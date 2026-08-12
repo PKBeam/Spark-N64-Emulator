@@ -1,0 +1,14 @@
+.cache/
+build/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+compile_commands.json
+Makefile
+log.json
+rom_initial_1mib.txt
+*.o
+*.obj
+*.a
+*.so
+*.exe

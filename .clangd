@@ -1,0 +1,2 @@
+CompileFlags:
+  Remove: [-freflection, -fcontracts, -fmodules-ts, -fdeps-format=p1689r5, -fmodule-mapper]
