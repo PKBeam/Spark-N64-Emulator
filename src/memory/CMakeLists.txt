@@ -4,7 +4,7 @@ target_sources(memory PUBLIC
     FILES
         module.cppm
         fragments/memory.cppm
-        fragments/types.cppm
+        fragments/segments.cppm
 )
 set_target_properties(memory PROPERTIES CXX_MODULE_STD ON)
 target_compile_options(memory PUBLIC ${CXX_COMPILE_OPTIONS})

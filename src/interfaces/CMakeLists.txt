@@ -11,8 +11,14 @@ target_sources(interfaces PUBLIC
         fragments/rdramInterfaceTypes.cppm
         fragments/rdramRegisters.cppm
         fragments/rdramRegistersTypes.cppm
+        fragments/rspRegisters.cppm
+        fragments/rspRegistersTypes.cppm
+        fragments/peripheralInterface.cppm
+        fragments/peripheralInterfaceTypes.cppm
+        fragments/serialInterface.cppm
+        fragments/serialInterfaceTypes.cppm
 )
 target_compile_options(interfaces PUBLIC ${CXX_COMPILE_OPTIONS})
 target_include_directories(interfaces PUBLIC ${CMAKE_SOURCE_DIR}/src)
-target_link_libraries(interfaces PUBLIC util)
+target_link_libraries(interfaces PUBLIC util rom)
 

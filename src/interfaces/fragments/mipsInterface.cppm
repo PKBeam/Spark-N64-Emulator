@@ -9,76 +9,96 @@ import :MipsInterfaceTypes;
 namespace Interfaces {
 
 export class MipsInterface : public MmioRegisters {
-    using RegisterPtr = std::variant<MI_MODE*, MI_VERSION*, MI_INTERRUPT*, MI_MASK*>;
-
   public:
-    MipsInterface(std::shared_ptr<Util::Logger> logger)
-        : m_logger(logger) {};
+    MipsInterface(std::shared_ptr<Util::Logger> logger) : m_logger(logger) {};
 
     auto read(uint32_t addr) -> uint32_t override;
-
     auto write(uint32_t addr, uint32_t data) -> void override;
 
-    auto getReg(uint32_t addr) -> RegisterPtr //
-        pre(MI_REG_ADDR::BASE <= addr && addr <= MI_REG_ADDR::END);
-
   private:
-    miRegs m_regs{};
-
     std::shared_ptr<Util::Logger> m_logger;
+
+    MI_MODE      m_mode{};
+    MI_INTERRUPT m_interrupt{};
+    MI_MASK      m_mask{};
 };
 
-auto MipsInterface::read(uint32_t addr)
-    -> uint32_t {
-    return getReg(addr).visit([=, this](auto&& v) {
-        auto value = std::bit_cast<uint32_t>(*v);
-        if (m_logger && m_logger->enabled()) {
-            m_logger->log<Util::Verbosity::MED>(
-                std::tuple{"sys", "MI"},
-                std::tuple{"op", "read"},
-                std::tuple{"reg", "{}", std::meta::display_string_of(^^decltype(v))},
-                std::tuple{"data", "0x{:08x}", value});
+auto MipsInterface::read(uint32_t addr) -> uint32_t {
+    contract_assert(MI_REG_ADDR::BASE <= addr && addr <= MI_REG_ADDR::END);
+    auto readReg = [this](uint32_t addr) -> uint32_t {
+        switch (addr) {
+            case MI_REG_ADDR::MI_MODE: return std::bit_cast<uint32_t>(m_mode);
+            case MI_REG_ADDR::MI_VERSION: return std::bit_cast<uint32_t>(MI_VERSION{});
+            case MI_REG_ADDR::MI_INTERRUPT: return std::bit_cast<uint32_t>(m_interrupt);
+            case MI_REG_ADDR::MI_MASK: return std::bit_cast<uint32_t>(m_mask);
+            default:
+                throw std::runtime_error(std::format("No MI register found for addr {:#08x}", addr));
         }
-        return value;
-    });
+    };
+
+    auto value = readReg(addr);
+    if (m_logger && m_logger->enabled()) {
+        auto name = Util::enumName(static_cast<decltype(MI_REG_ADDR::MI_MODE)>(addr)).value_or("Unknown");
+        m_logger->log<Util::Verbosity::MED>(
+            std::tuple{"sys", "MI"},
+            std::tuple{"op", "read"},
+            std::tuple{"reg", "{}", name},
+            std::tuple{"data", "0x{:08x}", value});
+    }
+    return value;
 }
 
 auto MipsInterface::write(uint32_t addr, uint32_t data) -> void {
-    getReg(addr).visit([=, this](auto&& v) {
-        if constexpr (WriteableRegister_c<decltype(v)>) {
-            if constexpr (std::is_same_v<MI_MODE*, std::remove_reference_t<decltype(v)>>) {
-                auto wr = std::bit_cast<MI_MODE::MI_MODE_write>(data);
-                if (wr.clearDp) {
-                    m_regs.miInterrupt.dp = 0;
-                }
-            }
+    contract_assert(MI_REG_ADDR::BASE <= addr && addr <= MI_REG_ADDR::END);
 
-            v->write(data);
+    if (m_logger && m_logger->enabled()) {
+        auto name = Util::enumName(static_cast<decltype(MI_REG_ADDR::MI_MODE)>(addr)).value_or("Unknown");
+        m_logger->log<Util::Verbosity::MED>(
+            std::tuple{"sys", "MI"},
+            std::tuple{"op", "write"},
+            std::tuple{"reg", "{}", name},
+            std::tuple{"data", "0x{:08x}", data});
+    }
+    switch (addr) {
+        case MI_REG_ADDR::MI_MODE: {
+            auto mode = std::bit_cast<MI_MODE::Write>(data);
+            if (mode.setRepeat) {
+                m_mode.repeat      = 1;
+                m_mode.repeatCount = mode.repeatCount;
+            }
+            if (mode.clearRepeat) m_mode.repeat = 0;
+            if (mode.setEBus) m_mode.eBus = 1;
+            if (mode.clearDp) m_interrupt.dp = 0;
+            if (mode.setUpper) m_mode.upper = 1;
+            if (mode.clearUpper) m_mode.upper = 0;
+            return;
+        }
+        case MI_REG_ADDR::MI_VERSION: [[fallthrough]];
+        case MI_REG_ADDR::MI_INTERRUPT: {
             if (m_logger && m_logger->enabled()) {
                 m_logger->log<Util::Verbosity::MED>(
                     std::tuple{"sys", "MI"},
-                    std::tuple{"op", "write"},
-                    std::tuple{"reg", "{}", std::meta::display_string_of(^^decltype(v))},
-                    std::tuple{"data", "0x{:08x}", data});
+                    std::tuple{"warning", "Attempted to write to read-only MI register"});
             }
+            return;
         }
-    });
-}
-
-auto MipsInterface::getReg(uint32_t addr) -> MipsInterface::RegisterPtr {
-    auto offset = addr & 0xF;
-    switch (offset) {
-        case MI_REG_ADDR::MI_MODE_OFFSET:
-            return &(m_regs.miMode);
-        case MI_REG_ADDR::MI_VERSION_OFFSET:
-            return &(m_regs.miVersion);
-        case MI_REG_ADDR::MI_INTERRUPT_OFFSET:
-            return &(m_regs.miInterrupt);
-        case MI_REG_ADDR::MI_MASK_OFFSET:
-            return &(m_regs.miMask);
-        default:
-            throw std::runtime_error(std::format("No MI register found for addr {:#08x}", addr));
-    };
+        case MI_REG_ADDR::MI_MASK: {
+            auto mask = std::bit_cast<MI_MASK::Write>(data);
+            if (mask.clearSp) m_mask.sp = 0;
+            if (mask.setSp) m_mask.sp = 1;
+            if (mask.clearSi) m_mask.si = 0;
+            if (mask.setSi) m_mask.si = 1;
+            if (mask.clearAi) m_mask.ai = 0;
+            if (mask.setAi) m_mask.ai = 1;
+            if (mask.clearVi) m_mask.vi = 0;
+            if (mask.setVi) m_mask.vi = 1;
+            if (mask.clearPi) m_mask.pi = 0;
+            if (mask.setPi) m_mask.pi = 1;
+            if (mask.clearDp) m_mask.dp = 0;
+            if (mask.setDp) m_mask.dp = 1;
+            return;
+        }
+    }
 }
 
 } // namespace Interfaces

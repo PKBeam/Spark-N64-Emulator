@@ -21,4 +21,4 @@ AllowShortLoopsOnASingleLine: false
 PointerAlignment: Left
 DerivePointerAlignment: false
 AlignConsecutiveBitFields : true
-
+AllowShortCaseLabelsOnASingleLine: true

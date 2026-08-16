@@ -17,6 +17,10 @@ int main(int argc, char* argv[]) {
         args.push_back(argv[i]);
     }
 
+    auto emulatorConfig = Emulator::Config{};
+
+    emulatorConfig.memorySize = 0x1FD00000; // maximum size of usable physical memory in N64
+
     // handle logging
     std::optional<Util::Verbosity> logLevel{};
     for (const auto arg : args) {
@@ -24,14 +28,27 @@ int main(int argc, char* argv[]) {
             logLevel = Util::Verbosity::MED;
         } else if (arg.starts_with("--log=")) {
             auto level = std::string{arg.substr(6)};
-            logLevel   = static_cast<Util::Verbosity>(std::stoi(level));
+            try {
+                logLevel = static_cast<Util::Verbosity>(std::stoi(level));
+            } catch (const std::exception& _) {
+                template for (constexpr auto e : Util::staticEnumeratorsOf(^^Util::Verbosity)) {
+                    if (std::meta::identifier_of(e) == level) {
+                        logLevel = [:e:];
+                        break;
+                    }
+                }
+            }
+        } else if (arg == "--dump-rom"sv) {
+            emulatorConfig.dumpRom = true;
         }
     }
 
-    auto emu = Emulator({
-        .memorySize = 0x1FD00000,
-        .logLevel   = logLevel,
-    });
+    if (logLevel) {
+        emulatorConfig.logger = std::make_shared<Util::Logger>("log.json"sv);
+        emulatorConfig.logger->setVerbosity(*logLevel);
+    }
+
+    auto emu = Emulator(emulatorConfig);
     emu.loadRom("/home/pkbeam/ZOOTDEC.z64");
 
     return 0;

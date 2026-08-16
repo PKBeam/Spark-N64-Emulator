@@ -33,11 +33,11 @@ class Logger {
     template <typename... Args>
     auto logUnstructured(const char* fmt, Args... obj) -> void;
 
-    template <Verbosity v, class T>
-    auto log(T obj) -> void;
-
     template <Verbosity v, Tuple_c... Args>
     auto log(Args... args) -> void;
+
+    template <Verbosity v, class T>
+    auto log(T obj) -> void;
 
     template <Verbosity v>
     auto log(std::string_view msg) -> void;

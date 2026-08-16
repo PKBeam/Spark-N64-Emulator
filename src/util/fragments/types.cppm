@@ -1,7 +1,7 @@
-module;
-import std;
-
 export module Util:Types;
+
+import std;
+import :Meta;
 
 export using int8_t   = std::int8_t;
 export using int16_t  = std::int16_t;
@@ -11,3 +11,29 @@ export using uint8_t  = std::uint8_t;
 export using uint16_t = std::uint16_t;
 export using uint32_t = std::uint32_t;
 export using uint64_t = std::uint64_t;
+
+export namespace Util {
+struct Range {
+    uint32_t lower;
+    uint32_t upper;
+
+    constexpr auto size() const -> std::size_t {
+        return upper - lower + 1;
+    }
+    constexpr auto contains(uint32_t addr) const -> bool {
+        return lower <= addr && addr <= upper;
+    }
+};
+
+template <typename E>
+constexpr auto getRange(uint32_t rangeValue) -> std::pair<E, Util::Range> {
+    template for (constexpr auto e : Util::staticEnumeratorsOf(^^E)) {
+        constexpr auto ann   = std::meta::annotations_of(e).front();
+        constexpr auto range = std::meta::extract<Util::Range>(ann);
+        if (range.contains(rangeValue)) {
+            return {[:e:], range};
+        }
+    }
+    throw std::runtime_error("Unknown range value");
+}
+} // namespace Util
