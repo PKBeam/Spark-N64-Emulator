@@ -3,85 +3,106 @@ export module Interfaces:RspRegisters;
 import std;
 import Util;
 
-import :MmioRegisters;
+import :Interface;
 import :RspRegistersTypes;
 
 namespace Interfaces {
 
-export class RspRegisters : public MmioRegisters {
-
-    using RegisterPtr = std::variant<RSP_DMA_SPADDR*, RSP_DMA_RAMADDR*, RSP_DMA_RDLEN*, RSP_DMA_WRLEN*, RSP_STATUS*, RSP_DMA_FULL*, RSP_DMA_BUSY*, RSP_SEMAPHORE*, RSP_PC*>;
-
+export class RspRegisters : public Interface {
   public:
     RspRegisters(std::shared_ptr<Util::Logger> logger)
         : m_logger(logger) {};
 
     auto read(uint32_t addr) -> uint32_t override;
-
     auto write(uint32_t addr, uint32_t data) -> void override;
 
-    auto getReg(uint32_t addr) -> RegisterPtr //
-        pre(RSP_REG_ADDR::BASE <= addr && addr <= RSP_REG_ADDR::END);
-
   private:
-    rspRegs m_regs{};
-
     std::shared_ptr<Util::Logger> m_logger;
+
+    RSP_STATUS m_status{};
 };
 
 auto RspRegisters::read(uint32_t addr) -> uint32_t {
-    return getReg(addr).visit([=, this](auto&& v) {
-        auto value = std::bit_cast<uint32_t>(*v);
-        if (m_logger && m_logger->enabled()) {
-            m_logger->log<Util::Verbosity::MED>(
-                std::tuple{"sys", "RSP_REG"},
-                std::tuple{"op", "read"},
-                std::tuple{"reg", "{}", std::meta::display_string_of(^^decltype(v))},
-                std::tuple{"data", "0x{:08x}", value});
+    contract_assert(addr % 4 == 0 &&
+                    RSP_REG_ADDR::BASE <= addr && addr <= RSP_REG_ADDR::END);
+
+    auto readReg = [this](uint32_t addr) -> uint32_t {
+        switch (addr) {
+            case RSP_REG_ADDR::RSP_DMA_SPADDR: [[fallthrough]];
+            case RSP_REG_ADDR::RSP_DMA_RAMADDR: [[fallthrough]];
+            case RSP_REG_ADDR::RSP_DMA_RDLEN: [[fallthrough]];
+            case RSP_REG_ADDR::RSP_DMA_WRLEN: [[fallthrough]];
+            case RSP_REG_ADDR::RSP_STATUS:
+                return std::bit_cast<uint32_t>(m_status);
+            case RSP_REG_ADDR::RSP_DMA_FULL: [[fallthrough]];
+            case RSP_REG_ADDR::RSP_DMA_BUSY: [[fallthrough]];
+            case RSP_REG_ADDR::RSP_SEMAPHORE: [[fallthrough]];
+            case RSP_REG_ADDR::RSP_PC:
+                // TODO
+                logWarnOnIgnoredRegister<RSP_REG_ADDR>(m_logger, addr);
+                return 0;
+            default:
+                throw Util::Error("No RSP register found for addr {:#08x}", addr);
         }
-        return value;
-    });
+    };
+
+    auto data = readReg(addr);
+
+    logOperation<RSP_REG_ADDR>(m_logger, "read", addr, data);
+
+    return data;
 }
 
 auto RspRegisters::write(uint32_t addr, uint32_t data) -> void {
-    getReg(addr).visit([=, this](auto&& v) {
-        if (m_logger && m_logger->enabled()) {
-            m_logger->log<Util::Verbosity::MED>(
-                std::tuple{"sys", "RSP_REG"},
-                std::tuple{"op", "write"},
-                std::tuple{"reg", "{}", std::meta::display_string_of(^^decltype(v))},
-                std::tuple{"data", "0x{:08x}", data});
-            m_logger->log<Util::Verbosity::MED>(
-                std::tuple{"sys", "RSP_REG"},
-                std::tuple{"warning", "Ignoring RSP register write"});
-        }
-        return 0;
-    });
-}
+    contract_assert(addr % 4 == 0 &&
+                    RSP_REG_ADDR::BASE <= addr && addr <= RSP_REG_ADDR::END);
 
-auto RspRegisters::getReg(uint32_t addr) -> RspRegisters::RegisterPtr {
+    logOperation<RSP_REG_ADDR>(m_logger, "write", addr, data);
+
     switch (addr) {
-        case RSP_REG_ADDR::RSP_DMA_SPADDR:
-            return &(m_regs.dmaSpAddr);
-        case RSP_REG_ADDR::RSP_DMA_RAMADDR:
-            return &(m_regs.dmaRamAddr);
-        case RSP_REG_ADDR::RSP_DMA_RDLEN:
-            return &(m_regs.dmaRdLen);
-        case RSP_REG_ADDR::RSP_DMA_WRLEN:
-            return &(m_regs.dmaWrLen);
-        case RSP_REG_ADDR::RSP_STATUS:
-            return &(m_regs.status);
-        case RSP_REG_ADDR::RSP_DMA_FULL:
-            return &(m_regs.dmaFull);
-        case RSP_REG_ADDR::RSP_DMA_BUSY:
-            return &(m_regs.dmaBusy);
-        case RSP_REG_ADDR::RSP_SEMAPHORE:
-            return &(m_regs.semaphore);
+        case RSP_REG_ADDR::RSP_DMA_SPADDR: [[fallthrough]];
+        case RSP_REG_ADDR::RSP_DMA_RAMADDR: [[fallthrough]];
+        case RSP_REG_ADDR::RSP_DMA_RDLEN: [[fallthrough]];
+        case RSP_REG_ADDR::RSP_DMA_WRLEN: [[fallthrough]];
+        case RSP_REG_ADDR::RSP_STATUS: {
+            auto status = std::bit_cast<RSP_STATUS::Write>(data);
+            if (status.clrHalt) m_status.halted = 0;
+            if (status.setHalt) m_status.halted = 1;
+            if (status.clrBroke) m_status.broke = 0;
+            // if (status.clrIntr) TODO
+            // if (status.setIntr) TODO
+            if (status.clrSstep) m_status.sstep = 0;
+            if (status.setSstep) m_status.sstep = 1;
+            if (status.clrIntbreak) m_status.intbreak = 0;
+            if (status.setIntbreak) m_status.intbreak = 1;
+            if (status.clrSig0) m_status.sig0 = 0;
+            if (status.setSig0) m_status.sig0 = 1;
+            if (status.clrSig1) m_status.sig1 = 0;
+            if (status.setSig1) m_status.sig1 = 1;
+            if (status.clrSig2) m_status.sig2 = 0;
+            if (status.setSig2) m_status.sig2 = 1;
+            if (status.clrSig3) m_status.sig3 = 0;
+            if (status.setSig3) m_status.sig3 = 1;
+            if (status.clrSig4) m_status.sig4 = 0;
+            if (status.setSig4) m_status.sig4 = 1;
+            if (status.clrSig5) m_status.sig5 = 0;
+            if (status.setSig5) m_status.sig5 = 1;
+            if (status.clrSig6) m_status.sig6 = 0;
+            if (status.setSig6) m_status.sig6 = 1;
+            if (status.clrSig7) m_status.sig7 = 0;
+            if (status.setSig7) m_status.sig7 = 1;
+            return;
+        }
+        case RSP_REG_ADDR::RSP_DMA_FULL: [[fallthrough]];
+        case RSP_REG_ADDR::RSP_DMA_BUSY: [[fallthrough]];
+        case RSP_REG_ADDR::RSP_SEMAPHORE: [[fallthrough]];
         case RSP_REG_ADDR::RSP_PC:
-            return &(m_regs.pc);
+            // TODO
+            logWarnOnIgnoredRegister<RSP_REG_ADDR>(m_logger, addr);
+            break;
         default:
-            throw std::runtime_error(std::format("No RSP register found for addr {:#08x}", addr));
-    };
+            throw Util::Error("No RSP register found for addr {:#08x}", addr);
+    }
 }
 
 } // namespace Interfaces

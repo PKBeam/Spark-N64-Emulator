@@ -1,11 +1,18 @@
 # Spark
 
-This is an educational project built with modern features C++26 such as modules, reflection and contracts.
+A Nintendo 64 emulator written in modern C++.
 
-The goal is to implement a Nintendo 64 emulator that is capable of playing retail games.
+This is an educational project. The goal is to implement a high-performance (not necessarily hardware-precise) emulator capable of playing retail games.
+
+## Current Status
+
+Able to boot into the beginning of a game.
 
 ## Building
 
-Currently only builds on Linux environments (although its designed to be eventually cross-platform).
-
-GCC 16 and CMake 4 is required.
+Requirements:
+- Linux
+- GCC 16 
+  - Requires support for C++26 reflection and contracts
+- CMake 4
+- Ninja

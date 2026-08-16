@@ -25,6 +25,7 @@ if(CMAKE_VERSION VERSION_GREATER_EQUAL "3.30.0")
 endif()
 
 project(n64emu LANGUAGES CXX)
+
 set(CXX_COMPILE_OPTIONS
     -freflection
     -Wall
@@ -34,9 +35,11 @@ set(CXX_COMPILE_OPTIONS
     -Wno-unused-variable
     -Wno-unused-parameter
     -Wno-unused-but-set-variable
+    -Wno-unused-but-set-parameter
     -fcontracts
     -fmodules
 )
+
 set(CMAKE_CXX_STANDARD 26)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)

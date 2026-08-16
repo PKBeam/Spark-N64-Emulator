@@ -4,19 +4,24 @@ target_sources(interfaces PUBLIC
     FILE_SET modules TYPE CXX_MODULES 
     FILES
         module.cppm
-        fragments/mmioRegisters.cppm
+        
+        fragments/interface.cppm
+        
+        fragments/audioInterface.cppm
         fragments/mipsInterface.cppm
-        fragments/mipsInterfaceTypes.cppm
         fragments/rdramInterface.cppm
-        fragments/rdramInterfaceTypes.cppm
         fragments/rdramRegisters.cppm
-        fragments/rdramRegistersTypes.cppm
         fragments/rspRegisters.cppm
-        fragments/rspRegistersTypes.cppm
         fragments/peripheralInterface.cppm
-        fragments/peripheralInterfaceTypes.cppm
         fragments/serialInterface.cppm
-        fragments/serialInterfaceTypes.cppm
+
+        fragments/types/audioInterfaceTypes.cppm
+        fragments/types/mipsInterfaceTypes.cppm
+        fragments/types/rdramInterfaceTypes.cppm
+        fragments/types/rdramRegistersTypes.cppm
+        fragments/types/rspRegistersTypes.cppm
+        fragments/types/peripheralInterfaceTypes.cppm
+        fragments/types/serialInterfaceTypes.cppm
 )
 target_compile_options(interfaces PUBLIC ${CXX_COMPILE_OPTIONS})
 target_include_directories(interfaces PUBLIC ${CMAKE_SOURCE_DIR}/src)

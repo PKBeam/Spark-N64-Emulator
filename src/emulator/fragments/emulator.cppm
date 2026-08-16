@@ -36,6 +36,7 @@ export class Emulator {
     std::optional<RomFile>          m_rom;
     std::shared_ptr<Memory::Memory> m_memoryManager;
 
+    Interfaces::AudioInterface*      m_audioInterface;
     Interfaces::MipsInterface*       m_mipsInterface;
     Interfaces::RdramInterface*      m_rdramInterface;
     Interfaces::RspRegisters*        m_rspRegisters;
@@ -81,12 +82,14 @@ constexpr Emulator::Emulator(Config config) : m_config(config) {
     m_memory        = std::malloc(m_config.memorySize);
     m_memoryManager = std::make_shared<Memory::Memory>(m_logger, reinterpret_cast<std::byte*>(m_memory));
 
+    m_audioInterface      = new Interfaces::AudioInterface(m_logger);
     m_mipsInterface       = new Interfaces::MipsInterface(m_logger);
     m_rdramInterface      = new Interfaces::RdramInterface(m_logger);
     m_rspRegisters        = new Interfaces::RspRegisters(m_logger);
     m_peripheralInterface = new Interfaces::PeripheralInterface(m_logger, reinterpret_cast<std::byte*>(m_memory));
     m_serialInterface     = new Interfaces::SerialInterface(m_logger, reinterpret_cast<std::byte*>(m_memory));
 
+    m_memoryManager->registerAudioInterface(m_audioInterface);
     m_memoryManager->registerMipsInterface(m_mipsInterface);
     m_memoryManager->registerRdramInterface(m_rdramInterface);
     m_memoryManager->registerRspRegisters(m_rspRegisters);

@@ -4,14 +4,12 @@ import std;
 import Rom;
 import Util;
 
-import :MmioRegisters;
+import :Interface;
 import :PeripheralInterfaceTypes;
 
 namespace Interfaces {
 
-export class PeripheralInterface : public MmioRegisters {
-    using RegisterPtr = std::variant<PI_DRAM_ADDR*, PI_CART_ADDR*, PI_RD_LEN*, PI_WR_LEN*, PI_STATUS*, PI_BSD_DOM1_LAT*, PI_BSD_DOM1_PWD*, PI_BSD_DOM1_PGS*, PI_BSD_DOM1_RLS*, PI_BSD_DOM2_LAT*, PI_BSD_DOM2_PWD*, PI_BSD_DOM2_PGS*, PI_BSD_DOM2_RLS*>;
-
+export class PeripheralInterface : public Interface {
   public:
     PeripheralInterface(std::shared_ptr<Util::Logger> logger, std::byte* memory) : m_logger(logger), m_memory(memory) {}
 
@@ -60,9 +58,9 @@ auto PeripheralInterface::readBus(uint32_t addr) -> T {
             return data;
         }
         case PiDmaRanges::PI_REG:
-            throw std::runtime_error("PI regs must not be accessed via the bus");
+            throw Util::Error("PI regs must not be accessed via the bus");
         case PiDmaRanges::SRAM:
-            throw std::runtime_error("SRAM not implemented");
+            throw Util::Error("SRAM not implemented");
         case PiDmaRanges::ROM:
             m_dramAddr += sizeof(T);
             m_cartAddr += sizeof(T);
@@ -81,15 +79,15 @@ auto PeripheralInterface::readBus(uint32_t addr) -> T {
 
 template <std::integral T>
 auto PeripheralInterface::writeBus(uint32_t addr, T data) -> void {
-    const auto [e, range] = Util::getRange<PiDmaRanges>(addr);
+    const auto [e, _] = Util::getRange<PiDmaRanges>(addr);
     switch (e) {
         case PiDmaRanges::RDRAM:
             std::memcpy(m_memory + addr, &data, sizeof(T));
             return;
         case PiDmaRanges::PI_REG:
-            throw std::runtime_error("PI regs must not be accessed via the bus");
+            throw Util::Error("PI regs must not be accessed via the bus");
         case PiDmaRanges::SRAM:
-            throw std::runtime_error("SRAM not implemented");
+            throw Util::Error("SRAM not implemented");
         case PiDmaRanges::ROM:
             return; // ignore
         case PiDmaRanges::N64DD_CTRL_REG: [[fallthrough]];
@@ -104,49 +102,48 @@ auto PeripheralInterface::writeBus(uint32_t addr, T data) -> void {
 }
 
 auto PeripheralInterface::read(uint32_t addr) -> uint32_t {
-    contract_assert(PI_REG_ADDR::BASE <= addr && addr <= PI_REG_ADDR::END);
+    contract_assert(addr % 4 == 0 &&
+                    PI_REG_ADDR::BASE <= addr && addr <= PI_REG_ADDR::END);
+
     auto readReg = [this](uint32_t addr) -> uint32_t {
         switch (addr) {
             case PI_REG_ADDR::PI_DRAM_ADDR: return m_dramAddr;
             case PI_REG_ADDR::PI_CART_ADDR: return m_cartAddr;
             case PI_REG_ADDR::PI_RD_LEN: return 0x7F;
             case PI_REG_ADDR::PI_WR_LEN: return 0x7F;
-            case PI_REG_ADDR::PI_STATUS: return std::bit_cast<uint32_t>(m_status);
-            case PI_REG_ADDR::PI_BSD_DOM1_LAT: return std::bit_cast<uint32_t>(PI_BSD_DOM1_LAT{});
-            case PI_REG_ADDR::PI_BSD_DOM1_PWD: return std::bit_cast<uint32_t>(PI_BSD_DOM1_PWD{});
-            case PI_REG_ADDR::PI_BSD_DOM1_PGS: return std::bit_cast<uint32_t>(PI_BSD_DOM1_PGS{});
-            case PI_REG_ADDR::PI_BSD_DOM1_RLS: return std::bit_cast<uint32_t>(PI_BSD_DOM1_RLS{});
-            case PI_REG_ADDR::PI_BSD_DOM2_LAT: return std::bit_cast<uint32_t>(PI_BSD_DOM2_LAT{});
-            case PI_REG_ADDR::PI_BSD_DOM2_PWD: return std::bit_cast<uint32_t>(PI_BSD_DOM2_PWD{});
-            case PI_REG_ADDR::PI_BSD_DOM2_PGS: return std::bit_cast<uint32_t>(PI_BSD_DOM2_PGS{});
-            case PI_REG_ADDR::PI_BSD_DOM2_RLS: return std::bit_cast<uint32_t>(PI_BSD_DOM2_RLS{});
+            case PI_REG_ADDR::PI_STATUS:
+                return std::bit_cast<uint32_t>(m_status);
+            case PI_REG_ADDR::PI_BSD_DOM1_LAT:
+                return std::bit_cast<uint32_t>(PI_BSD_DOM1_LAT{});
+            case PI_REG_ADDR::PI_BSD_DOM1_PWD:
+                return std::bit_cast<uint32_t>(PI_BSD_DOM1_PWD{});
+            case PI_REG_ADDR::PI_BSD_DOM1_PGS:
+                return std::bit_cast<uint32_t>(PI_BSD_DOM1_PGS{});
+            case PI_REG_ADDR::PI_BSD_DOM1_RLS:
+                return std::bit_cast<uint32_t>(PI_BSD_DOM1_RLS{});
+            case PI_REG_ADDR::PI_BSD_DOM2_LAT:
+                return std::bit_cast<uint32_t>(PI_BSD_DOM2_LAT{});
+            case PI_REG_ADDR::PI_BSD_DOM2_PWD:
+                return std::bit_cast<uint32_t>(PI_BSD_DOM2_PWD{});
+            case PI_REG_ADDR::PI_BSD_DOM2_PGS:
+                return std::bit_cast<uint32_t>(PI_BSD_DOM2_PGS{});
+            case PI_REG_ADDR::PI_BSD_DOM2_RLS:
+                return std::bit_cast<uint32_t>(PI_BSD_DOM2_RLS{});
             default:
-                throw std::runtime_error(std::format("No PI register found for addr {:#08x}", addr));
+                throw Util::Error("No PI register found for addr {:#08x}", addr);
         };
     };
-    auto value = readReg(addr);
-    if (m_logger && m_logger->enabled()) {
-        auto name = Util::enumName(static_cast<decltype(PI_REG_ADDR::PI_DRAM_ADDR)>(addr)).value_or("Unknown");
-        m_logger->log<Util::Verbosity::MED>(
-            std::tuple{"sys", "PI"},
-            std::tuple{"op", "read"},
-            std::tuple{"reg", "{}", name},
-            std::tuple{"data", "0x{:08x}", value});
-    }
-    return value;
+    auto data = readReg(addr);
+    logOperation<PI_REG_ADDR>(m_logger, "read", addr, data);
+    return data;
 }
 
 auto PeripheralInterface::write(uint32_t addr, uint32_t data) -> void {
-    contract_assert(PI_REG_ADDR::BASE <= addr && addr <= PI_REG_ADDR::END);
+    contract_assert(addr % 4 == 0 &&
+                    PI_REG_ADDR::BASE <= addr && addr <= PI_REG_ADDR::END);
 
-    if (m_logger && m_logger->enabled()) {
-        auto name = Util::enumName(static_cast<decltype(PI_REG_ADDR::PI_DRAM_ADDR)>(addr)).value_or("Unknown");
-        m_logger->log<Util::Verbosity::MED>(
-            std::tuple{"sys", "PI"},
-            std::tuple{"op", "write"},
-            std::tuple{"reg", "{}", name},
-            std::tuple{"data", "0x{:08x}", data});
-    }
+    logOperation<PI_REG_ADDR>(m_logger, "write", addr, data);
+
     switch (addr) {
         case PI_REG_ADDR::PI_DRAM_ADDR:
             m_dramAddr = data;
@@ -172,7 +169,7 @@ auto PeripheralInterface::write(uint32_t addr, uint32_t data) -> void {
             return;
         }
         case PI_REG_ADDR::PI_STATUS: {
-            const auto status = std::bit_cast<PI_STATUS::PI_STATUS_write>(data);
+            const auto status = std::bit_cast<PI_STATUS::Write>(data);
             // DMAs are modelled as instant, so ignore dmaReset
             if (status.clearInterrupt) {
                 m_status.interrupt = 0;
@@ -187,14 +184,10 @@ auto PeripheralInterface::write(uint32_t addr, uint32_t data) -> void {
         case PI_REG_ADDR::PI_BSD_DOM2_PWD: [[fallthrough]];
         case PI_REG_ADDR::PI_BSD_DOM2_PGS: [[fallthrough]];
         case PI_REG_ADDR::PI_BSD_DOM2_RLS:
-            if (m_logger && m_logger->enabled()) {
-                m_logger->log<Util::Verbosity::MED>(
-                    std::tuple{"sys", "PI"},
-                    std::tuple{"warning", "Ignoring PI_BSD_* write"});
-            }
+            logWarnOnIgnoredRegister<PI_REG_ADDR>(m_logger, addr);
             break;
         default:
-            throw std::runtime_error(std::format("No PI register found for addr {:#08x}", addr));
+            throw Util::Error("No PI register found for addr {:#08x}", addr);
     };
 }
 

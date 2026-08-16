@@ -3,12 +3,12 @@ export module Interfaces:MipsInterface;
 import std;
 import Util;
 
-import :MmioRegisters;
+import :Interface;
 import :MipsInterfaceTypes;
 
 namespace Interfaces {
 
-export class MipsInterface : public MmioRegisters {
+export class MipsInterface : public Interface {
   public:
     MipsInterface(std::shared_ptr<Util::Logger> logger) : m_logger(logger) {};
 
@@ -24,7 +24,9 @@ export class MipsInterface : public MmioRegisters {
 };
 
 auto MipsInterface::read(uint32_t addr) -> uint32_t {
-    contract_assert(MI_REG_ADDR::BASE <= addr && addr <= MI_REG_ADDR::END);
+    contract_assert(addr % 4 == 0 &&
+                    MI_REG_ADDR::BASE <= addr && addr <= MI_REG_ADDR::END);
+
     auto readReg = [this](uint32_t addr) -> uint32_t {
         switch (addr) {
             case MI_REG_ADDR::MI_MODE: return std::bit_cast<uint32_t>(m_mode);
@@ -32,33 +34,23 @@ auto MipsInterface::read(uint32_t addr) -> uint32_t {
             case MI_REG_ADDR::MI_INTERRUPT: return std::bit_cast<uint32_t>(m_interrupt);
             case MI_REG_ADDR::MI_MASK: return std::bit_cast<uint32_t>(m_mask);
             default:
-                throw std::runtime_error(std::format("No MI register found for addr {:#08x}", addr));
+                throw Util::Error("No MI register found for addr {:#08x}", addr);
         }
     };
 
-    auto value = readReg(addr);
-    if (m_logger && m_logger->enabled()) {
-        auto name = Util::enumName(static_cast<decltype(MI_REG_ADDR::MI_MODE)>(addr)).value_or("Unknown");
-        m_logger->log<Util::Verbosity::MED>(
-            std::tuple{"sys", "MI"},
-            std::tuple{"op", "read"},
-            std::tuple{"reg", "{}", name},
-            std::tuple{"data", "0x{:08x}", value});
-    }
-    return value;
+    auto data = readReg(addr);
+
+    logOperation<MI_REG_ADDR>(m_logger, "read", addr, data);
+
+    return data;
 }
 
 auto MipsInterface::write(uint32_t addr, uint32_t data) -> void {
-    contract_assert(MI_REG_ADDR::BASE <= addr && addr <= MI_REG_ADDR::END);
+    contract_assert(addr % 4 == 0 &&
+                    MI_REG_ADDR::BASE <= addr && addr <= MI_REG_ADDR::END);
 
-    if (m_logger && m_logger->enabled()) {
-        auto name = Util::enumName(static_cast<decltype(MI_REG_ADDR::MI_MODE)>(addr)).value_or("Unknown");
-        m_logger->log<Util::Verbosity::MED>(
-            std::tuple{"sys", "MI"},
-            std::tuple{"op", "write"},
-            std::tuple{"reg", "{}", name},
-            std::tuple{"data", "0x{:08x}", data});
-    }
+    logOperation<MI_REG_ADDR>(m_logger, "write", addr, data);
+
     switch (addr) {
         case MI_REG_ADDR::MI_MODE: {
             auto mode = std::bit_cast<MI_MODE::Write>(data);
@@ -75,11 +67,7 @@ auto MipsInterface::write(uint32_t addr, uint32_t data) -> void {
         }
         case MI_REG_ADDR::MI_VERSION: [[fallthrough]];
         case MI_REG_ADDR::MI_INTERRUPT: {
-            if (m_logger && m_logger->enabled()) {
-                m_logger->log<Util::Verbosity::MED>(
-                    std::tuple{"sys", "MI"},
-                    std::tuple{"warning", "Attempted to write to read-only MI register"});
-            }
+            logWarnOnWriteToReadOnlyRegister<MI_REG_ADDR>(m_logger, addr);
             return;
         }
         case MI_REG_ADDR::MI_MASK: {

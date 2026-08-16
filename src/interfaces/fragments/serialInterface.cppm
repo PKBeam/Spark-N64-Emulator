@@ -3,12 +3,12 @@ export module Interfaces:SerialInterface;
 import std;
 import Util;
 
-import :MmioRegisters;
+import :Interface;
 import :SerialInterfaceTypes;
 
 namespace Interfaces {
 
-export class SerialInterface : public MmioRegisters {
+export class SerialInterface : public Interface {
   public:
     SerialInterface(std::shared_ptr<Util::Logger> logger, std::byte* memory) : m_logger(logger), m_memory(memory) {}
 
@@ -33,46 +33,41 @@ export class SerialInterface : public MmioRegisters {
 };
 
 auto SerialInterface::read(uint32_t addr) -> uint32_t {
-    contract_assert(SI_REG_ADDR::BASE <= addr && addr <= SI_REG_ADDR::END);
+    contract_assert(addr % 4 == 0 &&
+                    SI_REG_ADDR::BASE <= addr && addr <= SI_REG_ADDR::END);
     auto readReg = [this](uint32_t addr) -> uint32_t {
         switch (addr) {
-            case SI_REG_ADDR::SI_DRAM_ADDR: return m_dramAddr;
-            case SI_REG_ADDR::SI_PIF_AD_RD64B: return m_pifAddr;
+            case SI_REG_ADDR::SI_DRAM_ADDR:
+                return m_dramAddr;
+            case SI_REG_ADDR::SI_PIF_AD_RD64B:
+                return m_pifAddr;
             case SI_REG_ADDR::SI_PIF_AD_WR4B: [[fallthrough]];
             case SI_REG_ADDR::SI_PIF_AD_WR64B: [[fallthrough]];
             case SI_REG_ADDR::SI_PIF_AD_RD4B:
                 return 0;
             case SI_REG_ADDR::SI_STATUS: return std::bit_cast<uint32_t>(m_status);
             default:
-                throw std::runtime_error(std::format("No SI register found for addr {:#08x}", addr));
+                throw Util::Error("No SI register found for addr {:#08x}", addr);
         }
     };
 
-    auto value = readReg(addr);
-    if (m_logger && m_logger->enabled()) {
-        auto name = Util::enumName(static_cast<decltype(SI_REG_ADDR::SI_DRAM_ADDR)>(addr)).value_or("Unknown");
-        m_logger->log<Util::Verbosity::MED>(
-            std::tuple{"sys", "SI"},
-            std::tuple{"op", "read"},
-            std::tuple{"reg", "{}", name},
-            std::tuple{"data", "0x{:08x}", value});
-    }
-    return value;
+    auto data = readReg(addr);
+
+    logOperation<SI_REG_ADDR>(m_logger, "read", addr, data);
+
+    return data;
 }
 
 auto SerialInterface::write(uint32_t addr, uint32_t data) -> void {
-    contract_assert(SI_REG_ADDR::BASE <= addr && addr <= SI_REG_ADDR::END);
+    contract_assert(addr % 4 == 0 &&
+                    SI_REG_ADDR::BASE <= addr && addr <= SI_REG_ADDR::END);
 
-    if (m_logger && m_logger->enabled()) {
-        auto name = Util::enumName(static_cast<decltype(SI_REG_ADDR::SI_DRAM_ADDR)>(addr)).value_or("Unknown");
-        m_logger->log<Util::Verbosity::MED>(
-            std::tuple{"sys", "SI"},
-            std::tuple{"op", "write"},
-            std::tuple{"reg", "{}", name},
-            std::tuple{"data", "0x{:08x}", data});
-    }
+    logOperation<SI_REG_ADDR>(m_logger, "write", addr, data);
+
     switch (addr) {
-        case SI_REG_ADDR::SI_DRAM_ADDR: m_dramAddr = data; break;
+        case SI_REG_ADDR::SI_DRAM_ADDR:
+            m_dramAddr = data;
+            break;
         case SI_REG_ADDR::SI_PIF_AD_RD64B: {
             m_pifAddr = data;
             dmaMemcpy(m_dramAddr, m_pifAddr);
@@ -80,34 +75,33 @@ auto SerialInterface::write(uint32_t addr, uint32_t data) -> void {
         };
         case SI_REG_ADDR::SI_PIF_AD_WR4B: [[fallthrough]];
         case SI_REG_ADDR::SI_PIF_AD_WR64B: [[fallthrough]];
-        case SI_REG_ADDR::SI_PIF_AD_RD4B: break;
+        case SI_REG_ADDR::SI_PIF_AD_RD4B:
+            logWarnOnIgnoredRegister<SI_REG_ADDR>(m_logger, addr);
+            break;
         case SI_REG_ADDR::SI_STATUS:
-            if (m_logger && m_logger->enabled()) {
-                m_logger->log<Util::Verbosity::MED>(
-                    std::tuple{"sys", "SI"},
-                    std::tuple{"warning", "Attempted to write to read-only SI register"});
-            }
+            logWarnOnWriteToReadOnlyRegister<SI_REG_ADDR>(m_logger, addr);
+            break;
     }
 }
 
 template <std::integral T>
 auto SerialInterface::readBus(uint32_t addr) -> T {
-    const auto [e, range] = Util::getRange<SiDmaRanges>(addr);
+    const auto [e, _] = Util::getRange<SiDmaRanges>(addr);
     switch (e) {
         case SiDmaRanges::PIF_ROM: [[fallthrough]];
         case SiDmaRanges::PIF_RAM:
-            throw std::runtime_error("SI bus not implemented");
+            throw Util::Error("SI bus not implemented");
     }
     return 0;
 }
 
 template <std::integral T>
 auto SerialInterface::writeBus(uint32_t addr, T data) -> void {
-    const auto [e, range] = Util::getRange<SiDmaRanges>(addr);
+    const auto [e, _] = Util::getRange<SiDmaRanges>(addr);
     switch (e) {
         case SiDmaRanges::PIF_ROM: [[fallthrough]];
         case SiDmaRanges::PIF_RAM:
-            throw std::runtime_error("SI bus not implemented");
+            throw Util::Error("SI bus not implemented");
     }
 }
 

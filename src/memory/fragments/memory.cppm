@@ -17,12 +17,6 @@ export class Memory {
   public:
     Memory(std::shared_ptr<Util::Logger> logger, std::byte* memory) : m_logger(logger), m_hostMemory(memory) {}
 
-    auto registerMipsInterface(Interfaces::MmioRegisters* interface) -> void;
-    auto registerRdramInterface(Interfaces::MmioRegisters* interface) -> void;
-    auto registerRspRegisters(Interfaces::MmioRegisters* interface) -> void;
-    auto registerPeripheralInterface(Interfaces::MmioRegisters* interface) -> void;
-    auto registerSerialInterface(Interfaces::MmioRegisters* interface) -> void;
-
     template <std::integral T>
     auto read(VirtualAddr addr) const -> T;
 
@@ -34,15 +28,34 @@ export class Memory {
 
     auto translate(VirtualAddr vaddr, std::size_t dataSize = 0) const -> PhysicalAddr;
 
+    auto registerAudioInterface(Interfaces::Interface* interface) -> void //
+        pre(interface != nullptr);
+
+    auto registerMipsInterface(Interfaces::Interface* interface) -> void //
+        pre(interface != nullptr);
+
+    auto registerRdramInterface(Interfaces::Interface* interface) -> void //
+        pre(interface != nullptr);
+
+    auto registerRspRegisters(Interfaces::Interface* interface) -> void //
+        pre(interface != nullptr);
+
+    auto registerPeripheralInterface(Interfaces::Interface* interface) -> void //
+        pre(interface != nullptr);
+
+    auto registerSerialInterface(Interfaces::Interface* interface) -> void //
+        pre(interface != nullptr);
+
   private:
     std::shared_ptr<Util::Logger> m_logger;
     std::byte*                    m_hostMemory;
 
-    Interfaces::MmioRegisters* m_mipsInterface;
-    Interfaces::MmioRegisters* m_rdramInterface;
-    Interfaces::MmioRegisters* m_rspRegisters;
-    Interfaces::MmioRegisters* m_peripheralInterface;
-    Interfaces::MmioRegisters* m_serialInterface;
+    Interfaces::Interface* m_audioInterface;
+    Interfaces::Interface* m_mipsInterface;
+    Interfaces::Interface* m_rdramInterface;
+    Interfaces::Interface* m_rspRegisters;
+    Interfaces::Interface* m_peripheralInterface;
+    Interfaces::Interface* m_serialInterface;
 };
 
 namespace Impl {
@@ -90,6 +103,10 @@ auto Memory::read(VirtualAddr addr) const -> T {
             data = m_mipsInterface->sizedRead(paddr, sizeof(T));
             break;
         }
+        case PhysSeg::AUDIO_INTERFACE: {
+            data = m_audioInterface->sizedRead(paddr, sizeof(T));
+            break;
+        }
         case PhysSeg::PERIPHERAL_INTERFACE: {
             data = m_peripheralInterface->sizedRead(paddr, sizeof(T));
             break;
@@ -134,6 +151,10 @@ auto Memory::write(VirtualAddr addr, uint32_t data) const -> void {
     switch (Impl::getPhysicalSegment(paddr)) {
         case PhysSeg::MIPS_INTERFACE: {
             m_mipsInterface->sizedWrite(paddr, sizeof(T), data);
+            break;
+        }
+        case PhysSeg::AUDIO_INTERFACE: {
+            m_audioInterface->sizedWrite(paddr, sizeof(T), data);
             break;
         }
         case PhysSeg::RDRAM_INTERFACE: {
@@ -213,23 +234,27 @@ auto Memory::translate(VirtualAddr vaddr, std::size_t dataSize) const -> Physica
         "Translation failed on N64 virtual address {:#08x}", vaddr));
 }
 
-auto Memory::registerMipsInterface(Interfaces::MmioRegisters* interface) -> void {
+auto Memory::registerAudioInterface(Interfaces::Interface* interface) -> void {
+    m_audioInterface = interface;
+}
+
+auto Memory::registerMipsInterface(Interfaces::Interface* interface) -> void {
     m_mipsInterface = interface;
 }
 
-auto Memory::registerRdramInterface(Interfaces::MmioRegisters* interface) -> void {
+auto Memory::registerRdramInterface(Interfaces::Interface* interface) -> void {
     m_rdramInterface = interface;
 }
 
-auto Memory::registerRspRegisters(Interfaces::MmioRegisters* interface) -> void {
+auto Memory::registerRspRegisters(Interfaces::Interface* interface) -> void {
     m_rspRegisters = interface;
 }
 
-auto Memory::registerPeripheralInterface(Interfaces::MmioRegisters* interface) -> void {
+auto Memory::registerPeripheralInterface(Interfaces::Interface* interface) -> void {
     m_peripheralInterface = interface;
 }
 
-auto Memory::registerSerialInterface(Interfaces::MmioRegisters* interface) -> void {
+auto Memory::registerSerialInterface(Interfaces::Interface* interface) -> void {
     m_serialInterface = interface;
 }
 

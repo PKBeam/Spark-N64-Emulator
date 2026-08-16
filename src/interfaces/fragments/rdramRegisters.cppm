@@ -3,12 +3,12 @@ export module Interfaces:RdramRegisters;
 import std;
 import Util;
 
-import :MmioRegisters;
+import :Interface;
 import :RdramRegistersTypes;
 
 namespace Interfaces {
 
-export class RdramRegisters : public MmioRegisters {
+export class RdramRegisters : public Interface {
   public:
     RdramRegisters(std::shared_ptr<Util::Logger> logger)
         : m_logger(logger) {};
@@ -21,18 +21,16 @@ export class RdramRegisters : public MmioRegisters {
 };
 
 auto RdramRegisters::read(uint32_t addr) -> uint32_t {
-    contract_assert(RDRAM_REG_ADDR::BASE <= addr && addr <= RDRAM_REG_ADDR::END);
-    if (m_logger && m_logger->enabled()) {
-        m_logger->log<Util::Verbosity::MED>(std::tuple{"warning", "Ignoring RDRAM register read"});
-    }
+    contract_assert(addr % 4 == 0 &&
+                    RDRAM_REG_ADDR::BASE <= addr && addr <= RDRAM_REG_ADDR::END);
+    logWarnOnIgnoredRegister<RDRAM_REG_ADDR>(m_logger, addr);
     return 0;
 }
 
 auto RdramRegisters::write(uint32_t addr, uint32_t data) -> void {
-    contract_assert(RDRAM_REG_ADDR::BASE <= addr && addr <= RDRAM_REG_ADDR::END);
-    if (m_logger && m_logger->enabled()) {
-        m_logger->log<Util::Verbosity::HIGH>(std::tuple{"warning", "Ignoring RDRAM register write"});
-    }
+    contract_assert(addr % 4 == 0 &&
+                    RDRAM_REG_ADDR::BASE <= addr && addr <= RDRAM_REG_ADDR::END);
+    logWarnOnIgnoredRegister<RDRAM_REG_ADDR>(m_logger, addr);
 }
 
 } // namespace Interfaces

@@ -36,4 +36,10 @@ constexpr auto getRange(uint32_t rangeValue) -> std::pair<E, Util::Range> {
     }
     throw std::runtime_error("Unknown range value");
 }
+
+struct Error : std::runtime_error {
+    template <typename... Args>
+    Error(std::format_string<Args...> fmt, Args&&... args)
+        : std::runtime_error(std::format(fmt, std::forward<Args>(args)...)) {}
+};
 } // namespace Util
