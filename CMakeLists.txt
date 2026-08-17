@@ -40,7 +40,6 @@ set(CXX_COMPILE_OPTIONS
     -fmodules
     -g3
     -ggdb3
-    -gsplit-dwarf
     -fvar-tracking-assignments
 )
 

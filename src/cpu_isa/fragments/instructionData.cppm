@@ -55,6 +55,4 @@ struct TypeR {
 };
 } // namespace FPU
 
-using InstructionData = std::variant<uint32_t, CPU::TypeI, CPU::TypeJ, CPU::TypeR>;
-
 } // namespace ISA

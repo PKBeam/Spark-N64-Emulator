@@ -7,9 +7,11 @@ export namespace Memory {
 
 // clang-format off
 enum class VirtSeg {
-    KUSEG [[=Util::Range{0x00000000, 0x7FFFFFFF}]],
-    KSEG0 [[=Util::Range{0x80000000, 0x9FFFFFFF}]],
+    // order most likely accesses first
     KSEG1 [[=Util::Range{0xA0000000, 0xBFFFFFFF}]],
+    KSEG0 [[=Util::Range{0x80000000, 0x9FFFFFFF}]],
+
+    KUSEG [[=Util::Range{0x00000000, 0x7FFFFFFF}]],
     KSSEG [[=Util::Range{0xC0000000, 0xDFFFFFFF}]],
     KSEG3 [[=Util::Range{0xE0000000, 0xFFFFFFFF}]],
 };
@@ -34,6 +36,12 @@ enum class PhysSeg {
     SI_BUS               [[=Util::Range{0x1FC00000, 0x1FC007FF}]],
 };
 // clang-format on
+
+template <typename T>
+    requires std::is_enum_v<T>
+constexpr auto rangeOf(T seg) -> Util::Range {
+    return std::meta::extract<Util::Range>(Util::annotationOf(^^seg));
+}
 
 } // namespace Memory
 

@@ -20,6 +20,10 @@ consteval auto staticAnnotationsOf(std::meta::info i) {
     return std::define_static_array(std::meta::annotations_of(i));
 }
 
+consteval auto annotationOf(std::meta::info i) {
+    return std::meta::annotations_of(i).front();
+}
+
 // extracts the dealiased reflected type `T`, from an annotation `[[=^^T]]`.
 consteval auto dealiasedTypeOf(std::meta::info annotation) //
     pre(std::meta::is_annotation(annotation))              //

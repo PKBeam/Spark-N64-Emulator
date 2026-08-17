@@ -20,3 +20,9 @@ struct info {};
 #define post(x)
 #define contract_assert(x)
 #endif
+
+#ifdef NDEBUG
+#define DEBUG_LOG(logger) if (false)
+#else
+#define DEBUG_LOG(logger) if (logger && logger->enabled())
+#endif
