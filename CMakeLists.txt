@@ -38,6 +38,10 @@ set(CXX_COMPILE_OPTIONS
     -Wno-unused-but-set-parameter
     -fcontracts
     -fmodules
+    -g3
+    -ggdb3
+    -gsplit-dwarf
+    -fvar-tracking-assignments
 )
 
 set(CMAKE_CXX_STANDARD 26)

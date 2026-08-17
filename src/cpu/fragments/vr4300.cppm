@@ -17,10 +17,10 @@ export class VR4300 {
 
     auto writePc(uint64_t value) -> void;
 
-    template <std::integral T = int64_t>
+    template <std::integral T = int32_t>
     auto readGpr(std::size_t index) -> T;
 
-    template <ISA::CPU_REG R, std::integral T = int64_t>
+    template <ISA::CPU_REG R, std::integral T = int32_t>
     auto readGpr() -> T;
 
     template <std::integral T>
@@ -72,6 +72,22 @@ export class VR4300 {
     std::array<uint32_t, 32> m_cp0regs;
 };
 
+struct CP0_STATUS {
+    uint32_t ie  : 1;
+    uint32_t exl : 1;
+    uint32_t erl : 1;
+    uint32_t ksu : 1;
+    uint32_t ux  : 1;
+    uint32_t sx  : 1;
+    uint32_t kx  : 1;
+    uint32_t im  : 8;
+    uint32_t ds  : 9;
+    uint32_t re  : 1;
+    uint32_t fr  : 1;
+    uint32_t rp  : 1;
+    uint32_t cu  : 4;
+};
+
 template <std::integral T>
 auto VR4300::readGpr(std::size_t index) -> T {
     auto value = static_cast<T>(m_regs.gprs[index]);
@@ -92,7 +108,7 @@ auto VR4300::readGpr() -> T {
 template <std::integral T>
 auto VR4300::writeGpr(std::size_t index, T value) -> void {
     if (index != 0) {
-        m_regs.gprs[index] = Util::signExt64(value);
+        m_regs.gprs[index] = static_cast<uint32_t>(value); // TODO 64 bit support
         if (m_logger && m_logger->enabled()) {
             m_logger->log<Util::Verbosity::MED>(
                 std::tuple{"op", "write"},
@@ -121,7 +137,7 @@ auto VR4300::readHi() -> T {
 
 template <std::integral T>
 auto VR4300::writeHi(T value) -> void {
-    m_regs.hi = Util::signExt64(value);
+    m_regs.hi = Util::signExt32(value);
     if (m_logger && m_logger->enabled()) {
         m_logger->log<Util::Verbosity::MED>(
             std::tuple{"op", "write"},
@@ -144,7 +160,7 @@ auto VR4300::readLo() -> T {
 
 template <std::integral T>
 auto VR4300::writeLo(T value) -> void {
-    m_regs.lo = Util::signExt64(value);
+    m_regs.lo = Util::signExt32(value);
     if (m_logger && m_logger->enabled()) {
         m_logger->log<Util::Verbosity::MED>(
             std::tuple{"op", "write"},
@@ -180,7 +196,13 @@ auto VR4300::writeCp0Reg(std::size_t index, T value) -> void {
         m_logger->log<Util::Verbosity::HIGH>(std::tuple{"warning", "Attempted to write to read-only register CP0_REG::RANDOM!"});
         return;
     }
-    m_cp0regs[index] = Util::signExt64(value);
+    if (m_logger && regName == ISA::CP0_REG::STATUS) {
+        auto status = std::bit_cast<CP0_STATUS>(static_cast<uint32_t>(value));
+        if (status.kx || status.sx || status.ux) {
+            m_logger->log<Util::Verbosity::HIGH>(std::tuple{"warning", "Enabled 64-bit mode in CP0_REG::STATUS, which is not fully supported yet"});
+        }
+    }
+    m_cp0regs[index] = Util::signExt32(value);
     if (m_logger && m_logger->enabled()) {
         const auto enumName = Util::enumName(regName);
         m_logger->log<Util::Verbosity::MED>(
@@ -196,9 +218,9 @@ auto VR4300::writeCp0Reg(T value) -> void {
 }
 
 VR4300::VR4300(std::shared_ptr<Memory::Memory> memory, std::shared_ptr<Util::Logger> logger) {
-    m_memory       = memory;
-    m_logger       = logger;
-    m_regs.gprs[0] = 0;
+    m_memory    = memory;
+    m_logger    = logger;
+    m_regs.gprs = {};
 }
 
 auto VR4300::runInstruction() -> void {
@@ -226,7 +248,7 @@ auto VR4300::runInstruction() -> void {
         auto checkBranch = [&, this](auto&& comp, bool likely = false) {
             auto ops = std::get<CPU::TypeI>(data);
             if (comp(readGpr(ops.rs), readGpr(ops.rt))) {
-                pcJumpValue = (m_regs.pc + 4) + (Util::signExt64<int16_t>(ops.imm) << 2);
+                pcJumpValue = (m_regs.pc + 4) + (Util::signExt32<int16_t>(ops.imm) << 2);
             } else if (likely) {
                 m_regs.pc += 4;
             }
@@ -279,6 +301,15 @@ auto VR4300::runInstruction() -> void {
             checkBranch([](auto rs, auto _) { return rs >= 0; }, true);
 
         } else if (op == REGIMM_rt::OP_BGEZAL) {
+            auto ops = std::get<CPU::TypeI>(data);
+
+            // detect boot checksum fail
+            if (ops.rs == static_cast<uint32_t>(CPU_REG::zero) && static_cast<int16_t>(ops.imm) == -1) {
+                if (m_memory->read<uint32_t>(m_regs.pc - 4) == 0) {
+                    throw Util::Error("Detected infinite looping BGEZAL->NOP, likely boot checksum fail.");
+                }
+            }
+
             writeGpr<CPU_REG::ra>(m_regs.pc + 8);
             checkBranch([](auto rs, auto _) { return rs >= 0; });
 
@@ -292,41 +323,42 @@ auto VR4300::runInstruction() -> void {
 
         } else if (op == OPCODE::OP_LUI) {
             auto ops = std::get<CPU::TypeI>(data);
-            writeGpr(ops.rt, Util::signExt64(ops.imm << 16));
+            writeGpr(ops.rt, Util::signExt32(ops.imm << 16));
 
         } else if (op == OPCODE::OP_LB) {
             auto ops   = std::get<CPU::TypeI>(data);
-            auto vaddr = Util::signExt64<int16_t>(ops.imm) + readGpr(ops.rs);
-            writeGpr(ops.rt, Util::signExt64(m_memory->read<uint8_t>(vaddr)));
+            auto vaddr = Util::signExt32<int16_t>(ops.imm) + readGpr(ops.rs);
+            writeGpr(ops.rt, Util::signExt32(m_memory->read<uint8_t>(vaddr)));
 
         } else if (op == OPCODE::OP_LBU) {
             auto ops   = std::get<CPU::TypeI>(data);
-            auto vaddr = Util::signExt64<int16_t>(ops.imm) + readGpr(ops.rs);
+            auto vaddr = Util::signExt32<int16_t>(ops.imm) + readGpr(ops.rs);
             writeGpr(ops.rt, m_memory->read<uint8_t>(vaddr));
 
         } else if (op == OPCODE::OP_LW) {
             auto ops   = std::get<CPU::TypeI>(data);
-            auto vaddr = Util::signExt64<int16_t>(ops.imm) + readGpr(ops.rs);
-            writeGpr(ops.rt, Util::signExt64(m_memory->read<uint32_t>(vaddr)));
+            auto vaddr = Util::signExt32<int16_t>(ops.imm) + readGpr(ops.rs);
+            writeGpr(ops.rt, Util::signExt32(m_memory->read<uint32_t>(vaddr)));
 
         } else if (op == OPCODE::OP_LD) {
+            throw Util::Error("64-bit not supported yet");
             auto ops   = std::get<CPU::TypeI>(data);
-            auto vaddr = Util::signExt64<int16_t>(ops.imm) + readGpr(ops.rs);
+            auto vaddr = Util::signExt32<int16_t>(ops.imm) + readGpr(ops.rs);
             writeGpr(ops.rt, m_memory->read<uint64_t>(vaddr));
 
         } else if (op == OPCODE::OP_SB) {
             auto ops   = std::get<CPU::TypeI>(data);
-            auto vaddr = Util::signExt64<int16_t>(ops.imm) + readGpr(ops.rs);
+            auto vaddr = Util::signExt32<int16_t>(ops.imm) + readGpr(ops.rs);
             m_memory->write<uint8_t>(vaddr, readGpr<uint32_t>(ops.rt));
 
         } else if (op == OPCODE::OP_SW) {
             auto ops   = std::get<CPU::TypeI>(data);
-            auto vaddr = Util::signExt64<int16_t>(ops.imm) + readGpr(ops.rs);
+            auto vaddr = Util::signExt32<int16_t>(ops.imm) + readGpr(ops.rs);
             m_memory->write<uint32_t>(vaddr, readGpr<uint32_t>(ops.rt));
 
         } else if (op == OPCODE::OP_SWL) {
             auto ops   = std::get<CPU::TypeI>(data);
-            auto vaddr = Util::signExt64<int16_t>(ops.imm) + readGpr(ops.rs);
+            auto vaddr = Util::signExt32<int16_t>(ops.imm) + readGpr(ops.rs);
             for (auto byte = 4z; byte > vaddr % 4; --byte) {
                 auto thisByte = (readGpr<uint32_t>(ops.rt) >> (8 * byte)) & 0xFF;
                 // TODO make this more HW accurate
@@ -353,11 +385,11 @@ auto VR4300::runInstruction() -> void {
 
         } else if (op == SPECIAL::OP_SLTU) {
             auto ops = std::get<CPU::TypeR>(data);
-            writeGpr(ops.rd, readGpr<uint64_t>(ops.rs) < readGpr<uint64_t>(ops.rt));
+            writeGpr(ops.rd, readGpr<uint32_t>(ops.rs) < readGpr<uint32_t>(ops.rt));
 
         } else if (op == OPCODE::OP_SLTI) {
             auto ops = std::get<CPU::TypeI>(data);
-            writeGpr(ops.rt, readGpr<int64_t>(ops.rs) < Util::signExt64<int16_t>(ops.imm));
+            writeGpr(ops.rt, readGpr<int32_t>(ops.rs) < Util::signExt32<int16_t>(ops.imm));
 
         } else if (op == SPECIAL::OP_SUBU) {
             auto ops = std::get<CPU::TypeR>(data);
@@ -412,22 +444,22 @@ auto VR4300::runInstruction() -> void {
         } else if (op == SPECIAL::OP_SLL) {
             auto ops = std::get<CPU::TypeR>(data);
             if (ops.sa != 0) { // check for NOP
-                writeGpr(ops.rd, readGpr<uint64_t>(ops.rt) << ops.sa);
+                writeGpr(ops.rd, Util::signExt<int32_t>(readGpr<uint32_t>(ops.rt) << ops.sa));
             }
 
         } else if (op == SPECIAL::OP_SLLV) {
             auto ops = std::get<CPU::TypeR>(data);
-            writeGpr(ops.rd, readGpr<uint64_t>(ops.rt) << (readGpr(ops.rs) & 0x1F));
+            writeGpr(ops.rd, Util::signExt<int32_t>(readGpr<uint32_t>(ops.rt) << (readGpr(ops.rs) & 0x1F)));
 
         } else if (op == SPECIAL::OP_SRL) {
             auto ops = std::get<CPU::TypeR>(data);
             if (ops.sa != 0) { // check for NOP
-                writeGpr(ops.rd, readGpr<uint64_t>(ops.rt) >> ops.sa);
+                writeGpr(ops.rd, readGpr<uint32_t>(ops.rt) >> ops.sa);
             }
 
         } else if (op == SPECIAL::OP_SRLV) {
             auto ops = std::get<CPU::TypeR>(data);
-            writeGpr(ops.rd, readGpr<uint64_t>(ops.rt) >> (readGpr(ops.rs) & 0x1F));
+            writeGpr(ops.rd, readGpr<uint32_t>(ops.rt) >> (readGpr(ops.rs) & 0x1F));
 
         } else if (op == COPz_rs::OP_MTCz) {
             auto ops = std::get<CPU::TypeR>(data);

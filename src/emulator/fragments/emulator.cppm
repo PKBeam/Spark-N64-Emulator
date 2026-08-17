@@ -65,11 +65,15 @@ constexpr auto Emulator::emulateInitialBoot() -> void {
 
     m_cpu->writePc(static_cast<uint32_t>(0xA4000040u));
 
-    m_cpu->writeGpr<ISA::CPU_REG::t3>(static_cast<uint64_t>(0xFFFFFFFFA4000040ull));
-    m_cpu->writeGpr<ISA::CPU_REG::s4>(static_cast<uint64_t>(0x0000000000000001ull));
-    m_cpu->writeGpr<ISA::CPU_REG::s6>(static_cast<uint64_t>(0x000000000000003Full));
-    m_cpu->writeGpr<ISA::CPU_REG::sp>(static_cast<uint64_t>(0xFFFFFFFFA4001FF0ull));
-    m_cpu->writeGpr<ISA::CPU_REG::ra>(static_cast<uint64_t>(0xFFFFFFFFA4001000ull)); // from IPL2 stage
+    m_cpu->writeGpr<ISA::CPU_REG::t3>(static_cast<uint32_t>(0xA4000040));
+    m_cpu->writeGpr<ISA::CPU_REG::s4>(static_cast<uint32_t>(0x00000001));
+
+    // TODO detect CIC and set this accordingly so we don't fail the checksum
+    // CIC_6102 : 0x3F
+    // CIC_6105 : 0x91
+    m_cpu->writeGpr<ISA::CPU_REG::s6>(static_cast<uint32_t>(0x00000091));
+    m_cpu->writeGpr<ISA::CPU_REG::sp>(static_cast<uint32_t>(0xA4001FF0));
+    m_cpu->writeGpr<ISA::CPU_REG::ra>(static_cast<uint32_t>(0xA4001000)); // from IPL2 stage
 
     m_cpu->writeCp0Reg<ISA::CP0_REG::RANDOM>(static_cast<uint32_t>(0x0000001F));
     m_cpu->writeCp0Reg<ISA::CP0_REG::STATUS>(static_cast<uint32_t>(0x34000000));

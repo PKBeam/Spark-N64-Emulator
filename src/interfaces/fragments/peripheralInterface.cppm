@@ -159,13 +159,13 @@ auto PeripheralInterface::write(uint32_t addr, uint32_t data) -> void {
         case PI_REG_ADDR::PI_RD_LEN: {
             const auto status = std::bit_cast<PI_RD_LEN>(data);
             const auto length = status.rdLen_23_0 + 1;
-            dmaMemcpy(m_dramAddr, m_cartAddr, length);
+            dmaMemcpy(m_cartAddr, m_dramAddr, length);
             return;
         }
         case PI_REG_ADDR::PI_WR_LEN: {
             const auto status = std::bit_cast<PI_WR_LEN>(data);
             const auto length = status.wrLen_23_0 + 1;
-            dmaMemcpy(m_cartAddr, m_dramAddr, length);
+            dmaMemcpy(m_dramAddr, m_cartAddr, length);
             return;
         }
         case PI_REG_ADDR::PI_STATUS: {

@@ -49,7 +49,7 @@ int main(int argc, char* argv[]) {
     }
 
     auto emu = Emulator(emulatorConfig);
-    emu.loadRom("/home/pkbeam/ZOOTDEC.z64");
+    emu.loadRom("/home/pkbeam/Legend of Zelda, The - Ocarina of Time (USA).z64");
 
     return 0;
 }

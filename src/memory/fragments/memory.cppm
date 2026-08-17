@@ -82,12 +82,11 @@ auto Memory::read(VirtualAddr addr) const -> T {
 
     switch (Impl::getPhysicalSegment(paddr)) {
         // these are all typical "memory" spaces
-        case PhysSeg::RDRAM:
-            [[fallthrough]];
-        case PhysSeg::RSP_DMEM:
-            [[fallthrough]];
+        case PhysSeg::RDRAM: [[fallthrough]];
+        case PhysSeg::RSP_DMEM: [[fallthrough]];
         case PhysSeg::RSP_IMEM:
             std::memcpy(&data, hostAddr, sizeof(T));
+            Util::byteswapIfLittleEndian(data);
             break;
         case PhysSeg::RDRAM_REG: {
             if (m_logger && m_logger->enabled()) {
@@ -179,11 +178,10 @@ auto Memory::write(VirtualAddr addr, uint32_t data) const -> void {
             m_serialInterface->sizedWrite(paddr, sizeof(T), data);
             break;
         }
-        case PhysSeg::RDRAM:
-            [[fallthrough]];
-        case PhysSeg::RSP_DMEM:
-            [[fallthrough]];
+        case PhysSeg::RDRAM: [[fallthrough]];
+        case PhysSeg::RSP_DMEM: [[fallthrough]];
         case PhysSeg::RSP_IMEM:
+            Util::byteswapIfLittleEndian(data);
             std::memcpy(hostAddr, &data, sizeof(T));
             break;
         case PhysSeg::PI_BUS:
