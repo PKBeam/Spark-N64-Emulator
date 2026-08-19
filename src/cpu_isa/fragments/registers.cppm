@@ -68,22 +68,6 @@ enum class CP0_REG : uint8_t {
     ERROREPC  = 30,
 };
 
-struct CPO_STATUS {
-    uint32_t ie  : 1;
-    uint32_t exl : 1;
-    uint32_t erl : 1;
-    uint32_t ksu : 2;
-    uint32_t ux  : 1;
-    uint32_t sx  : 1;
-    uint32_t kx  : 1;
-    uint32_t im  : 8;
-    uint32_t ds  : 9;
-    uint32_t re  : 1;
-    uint32_t fr  : 1;
-    uint32_t rp  : 1;
-    uint32_t cu  : 4;
-};
-
 } // namespace ISA
 
 template <>
