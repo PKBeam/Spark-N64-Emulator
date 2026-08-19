@@ -20,8 +20,7 @@ export class Memory {
     auto read(VirtualAddr addr) const -> T;
 
     template <std::integral T>
-        requires(sizeof(T) <= 4) // 64-bit writes need to be split for now
-    auto write(VirtualAddr addr, uint32_t data) const -> void;
+    auto write(VirtualAddr addr, T data) const -> void;
 
     auto data() const -> void*;
 
@@ -64,12 +63,10 @@ auto getPhysicalSegment(PhysicalAddr paddr) -> PhysSeg {
         constexpr auto a     = std::meta::annotations_of_with_type(e, ^^Util::Range)[0];
         constexpr auto range = std::meta::extract<Util::Range>(a);
         if (range.contains(paddr)) {
-            auto enumName = std::meta::identifier_of(e);
             return [:e:];
         }
     }
-    throw std::runtime_error(std::format(
-        "Translation failed on N64 physical address {:#08x}", paddr));
+    throw Util::Error("Translation failed on N64 physical address {:#08x}", paddr);
 }
 } // namespace Impl
 
@@ -89,7 +86,7 @@ auto Memory::read(VirtualAddr addr) const -> T {
             Util::byteswapIfLittleEndian(data);
             break;
         case PhysSeg::RDRAM_REG: {
-            DEBUG_LOG(m_logger) {
+            IF_LOG_ENABLED(m_logger) {
                 m_logger->log<Util::Verbosity::MED>(std::tuple{"warning", "Ignoring RDRAM register read"});
             }
             break;
@@ -125,25 +122,24 @@ auto Memory::read(VirtualAddr addr) const -> T {
             data = dynamic_cast<Interfaces::SerialInterface*>(m_serialInterface)->readBus<T>(paddr);
             break;
         default:
-            throw std::runtime_error(std::format(
-                "Unimplemented physical memory range {}", Util::enumName(Impl::getPhysicalSegment(paddr)).value_or("Unknown")));
+            throw Util::Error(
+                "Unimplemented physical memory range {}", Util::enumName(Impl::getPhysicalSegment(paddr)).value_or("Unknown"));
     }
 
-    DEBUG_LOG(m_logger) {
+    IF_LOG_ENABLED(m_logger) {
         m_logger->log<Util::Verbosity::MED>(
             std::tuple{"op", "read"},
-            std::tuple{"n64VAddr", "0x{:08x}", addr},
-            std::tuple{"n64PAddr", "0x{:08x}", paddr},
-            std::tuple{"hostAddr", "{:p}", (void*)hostAddr},
-            std::tuple{"data", "0x{:08x}", data},
-            std::tuple{"size", sizeof(T)});
+            std::tuple{"size", sizeof(T)},
+            std::tuple{"vAddr", "0x{:08x}", addr},
+            std::tuple{"pAddr", "0x{:08x}", paddr},
+            std::tuple{"ptr", "{:p}", (void*)hostAddr},
+            std::tuple{"data", "0x{:08x}", data});
     }
     return data;
 }
 
 template <std::integral T>
-    requires(sizeof(T) <= 4)
-auto Memory::write(VirtualAddr addr, uint32_t data) const -> void {
+auto Memory::write(VirtualAddr addr, T data) const -> void {
     const auto paddr    = translate<T>(addr);
     const auto hostAddr = m_hostMemory + paddr;
 
@@ -167,7 +163,7 @@ auto Memory::write(VirtualAddr addr, uint32_t data) const -> void {
             break;
         }
         case PhysSeg::RDRAM_REG: {
-            DEBUG_LOG(m_logger) {
+            IF_LOG_ENABLED(m_logger) {
                 m_logger->log<Util::Verbosity::MED>(std::tuple{"warning", "Ignoring RDRAM register write"});
             }
             break;
@@ -191,26 +187,25 @@ auto Memory::write(VirtualAddr addr, uint32_t data) const -> void {
             data = dynamic_cast<Interfaces::SerialInterface*>(m_serialInterface)->readBus<T>(paddr);
             break;
         default:
-            throw std::runtime_error(std::format(
-                "Unimplemented physical memory range {}", Util::enumName(Impl::getPhysicalSegment(paddr)).value_or("Unknown")));
+            throw Util::Error(
+                "Unimplemented physical memory range {}", Util::enumName(Impl::getPhysicalSegment(paddr)).value_or("Unknown"));
     }
 
-    DEBUG_LOG(m_logger) {
+    IF_LOG_ENABLED(m_logger) {
         m_logger->log<Util::Verbosity::MED>(
             std::tuple{"op", "write"},
-            std::tuple{"n64VAddr", "0x{:08x}", addr},
-            std::tuple{"n64PAddr", "0x{:08x}", paddr},
-            std::tuple{"hostAddr", "{:p}", (void*)hostAddr},
-            std::tuple{"data", "0x{:08x}", data},
-            std::tuple{"size", sizeof(T)});
+            std::tuple{"size", sizeof(T)},
+            std::tuple{"vAddr", "0x{:08x}", addr},
+            std::tuple{"pAddr", "0x{:08x}", paddr},
+            std::tuple{"ptr", "{:p}", (void*)hostAddr},
+            std::tuple{"data", "0x{:08x}", data});
     }
 }
 
 template <std::integral T>
 auto Memory::translate(VirtualAddr vaddr) const -> PhysicalAddr {
     if (vaddr % sizeof(T) != 0) {
-        throw std::runtime_error(std::format(
-            "Unaligned N64 virtual address access {:#08x}, size {}", vaddr, sizeof(T)));
+        throw Util::Error("Unaligned N64 virtual address access {:#08x}, size {}", vaddr, sizeof(T));
     }
 
     template for (constexpr auto e : Util::staticEnumeratorsOf(^^VirtSeg)) {
@@ -218,18 +213,16 @@ auto Memory::translate(VirtualAddr vaddr) const -> PhysicalAddr {
         constexpr auto range = std::meta::extract<Util::Range>(a);
         if (range.contains(vaddr)) {
             if constexpr (e != (^^VirtSeg::KSEG0) && e != ^^VirtSeg::KSEG1) {
-                throw std::runtime_error(std::format(
-                    "Unimplemented virtual memory range {}", std::meta::identifier_of(e)));
+                throw Util::Error(
+                    "Unimplemented virtual memory range {}", std::meta::identifier_of(e));
             }
             if (!range.contains(vaddr + sizeof(T) - 1)) {
-                throw std::runtime_error(std::format(
-                    "Out of bounds N64 virtual address access {:#08x}, size {}", vaddr, sizeof(T)));
+                throw Util::Error("Out of bounds N64 virtual address access {:#08x}, size {}", vaddr, sizeof(T));
             }
             return vaddr - range.lower;
         }
     }
-    throw std::runtime_error(std::format(
-        "Translation failed on N64 virtual address {:#08x}", vaddr));
+    throw Util::Error("Translation failed on N64 virtual address {:#08x}", vaddr);
 }
 
 auto Memory::registerAudioInterface(Interfaces::Interface* interface) -> void {

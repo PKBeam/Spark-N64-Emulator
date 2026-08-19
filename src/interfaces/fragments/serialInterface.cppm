@@ -1,3 +1,5 @@
+module;
+#include <util/defines.hpp>
 export module Interfaces:SerialInterface;
 
 import std;
@@ -88,9 +90,20 @@ template <std::integral T>
 auto SerialInterface::readBus(uint32_t addr) -> T {
     const auto [e, _] = Util::getRange<SiDmaRanges>(addr);
     switch (e) {
-        case SiDmaRanges::PIF_ROM: [[fallthrough]];
+        case SiDmaRanges::PIF_ROM:
+            IF_LOG_ENABLED(m_logger) {
+                m_logger->log<Util::Verbosity::MED>(
+                    std::tuple{"sys", std::meta::display_string_of(^^SerialInterface)},
+                    std::tuple{"warning", "Ignoring access to PIF ROM @ {:#08x}", addr});
+            }
+            return 0;
         case SiDmaRanges::PIF_RAM:
-            throw Util::Error("SI bus not implemented");
+            IF_LOG_ENABLED(m_logger) {
+                m_logger->log<Util::Verbosity::MED>(
+                    std::tuple{"sys", std::meta::display_string_of(^^SerialInterface)},
+                    std::tuple{"warning", "Ignoring access to PIF RAM @ {:#08x}", addr});
+            }
+            return 0;
     }
     return 0;
 }
@@ -99,9 +112,10 @@ template <std::integral T>
 auto SerialInterface::writeBus(uint32_t addr, T data) -> void {
     const auto [e, _] = Util::getRange<SiDmaRanges>(addr);
     switch (e) {
-        case SiDmaRanges::PIF_ROM: [[fallthrough]];
+        case SiDmaRanges::PIF_ROM:
+            throw Util::Error("SI: Attempt to write to read-only memory (PIF_ROM)");
         case SiDmaRanges::PIF_RAM:
-            throw Util::Error("SI bus not implemented");
+            throw Util::Error("SI: Write to unimplemented PIF_RAM");
     }
 }
 

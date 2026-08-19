@@ -38,7 +38,11 @@ int main(int argc, char* argv[]) {
                     }
                 }
             }
-        } else if (arg == "--dump-rom"sv) {
+        }
+        if (arg == "--log-after-boot"sv) {
+            emulatorConfig.logAfterBoot = true;
+        }
+        if (arg == "--dump-rom"sv) {
             emulatorConfig.dumpRom = true;
         }
     }
@@ -47,7 +51,10 @@ int main(int argc, char* argv[]) {
         emulatorConfig.logger = std::make_shared<Util::Logger>("log.json"sv);
         emulatorConfig.logger->setVerbosity(*logLevel);
     }
-
+    if (emulatorConfig.logAfterBoot) {
+        contract_assert(emulatorConfig.logger != nullptr);
+        emulatorConfig.logger->disable();
+    }
     auto emu = Emulator(emulatorConfig);
     emu.loadRom("/home/pkbeam/Legend of Zelda, The - Ocarina of Time (USA).z64");
 

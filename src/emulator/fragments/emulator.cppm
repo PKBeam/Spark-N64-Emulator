@@ -1,3 +1,5 @@
+module;
+#include <util/defines.hpp>
 export module Emulator:Emulator;
 
 import std;
@@ -14,9 +16,10 @@ using namespace std::string_view_literals;
 export class Emulator {
   public:
     struct Config {
-        std::shared_ptr<Util::Logger> logger     = nullptr;
-        std::size_t                   memorySize = 0;
-        bool                          dumpRom{};
+        std::shared_ptr<Util::Logger> logger       = nullptr;
+        std::size_t                   memorySize   = 0;
+        bool                          dumpRom      = false;
+        bool                          logAfterBoot = false;
     };
 
     constexpr Emulator(Config config);
@@ -31,10 +34,10 @@ export class Emulator {
     const Config                  m_config;
     std::shared_ptr<Util::Logger> m_logger;
 
-    void*                           m_memory;
-    std::unique_ptr<VR4300>         m_cpu;
-    std::optional<RomFile>          m_rom;
-    std::shared_ptr<Memory::Memory> m_memoryManager;
+    void*                   m_memory;
+    std::unique_ptr<VR4300> m_cpu;
+    std::optional<RomFile>  m_rom;
+    Memory::Memory*         m_memoryManager;
 
     Interfaces::AudioInterface*      m_audioInterface;
     Interfaces::MipsInterface*       m_mipsInterface;
@@ -45,24 +48,12 @@ export class Emulator {
 };
 
 constexpr auto Emulator::emulateInitialBoot() -> void {
-    // DMA 1 MiB of ROM code into memory at the bootAddress
+    // DMA 1 MiB of ROM code into RSP DMEM
     // these need to be done in 32-bit chunks to ensure correct endianness
-    std::optional<Util::Logger> romDumper{};
-    if (m_config.dumpRom) {
-        romDumper.emplace("./rom_initial_1mib.txt");
-        romDumper->setVerbosity(Util::Verbosity::MAX);
-    }
     for (auto i = 0uz; i < 0x1000; i += 4) {
         const auto word = m_memoryManager->read<uint32_t>(0xB0000000 + i);
-        if (romDumper && romDumper->enabled()) {
-            romDumper->logUnstructured("0x{:08x}: {}", i, ISA::Instruction(word));
-        }
         m_memoryManager->write<uint32_t>(0xA4000000 + i, word);
     }
-    if (romDumper) {
-        romDumper->flush();
-    }
-
     m_cpu->writePc(static_cast<uint32_t>(0xA4000040u));
 
     m_cpu->writeGpr<ISA::CPU_REG::t3>(static_cast<uint32_t>(0xA4000040));
@@ -84,7 +75,7 @@ constexpr auto Emulator::emulateInitialBoot() -> void {
 constexpr Emulator::Emulator(Config config) : m_config(config) {
     m_logger        = config.logger;
     m_memory        = std::malloc(m_config.memorySize);
-    m_memoryManager = std::make_shared<Memory::Memory>(m_logger, reinterpret_cast<std::byte*>(m_memory));
+    m_memoryManager = new Memory::Memory(m_logger, reinterpret_cast<std::byte*>(m_memory));
 
     m_audioInterface      = new Interfaces::AudioInterface(m_logger);
     m_mipsInterface       = new Interfaces::MipsInterface(m_logger);
@@ -100,7 +91,7 @@ constexpr Emulator::Emulator(Config config) : m_config(config) {
     m_memoryManager->registerPeripheralInterface(m_peripheralInterface);
     m_memoryManager->registerSerialInterface(m_serialInterface);
 
-    m_cpu = std::make_unique<VR4300>(m_memoryManager, m_logger);
+    m_cpu = std::make_unique<VR4300>(m_logger, m_memoryManager);
 }
 
 Emulator::~Emulator() {
@@ -114,11 +105,30 @@ Emulator::~Emulator() {
 
 constexpr auto Emulator::loadRom(std::filesystem::path path) -> void {
     m_rom.emplace(path);
+
+    if (m_config.dumpRom) {
+        Util::Logger romDumper{"./rom.txt"};
+        romDumper.setVerbosity(Util::Verbosity::MAX);
+        for (auto i = 0uz; i < m_rom->size(); i += 4) {
+            const auto word = m_rom->read<uint32_t>(i);
+            romDumper.logUnstructured("0x{:08x}: {}", i, ISA::Instruction(word));
+        }
+        romDumper.flush();
+        std::println("Dumped ROM to rom.txt, exiting...");
+        std::terminate();
+    }
+
     m_peripheralInterface->loadRom(&(*(m_rom)));
     emulateInitialBoot();
     if (m_logger) {
         m_logger->log<Util::Verbosity::HIGH>("Loaded ROM: {}", m_rom->readHeader().gameTitle);
     }
+    m_cpu->registerBootCallback(m_rom->readHeader().bootAddress, [this]() {
+        if (m_config.logAfterBoot) {
+            m_logger->enable();
+            m_logger->log<Util::Verbosity::HIGH>("Game booted");
+        }
+    });
     try {
         while (true) {
             m_cpu->runInstruction();

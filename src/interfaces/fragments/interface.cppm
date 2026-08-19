@@ -1,3 +1,5 @@
+module;
+#include <util/defines.hpp>
 export module Interfaces:Interface;
 
 import std;
@@ -57,8 +59,7 @@ auto Interface::sizedWrite(uint32_t addr, std::size_t size, uint32_t data) -> vo
             busValue = data;
             break;
         default:
-            throw std::runtime_error(std::format(
-                "Unsupported register write size: {}", size));
+            throw Util::Error("Unsupported register write size: {}", size);
     }
     write(addr, busValue);
 }
@@ -70,7 +71,7 @@ auto getRegisterName(uint32_t addr) -> std::string {
 
 template <typename RegAddrStruct, typename Self>
 auto Interface::logOperation(this Self&& self, std::shared_ptr<Util::Logger> logger, std::string_view operationName, uint32_t addr, uint32_t data) -> void {
-    if (logger && logger->enabled()) {
+    IF_LOG_ENABLED(logger) {
         auto name = getRegisterName<RegAddrStruct>(addr);
         logger->log<Util::Verbosity::MED>(
             std::tuple{"sys", std::meta::display_string_of(^^Self)},
@@ -82,7 +83,7 @@ auto Interface::logOperation(this Self&& self, std::shared_ptr<Util::Logger> log
 
 template <typename RegAddrStruct, typename Self>
 auto Interface::logWarnOnWriteToReadOnlyRegister(this Self&& self, std::shared_ptr<Util::Logger> logger, uint32_t addr) -> void {
-    if (logger && logger->enabled()) {
+    IF_LOG_ENABLED(logger) {
         auto name = getRegisterName<RegAddrStruct>(addr);
         logger->log<Util::Verbosity::MED>(
             std::tuple{"sys", std::meta::display_string_of(^^Self)},
@@ -92,7 +93,7 @@ auto Interface::logWarnOnWriteToReadOnlyRegister(this Self&& self, std::shared_p
 
 template <typename RegAddrStruct, typename Self>
 auto Interface::logWarnOnIgnoredRegister(this Self&& self, std::shared_ptr<Util::Logger> logger, uint32_t addr) -> void {
-    if (logger && logger->enabled()) {
+    IF_LOG_ENABLED(logger) {
         auto name = getRegisterName<RegAddrStruct>(addr);
         logger->log<Util::Verbosity::MED>(
             std::tuple{"sys", std::meta::display_string_of(^^Self)},

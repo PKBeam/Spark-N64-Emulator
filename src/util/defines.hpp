@@ -21,8 +21,18 @@ struct info {};
 #define contract_assert(x)
 #endif
 
-#ifdef NDEBUG
-#define DEBUG_LOG(logger) if (false)
-#else
-#define DEBUG_LOG(logger) if (logger && logger->enabled())
-#endif
+#define IF_LOG_ENABLED(logger) if (logger && logger->enabled())
+
+#define WITH_LOG_DISABLED(logger, expr) \
+    [&]() {                             \
+        bool was_enabled = false;       \
+        IF_LOG_ENABLED(logger) {        \
+            was_enabled = true;         \
+            logger->disable();          \
+        }                               \
+        auto result = expr;             \
+        if (was_enabled) {              \
+            logger->enable();           \
+        }                               \
+        return result;                  \
+    }();

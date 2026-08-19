@@ -69,7 +69,7 @@ auto PeripheralInterface::readBus(uint32_t addr) -> T {
             return m_romFile ? m_romFile->read<T>(addr - range.lower) : openBusRead(addr);
         case PiDmaRanges::N64DD_CTRL_REG: [[fallthrough]];
         case PiDmaRanges::N64DD_IPL_ROM:
-            DEBUG_LOG(m_logger) {
+            IF_LOG_ENABLED(m_logger) {
                 m_logger->log<Util::Verbosity::MED>(
                     std::tuple{"sys", "PI"},
                     std::tuple{"warning", "Ignoring read from N64DD memory range"});
@@ -94,7 +94,7 @@ auto PeripheralInterface::writeBus(uint32_t addr, T data) -> void {
             return; // ignore
         case PiDmaRanges::N64DD_CTRL_REG: [[fallthrough]];
         case PiDmaRanges::N64DD_IPL_ROM:
-            DEBUG_LOG(m_logger) {
+            IF_LOG_ENABLED(m_logger) {
                 m_logger->log<Util::Verbosity::MED>(
                     std::tuple{"sys", "PI"},
                     std::tuple{"warning", "Ignoring write to N64DD memory range"});

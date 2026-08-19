@@ -29,7 +29,11 @@ constexpr auto opcodeFor(uint32_t bits) -> Opcodes::UnifiedOpcode {
     uint32_t unifiedOpcode = 0;
     switch (opcode) {
         case OPCODE::OP_SPECIAL:
-            unifiedOpcode = UnifiedOpcodeBase::SPECIAL_BASE + instR.func;
+            if (instR.func == 0 && instR.sa == 0) {
+                unifiedOpcode = static_cast<uint32_t>(UnifiedOpcode::OP_NOP);
+            } else {
+                unifiedOpcode = UnifiedOpcodeBase::SPECIAL_BASE + instR.func;
+            }
             break;
 
         case OPCODE::OP_REGIMM:
@@ -37,14 +41,18 @@ constexpr auto opcodeFor(uint32_t bits) -> Opcodes::UnifiedOpcode {
             break;
 
         case OPCODE::OP_COP0:
-            if ((0xFE000000 & bits) >> 6 == 0) {
-                unifiedOpcode = UnifiedOpcodeBase::CP0_BASE + instR.func;
+            if ((bits >> 25) & 1) {
+                unifiedOpcode = UnifiedOpcodeBase::CP0_BASE + (bits & 0x01FFFFFF);
                 break;
             }
             [[fallthrough]];
 
         case OPCODE::OP_COP1: [[fallthrough]];
         case OPCODE::OP_COP2: {
+            if ((bits >> 25) & 1) { // COPz
+                unifiedOpcode = static_cast<uint32_t>(UnifiedOpcode::OP_COPz);
+                break;
+            }
             const auto rsOpcode = Util::scopedEnumCast<COPz_rs>(instR.rs);
             if (rsOpcode == COPz_rs::OP_BC) {
                 unifiedOpcode = UnifiedOpcodeBase::COPz_rt_BASE + instR.rt;
@@ -106,7 +114,7 @@ constexpr auto formatInstruction(const Instruction& inst) -> std::string {
     // check for NOP
     if (inst.opcode == Opcodes::UnifiedOpcode::OP_SLL &&
         std::bit_cast<CPU::TypeR>(inst.data).sa == 0) {
-        return std::format("{} ", "NOP");
+        return std::format("{:8} ", "NOP");
     }
 
     auto instStr = std::string{};
@@ -115,9 +123,9 @@ constexpr auto formatInstruction(const Instruction& inst) -> std::string {
     auto opcode = Util::enumName(inst.opcode);
     if (opcode.has_value()) {
         // insert coprocessor number
-        if (auto it = opcode->find("Cz"); it != opcode->npos) {
-            auto cpIndex = (inst.data >> 25) & 0b11;
-            opcode->replace(it, 2, std::format("C{}", cpIndex));
+        if (auto it = opcode->find("z"); it != opcode->npos) {
+            auto cpIndex = (inst.data >> 26) & 0b11;
+            opcode->replace(it, 1, std::format("{}", cpIndex));
         }
         instStr += std::format("{:8}", std::string_view(*opcode).substr(3));
     } else {

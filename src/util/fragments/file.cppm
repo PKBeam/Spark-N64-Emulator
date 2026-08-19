@@ -8,6 +8,7 @@ module;
 #endif
 
 export module Util:File;
+import :Types;
 
 import std;
 
@@ -22,7 +23,7 @@ auto memMapFile(std::filesystem::path path) -> std::byte* {
     close(fd);
 
     if (ptr == MAP_FAILED) {
-        throw std::runtime_error("Failed to map file from memory");
+        throw Util::Error("Failed to map file from memory");
     }
     return static_cast<std::byte*>(ptr);
 }
@@ -30,7 +31,7 @@ auto memMapFile(std::filesystem::path path) -> std::byte* {
 auto memUnmapFile(std::filesystem::path path, std::byte* ptr) -> void {
     auto fileSize = std::filesystem::file_size(path);
     if (munmap(ptr, fileSize) != 0) {
-        throw std::runtime_error("Failed to unmap file from memory");
+        throw Util::Error("Failed to unmap file from memory");
     }
 }
 #endif

@@ -2,6 +2,8 @@ module;
 import std;
 export module Util:Log;
 
+import :Types;
+
 using namespace std::string_view_literals;
 
 template <typename T>
@@ -11,11 +13,12 @@ export namespace Util {
 
 class Logger {
   public:
-    enum class Verbosity {
-        MAX  = 3,
-        HIGH = 2,
-        MED  = 1,
-        LOW  = 0,
+    enum class Verbosity : uint8_t {
+        MAX  = 255,
+        HIGH = 3,
+        MED  = 2,
+        LOW  = 1,
+        NONE = 0
     };
 
     Logger(std::string_view file) //
