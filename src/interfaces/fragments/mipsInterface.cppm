@@ -26,7 +26,7 @@ export class MipsInterface : public Interface {
     auto getInterrupt() -> bool;
 
   private:
-    auto raiseInterrupt() -> void;
+    auto updateInterrupt() -> void;
 
     std::shared_ptr<Util::Logger> m_logger;
     CP0::CP0*                     m_cp0;
@@ -36,13 +36,15 @@ export class MipsInterface : public Interface {
     MI_MASK      m_mask{};
 };
 
-auto MipsInterface::raiseInterrupt() -> void {
+auto MipsInterface::updateInterrupt() -> void {
+    auto cause = m_cp0->readReg<CP0::Registers::CAUSE>();
     if (std::bit_cast<uint32_t>(m_interrupt) & std::bit_cast<uint32_t>(m_mask)) {
-        auto cause = m_cp0->readReg<CP0::Registers::CAUSE>();
         cause.ip |= (1 << 2); // set IP2
-        m_cp0->writeReg(cause);
-        m_cp0->updateInterrupt();
+    } else {
+        cause.ip &= ~(1 << 2); // clear IP2
     }
+    m_cp0->writeReg(cause);
+    m_cp0->updateInterrupt();
 }
 
 template <std::meta::info IntrField>
@@ -54,7 +56,7 @@ auto MipsInterface::setInterrupt(bool enable) -> void {
             std::tuple{"interrupt", std::meta::identifier_of(IntrField)});
     }
     m_interrupt.[:IntrField:] = enable ? 1 : 0;
-    raiseInterrupt();
+    updateInterrupt();
 }
 
 template <std::meta::info IntrField>
@@ -65,6 +67,8 @@ auto MipsInterface::getInterrupt() -> bool {
 auto MipsInterface::read(uint32_t addr) -> uint32_t {
     contract_assert(addr % 4 == 0 &&
                     MI_REG_ADDR::BASE <= addr && addr <= MI_REG_ADDR::END);
+
+    addr = MI_REG_ADDR::BASE + (addr & 0xF);
 
     auto readReg = [this](uint32_t addr) -> uint32_t {
         switch (addr) {
@@ -88,6 +92,7 @@ auto MipsInterface::write(uint32_t addr, uint32_t data) -> void {
     contract_assert(addr % 4 == 0 &&
                     MI_REG_ADDR::BASE <= addr && addr <= MI_REG_ADDR::END);
 
+    addr = MI_REG_ADDR::BASE + (addr & 0xF);
     logOperation<MI_REG_ADDR>(m_logger, "write", addr, data);
 
     switch (addr) {
@@ -123,7 +128,7 @@ auto MipsInterface::write(uint32_t addr, uint32_t data) -> void {
             if (mask.setPi) m_mask.pi = 1;
             if (mask.clearDp) m_mask.dp = 0;
             if (mask.setDp) m_mask.dp = 1;
-            raiseInterrupt();
+            updateInterrupt();
             return;
         }
     }

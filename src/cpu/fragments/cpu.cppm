@@ -141,7 +141,18 @@ auto CPU::registerBootCallback(uint32_t callbackBootAddress, std::function<void(
 
 auto CPU::handleInterrupts() -> void {
     if (m_cp0->hasInterrupt()) {
-        throw Util::Error("Interrupts not yet implemented");
+        auto status = m_cp0->readReg<CP0::Registers::STATUS>();
+        status.exl  = 1;
+        m_cp0->writeReg(status);
+        auto nextPc = m_delaySlotPc.has_value() ? m_regs.pc - 4 : m_regs.pc;
+        m_cp0->writeReg<CP0::Registers::EPC>(nextPc);
+        m_regs.pc = status.bev ? 0xBFC00000 : 0x80000000;
+        IF_LOG_ENABLED(m_logger) {
+            m_logger->log<Util::Verbosity::MED>(
+                std::tuple{"exceptionStatus", "{:#08x}", std::bit_cast<uint32_t>(status)},
+                std::tuple{"exceptionCause", "{:#08x}", std::bit_cast<uint32_t>(m_cp0->readReg<CP0::Registers::CAUSE>())},
+                std::tuple{"returnPc", "{:#08x}", nextPc});
+        }
     }
 }
 

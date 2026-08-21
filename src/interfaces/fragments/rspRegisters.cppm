@@ -36,7 +36,7 @@ auto RspRegisters::read(uint32_t addr) -> uint32_t {
             case RSP_REG_ADDR::RSP_DMA_RDLEN: [[fallthrough]];
             case RSP_REG_ADDR::RSP_DMA_WRLEN: [[fallthrough]];
             case RSP_REG_ADDR::RSP_STATUS:
-                logWarnOnWriteToReadOnlyRegister<RSP_REG_ADDR>(m_logger, addr);
+                logWarnOnIgnoredRegister<RSP_REG_ADDR>(m_logger, addr);
                 return 0;
             case RSP_REG_ADDR::RSP_DMA_FULL: [[fallthrough]];
             case RSP_REG_ADDR::RSP_DMA_BUSY: [[fallthrough]];

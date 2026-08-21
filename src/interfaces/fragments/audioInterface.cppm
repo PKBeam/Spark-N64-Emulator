@@ -27,11 +27,14 @@ export class AudioInterface : public Interface {
     uint8_t   m_bitrate;
     uint16_t  m_dacRate;
     AI_STATUS m_status;
+    bool      m_enabled = false;
 };
 
 auto AudioInterface::read(uint32_t addr) -> uint32_t {
     contract_assert(addr % 4 == 0 &&
                     AI_REG_ADDR::BASE <= addr && addr <= AI_REG_ADDR::END);
+
+    addr = AI_REG_ADDR::BASE + (addr & 0x1F);
 
     auto readReg = [this](uint32_t addr) -> uint32_t {
         switch (addr) {
@@ -59,6 +62,7 @@ auto AudioInterface::write(uint32_t addr, uint32_t data) -> void {
     contract_assert(addr % 4 == 0 &&
                     AI_REG_ADDR::BASE <= addr && addr <= AI_REG_ADDR::END);
 
+    addr = AI_REG_ADDR::BASE + (addr & 0x1F);
     logOperation<AI_REG_ADDR>(m_logger, "write", addr, data);
 
     switch (addr) {
@@ -68,15 +72,13 @@ auto AudioInterface::write(uint32_t addr, uint32_t data) -> void {
         }
         case AI_REG_ADDR::AI_LENGTH: {
             m_length = data;
+            if (m_enabled) {
+                m_mipsInterface->setInterrupt<^^MI_INTERRUPT::ai>(true);
+            }
             return;
         }
         case AI_REG_ADDR::AI_CONTROL: {
-            auto control = std::bit_cast<AI_CONTROL>(data);
-            if (control.dmaEnable) {
-                m_mipsInterface->setInterrupt<^^MI_INTERRUPT::ai>(true);
-                // TODO
-                logWarnOnIgnoredRegister<AI_REG_ADDR>(m_logger, addr);
-            }
+            m_enabled = std::bit_cast<AI_CONTROL>(data).dmaEnable; // TODO do we need to initiate a pending DMA here
             return;
         }
         case AI_REG_ADDR::AI_STATUS: {

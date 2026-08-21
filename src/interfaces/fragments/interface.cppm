@@ -37,6 +37,9 @@ class Interface {
 
 auto Interface::sizedRead(uint32_t addr, std::size_t size) -> uint32_t {
     auto value = read(addr);
+    if (size >= 4) {
+        return value;
+    }
     return (value >> (8 * (addr % 4))) & ((1 << (size * 8)) - 1);
 }
 

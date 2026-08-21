@@ -27,6 +27,8 @@ auto VideoInterface::read(uint32_t addr) -> uint32_t {
     contract_assert(addr % 4 == 0 &&
                     VI_REG_ADDR::BASE <= addr && addr <= VI_REG_ADDR::END);
 
+    addr = VI_REG_ADDR::BASE + (addr & 0x3F);
+
     auto readReg = [this](uint32_t addr) -> uint32_t {
         switch (addr) {
             case VI_REG_ADDR::VI_CTRL:
@@ -46,11 +48,7 @@ auto VideoInterface::read(uint32_t addr) -> uint32_t {
             case VI_REG_ADDR::VI_Y_SCALE: [[fallthrough]];
             case VI_REG_ADDR::VI_TEST_ADDR: [[fallthrough]];
             case VI_REG_ADDR::VI_STAGED_DATA:
-                IF_LOG_ENABLED(m_logger) {
-                    m_logger->log<Util::Verbosity::MED>(
-                        std::tuple{"sys", std::meta::display_string_of(^^VideoInterface)},
-                        std::tuple{"warning", "Ignoring access to VI register @ {:#08x}", addr});
-                }
+                logWarnOnIgnoredRegister<VI_REG_ADDR>(m_logger, addr);
                 return 0;
             default:
                 throw Util::Error("No VI register found for addr {:#08x}", addr);
@@ -68,6 +66,7 @@ auto VideoInterface::write(uint32_t addr, uint32_t data) -> void {
     contract_assert(addr % 4 == 0 &&
                     VI_REG_ADDR::BASE <= addr && addr <= VI_REG_ADDR::END);
 
+    addr = VI_REG_ADDR::BASE + (addr & 0x3F);
     logOperation<VI_REG_ADDR>(m_logger, "write", addr, data);
 
     switch (addr) {
@@ -87,11 +86,7 @@ auto VideoInterface::write(uint32_t addr, uint32_t data) -> void {
         case VI_REG_ADDR::VI_Y_SCALE: [[fallthrough]];
         case VI_REG_ADDR::VI_TEST_ADDR: [[fallthrough]];
         case VI_REG_ADDR::VI_STAGED_DATA:
-            IF_LOG_ENABLED(m_logger) {
-                m_logger->log<Util::Verbosity::MED>(
-                    std::tuple{"sys", std::meta::display_string_of(^^VideoInterface)},
-                    std::tuple{"warning", "Ignoring access to VI register @ {:#08x}", addr});
-            }
+            logWarnOnIgnoredRegister<VI_REG_ADDR>(m_logger, addr);
             return; // Placeholder
         default:
             throw Util::Error("No VI register found for addr {:#08x}", addr);

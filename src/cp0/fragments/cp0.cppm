@@ -120,6 +120,7 @@ class CP0 {
     auto writeReg(T value) -> void;
 
     auto updateInterrupt() -> void;
+    auto clearInterrupt() -> void;
 
     auto hasInterrupt() -> bool;
 
@@ -185,6 +186,9 @@ auto CP0::writeReg(std::size_t index, T value) -> void {
             std::tuple{"reg", "CP0 {}", static_cast<Registers>(index)},
             std::tuple{"data", "0x{:08X}", static_cast<uint32_t>(value)});
     }
+    if (index == static_cast<uint8_t>(Registers::STATUS) || index == static_cast<uint8_t>(Registers::CAUSE)) {
+        updateInterrupt();
+    }
 }
 
 template <typename T>
@@ -207,7 +211,11 @@ auto CP0::writeReg(T value) -> void {
 auto CP0::updateInterrupt() -> void {
     auto status    = WITH_LOG_DISABLED(m_logger, readReg<Registers::STATUS>());
     auto cause     = WITH_LOG_DISABLED(m_logger, readReg<Registers::CAUSE>());
-    m_hasInterrupt = status.im & cause.ip;
+    m_hasInterrupt = status.im & cause.ip && status.ie && !status.exl && !status.erl;
+}
+
+auto CP0::clearInterrupt() -> void {
+    m_hasInterrupt = false;
 }
 
 auto CP0::hasInterrupt() -> bool {

@@ -40,6 +40,7 @@ auto CPU::runInstruction() -> void {
     auto data = inst.data;
 
     switch (op) {
+        case UnifiedOpcode::OP_SYNC: [[fallthrough]];
         case UnifiedOpcode::OP_NOP: break;
 
         // Jump instructions
