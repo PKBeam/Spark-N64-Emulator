@@ -6,13 +6,18 @@ import std;
 import Util;
 
 import :Interface;
+import :MipsInterface;
 import :SerialInterfaceTypes;
 
 namespace Interfaces {
 
 export class SerialInterface : public Interface {
   public:
-    SerialInterface(std::shared_ptr<Util::Logger> logger, std::byte* memory) : m_logger(logger), m_memory(memory) {}
+    SerialInterface(
+        std::shared_ptr<Util::Logger> logger,
+        std::byte*                    memory,
+        MipsInterface*                mipsInterface)
+        : m_logger(logger), m_memory(memory), m_mipsInterface(mipsInterface) {}
 
     auto read(uint32_t addr) -> uint32_t override;
     auto write(uint32_t addr, uint32_t data) -> void override;
@@ -28,10 +33,10 @@ export class SerialInterface : public Interface {
   private:
     std::shared_ptr<Util::Logger> m_logger;
     std::byte*                    m_memory;
-
-    uint32_t  m_dramAddr;
-    uint32_t  m_pifAddr;
-    SI_STATUS m_status;
+    MipsInterface*                m_mipsInterface;
+    uint32_t                      m_dramAddr;
+    uint32_t                      m_pifAddr;
+    SI_STATUS                     m_status;
 };
 
 auto SerialInterface::read(uint32_t addr) -> uint32_t {
@@ -47,7 +52,9 @@ auto SerialInterface::read(uint32_t addr) -> uint32_t {
             case SI_REG_ADDR::SI_PIF_AD_WR64B: [[fallthrough]];
             case SI_REG_ADDR::SI_PIF_AD_RD4B:
                 return 0;
-            case SI_REG_ADDR::SI_STATUS: return std::bit_cast<uint32_t>(m_status);
+            case SI_REG_ADDR::SI_STATUS:
+                m_status.interrupt = m_mipsInterface->getInterrupt<^^MI_INTERRUPT::si>();
+                return std::bit_cast<uint32_t>(m_status);
             default:
                 throw Util::Error("No SI register found for addr {:#08x}", addr);
         }
@@ -73,6 +80,7 @@ auto SerialInterface::write(uint32_t addr, uint32_t data) -> void {
         case SI_REG_ADDR::SI_PIF_AD_RD64B: {
             m_pifAddr = data;
             dmaMemcpy(m_dramAddr, m_pifAddr);
+            m_mipsInterface->setInterrupt<^^MI_INTERRUPT::si>(true);
             break;
         };
         case SI_REG_ADDR::SI_PIF_AD_WR4B: [[fallthrough]];
@@ -81,7 +89,7 @@ auto SerialInterface::write(uint32_t addr, uint32_t data) -> void {
             logWarnOnIgnoredRegister<SI_REG_ADDR>(m_logger, addr);
             break;
         case SI_REG_ADDR::SI_STATUS:
-            logWarnOnWriteToReadOnlyRegister<SI_REG_ADDR>(m_logger, addr);
+            m_mipsInterface->setInterrupt<^^MI_INTERRUPT::si>(false);
             break;
     }
 }

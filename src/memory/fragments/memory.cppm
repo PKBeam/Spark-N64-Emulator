@@ -45,6 +45,9 @@ export class Memory {
     auto registerSerialInterface(Interfaces::Interface* interface) -> void //
         pre(interface != nullptr);
 
+    auto registerVideoInterface(Interfaces::Interface* interface) -> void //
+        pre(interface != nullptr);
+
   private:
     std::shared_ptr<Util::Logger> m_logger;
     std::byte*                    m_hostMemory;
@@ -55,6 +58,7 @@ export class Memory {
     Interfaces::Interface* m_rspRegisters;
     Interfaces::Interface* m_peripheralInterface;
     Interfaces::Interface* m_serialInterface;
+    Interfaces::Interface* m_videoInterface;
 };
 
 namespace Impl {
@@ -71,7 +75,7 @@ auto getPhysicalSegment(PhysicalAddr paddr) -> PhysSeg {
 } // namespace Impl
 
 template <std::integral T>
-auto Memory::read(VirtualAddr addr) const -> T {
+auto Memory::read(VirtualAddr addr) const -> T { // TODO improve performance
     const auto paddr    = translate<T>(addr);
     const auto hostAddr = m_hostMemory + paddr;
 
@@ -95,26 +99,12 @@ auto Memory::read(VirtualAddr addr) const -> T {
             data = m_rspRegisters->sizedRead(paddr, sizeof(T));
             break;
         }
-        case PhysSeg::MIPS_INTERFACE: {
-            data = m_mipsInterface->sizedRead(paddr, sizeof(T));
-            break;
-        }
-        case PhysSeg::AUDIO_INTERFACE: {
-            data = m_audioInterface->sizedRead(paddr, sizeof(T));
-            break;
-        }
-        case PhysSeg::PERIPHERAL_INTERFACE: {
-            data = m_peripheralInterface->sizedRead(paddr, sizeof(T));
-            break;
-        }
-        case PhysSeg::RDRAM_INTERFACE: {
-            data = m_rdramInterface->sizedRead(paddr, sizeof(T));
-            break;
-        }
-        case PhysSeg::SERIAL_INTERFACE: {
-            data = m_serialInterface->sizedRead(paddr, sizeof(T));
-            break;
-        }
+        case PhysSeg::MIPS_INTERFACE: data = m_mipsInterface->sizedRead(paddr, sizeof(T)); break;
+        case PhysSeg::AUDIO_INTERFACE: data = m_audioInterface->sizedRead(paddr, sizeof(T)); break;
+        case PhysSeg::VIDEO_INTERFACE: data = m_videoInterface->sizedRead(paddr, sizeof(T)); break;
+        case PhysSeg::PERIPHERAL_INTERFACE: data = m_peripheralInterface->sizedRead(paddr, sizeof(T)); break;
+        case PhysSeg::RDRAM_INTERFACE: data = m_rdramInterface->sizedRead(paddr, sizeof(T)); break;
+        case PhysSeg::SERIAL_INTERFACE: data = m_serialInterface->sizedRead(paddr, sizeof(T)); break;
         case PhysSeg::PI_BUS:
             data = dynamic_cast<Interfaces::PeripheralInterface*>(m_peripheralInterface)->readBus<T>(paddr);
             break;
@@ -133,7 +123,7 @@ auto Memory::read(VirtualAddr addr) const -> T {
             std::tuple{"vAddr", "0x{:08x}", addr},
             std::tuple{"pAddr", "0x{:08x}", paddr},
             std::tuple{"ptr", "{:p}", (void*)hostAddr},
-            std::tuple{"data", "0x{:08x}", data});
+            std::tuple{"data", "0x{:08x}", static_cast<std::make_unsigned_t<T>>(data)});
     }
     return data;
 }
@@ -150,36 +140,19 @@ auto Memory::write(VirtualAddr addr, T data) const -> void {
             Util::byteswapIfLittleEndian(data);
             std::memcpy(hostAddr, &data, sizeof(T));
             break;
-        case PhysSeg::MIPS_INTERFACE: {
-            m_mipsInterface->sizedWrite(paddr, sizeof(T), data);
-            break;
-        }
-        case PhysSeg::AUDIO_INTERFACE: {
-            m_audioInterface->sizedWrite(paddr, sizeof(T), data);
-            break;
-        }
-        case PhysSeg::RDRAM_INTERFACE: {
-            m_rdramInterface->sizedWrite(paddr, sizeof(T), data);
-            break;
-        }
+        case PhysSeg::MIPS_INTERFACE: m_mipsInterface->sizedWrite(paddr, sizeof(T), data); break;
+        case PhysSeg::AUDIO_INTERFACE: m_audioInterface->sizedWrite(paddr, sizeof(T), data); break;
+        case PhysSeg::VIDEO_INTERFACE: m_videoInterface->sizedWrite(paddr, sizeof(T), data); break;
+        case PhysSeg::RDRAM_INTERFACE: m_rdramInterface->sizedWrite(paddr, sizeof(T), data); break;
         case PhysSeg::RDRAM_REG: {
             IF_LOG_ENABLED(m_logger) {
                 m_logger->log<Util::Verbosity::MED>(std::tuple{"warning", "Ignoring RDRAM register write"});
             }
             break;
         }
-        case PhysSeg::RSP_REG: {
-            m_rspRegisters->sizedWrite(paddr, sizeof(T), data);
-            break;
-        }
-        case PhysSeg::PERIPHERAL_INTERFACE: {
-            m_peripheralInterface->sizedWrite(paddr, sizeof(T), data);
-            break;
-        }
-        case PhysSeg::SERIAL_INTERFACE: {
-            m_serialInterface->sizedWrite(paddr, sizeof(T), data);
-            break;
-        }
+        case PhysSeg::RSP_REG: m_rspRegisters->sizedWrite(paddr, sizeof(T), data); break;
+        case PhysSeg::PERIPHERAL_INTERFACE: m_peripheralInterface->sizedWrite(paddr, sizeof(T), data); break;
+        case PhysSeg::SERIAL_INTERFACE: m_serialInterface->sizedWrite(paddr, sizeof(T), data); break;
         case PhysSeg::PI_BUS:
             data = dynamic_cast<Interfaces::PeripheralInterface*>(m_peripheralInterface)->readBus<T>(paddr);
             break;
@@ -192,13 +165,21 @@ auto Memory::write(VirtualAddr addr, T data) const -> void {
     }
 
     IF_LOG_ENABLED(m_logger) {
+        auto printData = data;
+        switch (Impl::getPhysicalSegment(paddr)) {
+            case PhysSeg::RDRAM: [[fallthrough]];
+            case PhysSeg::RSP_DMEM: [[fallthrough]];
+            case PhysSeg::RSP_IMEM:
+                Util::byteswapIfLittleEndian(printData);
+            default: break;
+        }
         m_logger->log<Util::Verbosity::MED>(
             std::tuple{"op", "write"},
             std::tuple{"size", sizeof(T)},
             std::tuple{"vAddr", "0x{:08x}", addr},
             std::tuple{"pAddr", "0x{:08x}", paddr},
             std::tuple{"ptr", "{:p}", (void*)hostAddr},
-            std::tuple{"data", "0x{:08x}", data});
+            std::tuple{"data", "0x{:08x}", static_cast<std::make_unsigned_t<T>>(printData)});
     }
 }
 
@@ -247,6 +228,10 @@ auto Memory::registerPeripheralInterface(Interfaces::Interface* interface) -> vo
 
 auto Memory::registerSerialInterface(Interfaces::Interface* interface) -> void {
     m_serialInterface = interface;
+}
+
+auto Memory::registerVideoInterface(Interfaces::Interface* interface) -> void {
+    m_videoInterface = interface;
 }
 
 } // namespace Memory

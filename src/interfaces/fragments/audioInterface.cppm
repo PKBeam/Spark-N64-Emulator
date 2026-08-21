@@ -4,19 +4,23 @@ import std;
 import Util;
 
 import :Interface;
+import :MipsInterface;
 import :AudioInterfaceTypes;
 
 namespace Interfaces {
 
 export class AudioInterface : public Interface {
   public:
-    AudioInterface(std::shared_ptr<Util::Logger> logger) : m_logger(logger) {};
+    AudioInterface(std::shared_ptr<Util::Logger> logger,
+                   MipsInterface*                mipsInterface)
+        : m_logger(logger), m_mipsInterface(mipsInterface) {};
 
     auto read(uint32_t addr) -> uint32_t override;
     auto write(uint32_t addr, uint32_t data) -> void override;
 
   private:
     std::shared_ptr<Util::Logger> m_logger;
+    MipsInterface*                m_mipsInterface;
 
     uint32_t  m_dramAddr;
     uint32_t  m_length;
@@ -69,14 +73,14 @@ auto AudioInterface::write(uint32_t addr, uint32_t data) -> void {
         case AI_REG_ADDR::AI_CONTROL: {
             auto control = std::bit_cast<AI_CONTROL>(data);
             if (control.dmaEnable) {
+                m_mipsInterface->setInterrupt<^^MI_INTERRUPT::ai>(true);
                 // TODO
                 logWarnOnIgnoredRegister<AI_REG_ADDR>(m_logger, addr);
             }
             return;
         }
         case AI_REG_ADDR::AI_STATUS: {
-            // TODO ack interrupt
-            logWarnOnIgnoredRegister<AI_REG_ADDR>(m_logger, addr);
+            m_mipsInterface->setInterrupt<^^MI_INTERRUPT::ai>(false);
             return;
         }
         case AI_REG_ADDR::AI_DACRATE: {

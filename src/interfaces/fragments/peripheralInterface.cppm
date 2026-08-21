@@ -7,13 +7,18 @@ import Rom;
 import Util;
 
 import :Interface;
+import :MipsInterface;
 import :PeripheralInterfaceTypes;
 
 namespace Interfaces {
 
 export class PeripheralInterface : public Interface {
   public:
-    PeripheralInterface(std::shared_ptr<Util::Logger> logger, std::byte* memory) : m_logger(logger), m_memory(memory) {}
+    PeripheralInterface(
+        std::shared_ptr<Util::Logger> logger,
+        std::byte*                    memory,
+        MipsInterface*                mipsInterface)
+        : m_logger(logger), m_memory(memory), m_mipsInterface(mipsInterface) {}
 
     auto loadRom(const RomFile* rom) -> void //
         pre(rom != nullptr);
@@ -37,6 +42,7 @@ export class PeripheralInterface : public Interface {
     PI_STATUS                     m_status{};
     uint32_t                      m_dramAddr = 0;
     uint32_t                      m_cartAddr = 0;
+    MipsInterface*                m_mipsInterface;
 
     auto readRegister(uint32_t addr) -> uint32_t;
     auto writeRegister(uint32_t addr, uint32_t data) -> void;
@@ -114,6 +120,7 @@ auto PeripheralInterface::read(uint32_t addr) -> uint32_t {
             case PI_REG_ADDR::PI_RD_LEN: return 0x7F;
             case PI_REG_ADDR::PI_WR_LEN: return 0x7F;
             case PI_REG_ADDR::PI_STATUS:
+                m_status.interrupt = m_mipsInterface->getInterrupt<^^MI_INTERRUPT::pi>(); // TODO does this need to be mirrored?
                 return std::bit_cast<uint32_t>(m_status);
             case PI_REG_ADDR::PI_BSD_DOM1_LAT:
                 return std::bit_cast<uint32_t>(PI_BSD_DOM1_LAT{});
@@ -162,19 +169,21 @@ auto PeripheralInterface::write(uint32_t addr, uint32_t data) -> void {
             const auto status = std::bit_cast<PI_RD_LEN>(data);
             const auto length = status.rdLen_23_0 + 1;
             dmaMemcpy(m_cartAddr, m_dramAddr, length);
+            m_mipsInterface->setInterrupt<^^MI_INTERRUPT::pi>(true);
             return;
         }
         case PI_REG_ADDR::PI_WR_LEN: {
             const auto status = std::bit_cast<PI_WR_LEN>(data);
             const auto length = status.wrLen_23_0 + 1;
             dmaMemcpy(m_dramAddr, m_cartAddr, length);
+            m_mipsInterface->setInterrupt<^^MI_INTERRUPT::pi>(true);
             return;
         }
         case PI_REG_ADDR::PI_STATUS: {
             const auto status = std::bit_cast<PI_STATUS::Write>(data);
             // DMAs are modelled as instant, so ignore dmaReset
             if (status.clearInterrupt) {
-                m_status.interrupt = 0;
+                m_mipsInterface->setInterrupt<^^MI_INTERRUPT::pi>(false);
             }
             break;
         }

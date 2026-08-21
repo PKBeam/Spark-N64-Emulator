@@ -1,3 +1,3 @@
 export module CPU;
 
-export import :VR4300;
+export import :CPU;

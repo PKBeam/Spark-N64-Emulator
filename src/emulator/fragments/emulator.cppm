@@ -4,6 +4,7 @@ export module Emulator:Emulator;
 
 import std;
 
+import CP0;
 import CPU;
 import Rom;
 import Interfaces;
@@ -34,10 +35,11 @@ export class Emulator {
     const Config                  m_config;
     std::shared_ptr<Util::Logger> m_logger;
 
-    void*                   m_memory;
-    std::unique_ptr<VR4300> m_cpu;
-    std::optional<RomFile>  m_rom;
-    Memory::Memory*         m_memoryManager;
+    void*                  m_memory;
+    CPU::CPU*              m_cpu;
+    CP0::CP0*              m_cp0;
+    std::optional<RomFile> m_rom;
+    Memory::Memory*        m_memoryManager;
 
     Interfaces::AudioInterface*      m_audioInterface;
     Interfaces::MipsInterface*       m_mipsInterface;
@@ -45,6 +47,7 @@ export class Emulator {
     Interfaces::RspRegisters*        m_rspRegisters;
     Interfaces::PeripheralInterface* m_peripheralInterface;
     Interfaces::SerialInterface*     m_serialInterface;
+    Interfaces::VideoInterface*      m_videoInterface;
 };
 
 constexpr auto Emulator::emulateInitialBoot() -> void {
@@ -66,10 +69,10 @@ constexpr auto Emulator::emulateInitialBoot() -> void {
     m_cpu->writeGpr<ISA::CPU_REG::sp>(static_cast<uint32_t>(0xA4001FF0));
     m_cpu->writeGpr<ISA::CPU_REG::ra>(static_cast<uint32_t>(0xA4001000)); // from IPL2 stage
 
-    m_cpu->writeCp0Reg<ISA::CP0_REG::RANDOM>(static_cast<uint32_t>(0x0000001F));
-    m_cpu->writeCp0Reg<ISA::CP0_REG::STATUS>(static_cast<uint32_t>(0x34000000));
-    m_cpu->writeCp0Reg<ISA::CP0_REG::PRID>(static_cast<uint32_t>(0x00000B00));
-    m_cpu->writeCp0Reg<ISA::CP0_REG::CONFIG>(static_cast<uint32_t>(0x0006E463));
+    m_cp0->writeReg<CP0::Registers::RANDOM>(static_cast<uint32_t>(0x0000001F));
+    m_cp0->writeReg<CP0::Registers::STATUS>(static_cast<uint32_t>(0x34000000));
+    m_cp0->writeReg<CP0::Registers::PRID>(static_cast<uint32_t>(0x00000B00));
+    m_cp0->writeReg<CP0::Registers::CONFIG>(static_cast<uint32_t>(0x0006E463));
 }
 
 constexpr Emulator::Emulator(Config config) : m_config(config) {
@@ -77,12 +80,16 @@ constexpr Emulator::Emulator(Config config) : m_config(config) {
     m_memory        = std::malloc(m_config.memorySize);
     m_memoryManager = new Memory::Memory(m_logger, reinterpret_cast<std::byte*>(m_memory));
 
-    m_audioInterface      = new Interfaces::AudioInterface(m_logger);
-    m_mipsInterface       = new Interfaces::MipsInterface(m_logger);
+    m_cp0 = new CP0::CP0(m_logger);
+    m_cpu = new CPU::CPU(m_logger, m_cp0, m_memoryManager);
+
+    m_mipsInterface       = new Interfaces::MipsInterface(m_logger, m_cp0);
     m_rdramInterface      = new Interfaces::RdramInterface(m_logger);
-    m_rspRegisters        = new Interfaces::RspRegisters(m_logger);
-    m_peripheralInterface = new Interfaces::PeripheralInterface(m_logger, reinterpret_cast<std::byte*>(m_memory));
-    m_serialInterface     = new Interfaces::SerialInterface(m_logger, reinterpret_cast<std::byte*>(m_memory));
+    m_videoInterface      = new Interfaces::VideoInterface(m_logger);
+    m_audioInterface      = new Interfaces::AudioInterface(m_logger, m_mipsInterface);
+    m_rspRegisters        = new Interfaces::RspRegisters(m_logger, m_mipsInterface);
+    m_peripheralInterface = new Interfaces::PeripheralInterface(m_logger, reinterpret_cast<std::byte*>(m_memory), m_mipsInterface);
+    m_serialInterface     = new Interfaces::SerialInterface(m_logger, reinterpret_cast<std::byte*>(m_memory), m_mipsInterface);
 
     m_memoryManager->registerAudioInterface(m_audioInterface);
     m_memoryManager->registerMipsInterface(m_mipsInterface);
@@ -90,17 +97,21 @@ constexpr Emulator::Emulator(Config config) : m_config(config) {
     m_memoryManager->registerRspRegisters(m_rspRegisters);
     m_memoryManager->registerPeripheralInterface(m_peripheralInterface);
     m_memoryManager->registerSerialInterface(m_serialInterface);
-
-    m_cpu = std::make_unique<VR4300>(m_logger, m_memoryManager);
+    m_memoryManager->registerVideoInterface(m_videoInterface);
 }
 
 Emulator::~Emulator() {
     std::free(m_memory);
+    delete m_cp0;
+    delete m_cpu;
+    delete m_memoryManager;
+    delete m_audioInterface;
     delete m_mipsInterface;
     delete m_rdramInterface;
     delete m_rspRegisters;
     delete m_peripheralInterface;
     delete m_serialInterface;
+    delete m_videoInterface;
 }
 
 constexpr auto Emulator::loadRom(std::filesystem::path path) -> void {
@@ -131,6 +142,7 @@ constexpr auto Emulator::loadRom(std::filesystem::path path) -> void {
     });
     try {
         while (true) {
+            m_cpu->handleInterrupts();
             m_cpu->runInstruction();
         }
     } catch (const std::runtime_error& e) {

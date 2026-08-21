@@ -2,9 +2,10 @@ module;
 
 #include <util/defines.hpp>
 
-export module CPU:VR4300;
+export module CPU:CPU;
 
 import std;
+import CP0;
 import ISA;
 import Memory;
 import Util;
@@ -32,14 +33,17 @@ enum Type : bool { LOAD, STORE };
 }
 // clang-format on
 
-export class VR4300 {
+export namespace CPU {
+
+class CPU {
   public:
-    VR4300(
-        std::shared_ptr<Util::Logger> logger,
+    CPU(std::shared_ptr<Util::Logger> logger,
+        CP0::CP0*                     cp0,
         Memory::Memory*               memory);
 
     auto registerBootCallback(uint32_t callbackBootAddress, std::function<void()> callback) -> void;
 
+    auto handleInterrupts() -> void;
     auto runInstruction() -> void;
 
     // register I/O
@@ -72,22 +76,11 @@ export class VR4300 {
     template <std::integral T>
     auto writeLo(T value) -> void;
 
-    template <std::integral T = int32_t>
-    auto readCp0Reg(std::size_t index) -> T;
-
-    template <ISA::CP0_REG R, std::integral T = int32_t>
-    auto readCp0Reg() -> T;
-
-    template <std::integral T>
-    auto writeCp0Reg(std::size_t index, T value) -> void;
-
-    template <ISA::CP0_REG R, std::integral T>
-    auto writeCp0Reg(T value) -> void;
-
   private:
     std::shared_ptr<Util::Logger> m_logger;
     Memory::Memory*               m_memory;
     std::optional<VirtualAddr>    m_delaySlotPc;
+    CP0::CP0*                     m_cp0;
 
     struct { // do not write directly
         std::array<uint64_t, 32> gprs;
@@ -100,9 +93,9 @@ export class VR4300 {
         float                    fcr31;
     } m_regs;
 
-    std::function<void()>    m_bootCallback;
-    uint32_t                 m_bootCallbackAddress;
-    std::array<uint32_t, 32> m_cp0regs;
+    bool                  m_hasBooted;
+    std::function<void()> m_bootCallback;
+    uint32_t              m_bootAddress;
 
     // todo genericise to allow jump insts
     template <Branch::Likelihood Likely = Branch::NONE, Branch::Link Link = Branch::NO_LINK, typename Function>
@@ -134,31 +127,24 @@ export class VR4300 {
     auto executeDivide(uint32_t inst) -> void;
 };
 
-VR4300::VR4300(std::shared_ptr<Util::Logger> logger, Memory::Memory* memory) {
+CPU::CPU(std::shared_ptr<Util::Logger> logger, CP0::CP0* cp0, Memory::Memory* memory) {
     m_memory    = memory;
     m_logger    = logger;
+    m_cp0       = cp0;
     m_regs.gprs = {};
 }
 
-auto VR4300::registerBootCallback(uint32_t callbackBootAddress, std::function<void()> callback) -> void {
-    m_bootCallbackAddress = callbackBootAddress;
-    m_bootCallback        = std::move(callback);
+auto CPU::registerBootCallback(uint32_t callbackBootAddress, std::function<void()> callback) -> void {
+    m_bootAddress  = callbackBootAddress;
+    m_bootCallback = std::move(callback);
 }
 
-struct CP0_STATUS {
-    uint32_t ie  : 1;
-    uint32_t exl : 1;
-    uint32_t erl : 1;
-    uint32_t ksu : 1;
-    uint32_t ux  : 1;
-    uint32_t sx  : 1;
-    uint32_t kx  : 1;
-    uint32_t im  : 8;
-    uint32_t ds  : 9;
-    uint32_t re  : 1;
-    uint32_t fr  : 1;
-    uint32_t rp  : 1;
-    uint32_t cu  : 4;
-};
+auto CPU::handleInterrupts() -> void {
+    if (m_cp0->hasInterrupt()) {
+        throw Util::Error("Interrupts not yet implemented");
+    }
+}
 
-#include "vr4300registers.inl"
+#include "cpuRegisters.inl"
+
+} // namespace CPU

@@ -91,14 +91,14 @@ constexpr auto formatOps(Instruction inst) -> std::vector<std::string> {
                     } else if constexpr (name == "rs") {
                         result.push_back(std::format("{}", static_cast<ISA::CPU_REG>(instData.rs)));
                     } else if constexpr (name == "imm") {
-                        result.push_back(std::format("{:#x}", (int16_t)instData.imm));
+                        result.push_back(std::format("{:#x}", static_cast<uint32_t>(instData.imm)));
                     } else if constexpr (name == "tgt") {
                         // shift left 2 and append high order 4 bits (always 0x8?)
-                        result.push_back(std::format("0x8{:05x}", (uint32_t)instData.tgt << 2));
+                        result.push_back(std::format("0x8{:05x}", static_cast<uint32_t>(instData.tgt << 2)));
                     } else if constexpr (name == "rd") {
                         result.push_back(std::format("{}", static_cast<ISA::CPU_REG>(instData.rd)));
                     } else if constexpr (name == "sa") {
-                        result.push_back(std::format("{}", (uint32_t)instData.sa));
+                        result.push_back(std::format("{}", static_cast<uint32_t>(instData.sa)));
                     } else {
                         static_assert(false, name);
                     }

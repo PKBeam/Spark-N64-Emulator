@@ -40,34 +40,6 @@ enum class CPU_REG : uint8_t {
     ra   = 31,
 };
 
-enum class CP0_REG : uint8_t {
-    INDEX     = 0,
-    RANDOM    = 1,
-    ENTRYLO0  = 2,
-    ENTRYLO1  = 3,
-    CONTEXT   = 4,
-    PAGEMASK  = 5,
-    WIRED     = 6,
-    BADVADDR  = 8,
-    COUNT     = 9,
-    ENTRYHI   = 10,
-    COMPARE   = 11,
-    STATUS    = 12,
-    CAUSE     = 13,
-    EPC       = 14,
-    PRID      = 15,
-    CONFIG    = 16,
-    LLADDR    = 17,
-    WATCHLO   = 18,
-    WATCHHI   = 19,
-    XCONTEXT  = 20,
-    PARITYERR = 26,
-    CACHEERR  = 27,
-    TAGLO     = 28,
-    TAGHI     = 29,
-    ERROREPC  = 30,
-};
-
 } // namespace ISA
 
 template <>
@@ -78,18 +50,6 @@ struct std::formatter<ISA::CPU_REG> {
 
     auto format(const ISA::CPU_REG& reg, std::format_context& ctx) const {
         auto str = Util::enumName(reg).value_or(std::format("r{}", static_cast<uint8_t>(reg)));
-        return std::format_to(ctx.out(), "{}", str);
-    }
-};
-
-template <>
-struct std::formatter<ISA::CP0_REG> {
-    constexpr auto parse(std::format_parse_context& ctx) -> std::format_parse_context::iterator {
-        return ctx.begin();
-    }
-
-    auto format(const ISA::CP0_REG& reg, std::format_context& ctx) const {
-        auto str = Util::enumName(reg).value_or(std::format("{}", static_cast<uint8_t>(reg)));
         return std::format_to(ctx.out(), "{}", str);
     }
 };

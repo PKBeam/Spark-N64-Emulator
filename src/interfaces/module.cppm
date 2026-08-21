@@ -7,6 +7,7 @@ export import :RdramRegistersTypes;
 export import :RspRegistersTypes;
 export import :PeripheralInterfaceTypes;
 export import :SerialInterfaceTypes;
+export import :VideoInterfaceTypes;
 
 export import :Interface;
 
@@ -17,3 +18,4 @@ export import :RdramRegisters;
 export import :RspRegisters;
 export import :PeripheralInterface;
 export import :SerialInterface;
+export import :VideoInterface;

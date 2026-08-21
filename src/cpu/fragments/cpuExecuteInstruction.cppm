@@ -8,29 +8,35 @@ import std;
 import ISA;
 import Memory;
 import Util;
-import :VR4300;
+import :CPU;
+
+namespace CPU {
 
 template <Branch::Likelihood Likely, typename Function>
     requires std::same_as<bool, std::invoke_result_t<Function, int32_t, int32_t>>
-auto VR4300::executeBranchAndLink(uint32_t inst, Function&& func) -> std::optional<uint64_t> {
+auto CPU::executeBranchAndLink(uint32_t inst, Function&& func) -> std::optional<uint64_t> {
     return executeBranch<Likely, Branch::LINK>(inst, std::forward<Function>(func));
 }
 
 template <Immediate::Extend I, std::integral RegisterType, typename Function>
     requires std::integral<std::invoke_result_t<Function, RegisterType, RegisterType>>
-auto VR4300::executeBivariateImmediate(uint32_t inst, Function&& func) -> void {
+auto CPU::executeBivariateImmediate(uint32_t inst, Function&& func) -> void {
     executeBivariate<RegisterType, I>(inst, std::forward<Function>(func));
 }
 
 template <Branch::Likelihood Likely, Branch::Link Link, typename Function>
     requires std::same_as<bool, std::invoke_result_t<Function, int32_t, int32_t>>
-auto VR4300::executeBranch(uint32_t inst, Function&& func) -> std::optional<uint64_t> {
+auto CPU::executeBranch(uint32_t inst, Function&& func) -> std::optional<uint64_t> {
     if constexpr (Link == Branch::LINK) {
         writeGpr<ISA::CPU_REG::ra>(m_regs.pc + 8);
     }
     auto ops = std::bit_cast<ISA::CPU::TypeI>(inst);
     if (func(readGpr(ops.rs), readGpr(ops.rt))) {
-        return (m_regs.pc + 4) + (Util::signExt32<int16_t>(ops.imm) << 2);
+        auto instOffset = Util::signExt32<int16_t>(ops.imm);
+        if (instOffset == -1) {
+            throw Util::Error("Detected infinite loop @ PC {:#08x}: {:#08x}", m_regs.pc, inst);
+        }
+        return (m_regs.pc + 4) + (instOffset << 2);
     }
     if constexpr (Likely == Branch::LIKELY) {
         m_regs.pc += 4;
@@ -39,7 +45,7 @@ auto VR4300::executeBranch(uint32_t inst, Function&& func) -> std::optional<uint
 }
 
 template <Shift::Len Len, Shift::Dir Dir, Shift::Type Type, Shift::Var Var, Shift::Add Add>
-auto VR4300::executeShift(uint32_t inst) -> void {
+auto CPU::executeShift(uint32_t inst) -> void {
     auto ops = std::bit_cast<ISA::CPU::TypeR>(inst);
 
     constexpr uint8_t rsMask      = Len == Shift::Len::WORD ? 0x1F : 0x3F;
@@ -69,7 +75,7 @@ auto VR4300::executeShift(uint32_t inst) -> void {
 
 template <std::integral RegisterType, Immediate::Extend I, typename Function>
     requires std::integral<std::invoke_result_t<Function, RegisterType, RegisterType>>
-auto VR4300::executeBivariate(uint32_t inst, Function&& func) -> void {
+auto CPU::executeBivariate(uint32_t inst, Function&& func) -> void {
     auto ops = [&] {
         if constexpr (I == Immediate::NONE) {
             return std::bit_cast<ISA::CPU::TypeR>(inst);
@@ -100,7 +106,7 @@ auto VR4300::executeBivariate(uint32_t inst, Function&& func) -> void {
 }
 
 template <std::integral T>
-auto VR4300::executeMultiply(uint32_t inst) -> void {
+auto CPU::executeMultiply(uint32_t inst) -> void {
 #if defined(__SIZEOF_INT128__)
     using ResultType = std::conditional_t<sizeof(T) == 4, uint64_t, __uint128_t>;
 #else
@@ -115,7 +121,7 @@ auto VR4300::executeMultiply(uint32_t inst) -> void {
 }
 
 template <std::integral T>
-auto VR4300::executeDivide(uint32_t inst) -> void {
+auto CPU::executeDivide(uint32_t inst) -> void {
     auto ops = std::bit_cast<ISA::CPU::TypeR>(inst);
     auto rs  = readGpr<T>(ops.rs);
     auto rt  = readGpr<T>(ops.rt);
@@ -137,7 +143,7 @@ auto VR4300::executeDivide(uint32_t inst) -> void {
 }
 
 template <Memory::Type Type, std::integral T>
-auto VR4300::executeMemoryOperation(uint32_t inst) -> void {
+auto CPU::executeMemoryOperation(uint32_t inst) -> void {
     auto ops   = std::bit_cast<ISA::CPU::TypeI>(inst);
     auto vaddr = Util::signExt32<int16_t>(ops.imm) + readGpr(ops.rs);
     if constexpr (Type == Memory::Type::LOAD) {
@@ -155,4 +161,6 @@ auto VR4300::executeMemoryOperation(uint32_t inst) -> void {
     }
 }
 
-#include "vr4300executeInstruction.inl"
+} // namespace CPU
+
+#include "cpuExecuteInstruction.inl"

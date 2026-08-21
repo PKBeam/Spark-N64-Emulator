@@ -4,20 +4,23 @@ import std;
 import Util;
 
 import :Interface;
+import :MipsInterface;
 import :RspRegistersTypes;
 
 namespace Interfaces {
 
 export class RspRegisters : public Interface {
   public:
-    RspRegisters(std::shared_ptr<Util::Logger> logger)
-        : m_logger(logger) {};
+    RspRegisters(std::shared_ptr<Util::Logger> logger,
+                 MipsInterface*                mipsInterface)
+        : m_logger(logger), m_mipsInterface(mipsInterface) {};
 
     auto read(uint32_t addr) -> uint32_t override;
     auto write(uint32_t addr, uint32_t data) -> void override;
 
   private:
     std::shared_ptr<Util::Logger> m_logger;
+    MipsInterface*                m_mipsInterface;
 
     RSP_STATUS m_status{};
 };
@@ -33,7 +36,8 @@ auto RspRegisters::read(uint32_t addr) -> uint32_t {
             case RSP_REG_ADDR::RSP_DMA_RDLEN: [[fallthrough]];
             case RSP_REG_ADDR::RSP_DMA_WRLEN: [[fallthrough]];
             case RSP_REG_ADDR::RSP_STATUS:
-                return std::bit_cast<uint32_t>(m_status);
+                logWarnOnWriteToReadOnlyRegister<RSP_REG_ADDR>(m_logger, addr);
+                return 0;
             case RSP_REG_ADDR::RSP_DMA_FULL: [[fallthrough]];
             case RSP_REG_ADDR::RSP_DMA_BUSY: [[fallthrough]];
             case RSP_REG_ADDR::RSP_SEMAPHORE: [[fallthrough]];
@@ -69,8 +73,8 @@ auto RspRegisters::write(uint32_t addr, uint32_t data) -> void {
             if (status.clrHalt) m_status.halted = 0;
             if (status.setHalt) m_status.halted = 1;
             if (status.clrBroke) m_status.broke = 0;
-            // if (status.clrIntr) TODO
-            // if (status.setIntr) TODO
+            if (status.clrIntr) m_mipsInterface->setInterrupt<^^MI_INTERRUPT::sp>(false);
+            if (status.setIntr) m_mipsInterface->setInterrupt<^^MI_INTERRUPT::sp>(true);
             if (status.clrSstep) m_status.sstep = 0;
             if (status.setSstep) m_status.sstep = 1;
             if (status.clrIntbreak) m_status.intbreak = 0;

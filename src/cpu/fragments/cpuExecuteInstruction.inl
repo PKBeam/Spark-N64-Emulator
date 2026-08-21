@@ -1,3 +1,5 @@
+namespace CPU {
+
 namespace Function {
 constexpr auto ADD     = [](auto a, auto b) { return a + b; };
 constexpr auto SUB     = [](auto a, auto b) { return a - b; };
@@ -16,9 +18,11 @@ constexpr auto CMP_LTZ = [](auto a, auto _) { return a < 0; };
 constexpr auto CMP_GEZ = [](auto a, auto _) { return a >= 0; };
 } // namespace Function
 
-auto VR4300::runInstruction() -> void {
+auto CPU::runInstruction() -> void {
     using namespace Opcodes;
-    using namespace ISA;
+    using TypeJ = ISA::CPU::TypeJ;
+    using TypeI = ISA::CPU::TypeI;
+    using TypeR = ISA::CPU::TypeR;
 
     auto instBits = WITH_LOG_DISABLED(m_logger, m_memory->read<uint32_t>(m_regs.pc));
 
@@ -29,36 +33,44 @@ auto VR4300::runInstruction() -> void {
             std::tuple{"inst", "{}", inst});
     }
 
-    std::optional<uint64_t> pcJumpValue = std::nullopt;
+    bool                    pcSetOverride = false;
+    std::optional<uint64_t> pcJumpValue   = std::nullopt;
 
     auto op   = inst.opcode;
     auto data = inst.data;
 
     switch (op) {
         case UnifiedOpcode::OP_NOP: break;
+
+        // Jump instructions
         case UnifiedOpcode::OP_J: {
-            auto ops    = std::bit_cast<CPU::TypeJ>(data);
+            auto ops    = std::bit_cast<TypeJ>(data);
             pcJumpValue = (m_regs.pc & 0xF0000000) | (ops.tgt << 2);
             break;
         }
         case UnifiedOpcode::OP_JAL: {
-            auto ops    = std::bit_cast<CPU::TypeJ>(data);
+            auto ops    = std::bit_cast<TypeJ>(data);
             pcJumpValue = (m_regs.pc & 0xF0000000) | (ops.tgt << 2);
-            writeGpr<CPU_REG::ra>(m_regs.pc + 8);
+            writeGpr<ISA::CPU_REG::ra>(m_regs.pc + 8);
             break;
         }
         case UnifiedOpcode::OP_JR: {
-            auto ops    = std::bit_cast<CPU::TypeR>(data);
+            auto ops    = std::bit_cast<TypeR>(data);
             pcJumpValue = readGpr(ops.rs);
-            if (static_cast<uint32_t>(*pcJumpValue) == m_bootCallbackAddress) m_bootCallback();
+            if (static_cast<uint32_t>(*pcJumpValue) == m_bootAddress) {
+                m_hasBooted = true;
+                m_bootCallback();
+            }
             break;
         }
         case UnifiedOpcode::OP_JALR: {
-            auto ops    = std::bit_cast<CPU::TypeR>(data);
+            auto ops    = std::bit_cast<TypeR>(data);
             pcJumpValue = readGpr(ops.rs);
             writeGpr(ops.rd, m_regs.pc + 8);
             break;
         }
+
+        // Branch instructions
         case UnifiedOpcode::OP_BNE: pcJumpValue = executeBranch(data, Function::CMP_NE); break;
         case UnifiedOpcode::OP_BNEL: pcJumpValue = executeBranch<Branch::LIKELY>(data, Function::CMP_NE); break;
         case UnifiedOpcode::OP_BLTZ: pcJumpValue = executeBranch(data, Function::CMP_LTZ); break;
@@ -70,8 +82,10 @@ auto VR4300::runInstruction() -> void {
         case UnifiedOpcode::OP_BGEZAL: pcJumpValue = executeBranchAndLink(data, Function::CMP_GEZ); break;
         case UnifiedOpcode::OP_BEQ: pcJumpValue = executeBranch(data, Function::CMP_EQ); break;
         case UnifiedOpcode::OP_BEQL: pcJumpValue = executeBranch<Branch::LIKELY>(data, Function::CMP_EQ); break;
+
+        // Load/Store instructions
         case UnifiedOpcode::OP_LUI: {
-            auto ops = std::bit_cast<CPU::TypeI>(data);
+            auto ops = std::bit_cast<TypeI>(data);
             writeGpr(ops.rt, Util::signExt32(ops.imm << 16));
             break;
         }
@@ -87,7 +101,7 @@ auto VR4300::runInstruction() -> void {
         case UnifiedOpcode::OP_SW: executeMemoryOperation<Memory::STORE, int32_t>(data); break;
         case UnifiedOpcode::OP_SD: executeMemoryOperation<Memory::STORE, int64_t>(data); break;
         case UnifiedOpcode::OP_SWL: {
-            auto ops   = std::bit_cast<CPU::TypeI>(data);
+            auto ops   = std::bit_cast<TypeI>(data);
             auto vaddr = Util::signExt32<int16_t>(ops.imm) + readGpr(ops.rs);
             for (auto byte = 4z; byte > vaddr % 4; --byte) {
                 auto thisByte = (readGpr<uint32_t>(ops.rt) >> (8 * byte)) & 0xFF;
@@ -95,6 +109,8 @@ auto VR4300::runInstruction() -> void {
             }
             break;
         }
+
+        // Arithmetic instructions
         case UnifiedOpcode::OP_MULT: executeMultiply<int32_t>(data); break;
         case UnifiedOpcode::OP_MULTU: executeMultiply<uint32_t>(data); break;
         case UnifiedOpcode::OP_DMULT: executeMultiply<int64_t>(data); break;
@@ -103,13 +119,13 @@ auto VR4300::runInstruction() -> void {
         case UnifiedOpcode::OP_DIVU: executeDivide<uint32_t>(data); break;
         case UnifiedOpcode::OP_DDIV: executeDivide<int64_t>(data); break;
         case UnifiedOpcode::OP_DDIVU: executeDivide<uint64_t>(data); break;
-        case UnifiedOpcode::OP_MFLO: writeGpr(std::bit_cast<CPU::TypeR>(data).rd, readLo()); break;
-        case UnifiedOpcode::OP_MFHI: writeGpr(std::bit_cast<CPU::TypeR>(data).rd, readHi()); break;
-        case UnifiedOpcode::OP_MTLO: writeLo(readGpr(std::bit_cast<CPU::TypeR>(data).rs)); break;
-        case UnifiedOpcode::OP_MTHI: writeHi(readGpr(std::bit_cast<CPU::TypeR>(data).rs)); break;
-        case UnifiedOpcode::OP_ADD: [[fallthrough]];
+        case UnifiedOpcode::OP_MFLO: writeGpr(std::bit_cast<TypeR>(data).rd, readLo()); break;
+        case UnifiedOpcode::OP_MFHI: writeGpr(std::bit_cast<TypeR>(data).rd, readHi()); break;
+        case UnifiedOpcode::OP_MTLO: writeLo(readGpr(std::bit_cast<TypeR>(data).rs)); break;
+        case UnifiedOpcode::OP_MTHI: writeHi(readGpr(std::bit_cast<TypeR>(data).rs)); break;
+        case UnifiedOpcode::OP_ADD: [[fallthrough]]; // TODO overflow exception
         case UnifiedOpcode::OP_ADDU: executeBivariate(data, Function::ADD); break;
-        case UnifiedOpcode::OP_ADDI: [[fallthrough]];
+        case UnifiedOpcode::OP_ADDI: [[fallthrough]]; // TODO overflow exception
         case UnifiedOpcode::OP_ADDIU: executeBivariateImmediate<Immediate::SIGN_EXTEND>(data, Function::ADD); break;
         case UnifiedOpcode::OP_SLT: executeBivariate(data, Function::CMP_LT); break;
         case UnifiedOpcode::OP_SLTU: executeBivariate<uint32_t>(data, Function::CMP_LT); break;
@@ -123,6 +139,8 @@ auto VR4300::runInstruction() -> void {
         case UnifiedOpcode::OP_XOR: executeBivariate(data, Function::XOR); break;
         case UnifiedOpcode::OP_XORI: executeBivariateImmediate<Immediate::ZERO_EXTEND>(data, Function::XOR); break;
         case UnifiedOpcode::OP_NOR: executeBivariate(data, Function::NOR); break;
+
+        // Shift instructions
         case UnifiedOpcode::OP_SLL: executeShift<Shift::WORD, Shift::LEFT, Shift::LOGICAL>(data); break;
         case UnifiedOpcode::OP_SRL: executeShift<Shift::WORD, Shift::RIGHT, Shift::LOGICAL>(data); break;
         case UnifiedOpcode::OP_SRA: executeShift<Shift::WORD, Shift::RIGHT, Shift::ARITHMETIC>(data); break;
@@ -138,23 +156,25 @@ auto VR4300::runInstruction() -> void {
         case UnifiedOpcode::OP_DSLL32: executeShift<Shift::DOUBLE, Shift::LEFT, Shift::LOGICAL, Shift::FIXED, Shift::ADD32>(data); break;
         case UnifiedOpcode::OP_DSRL32: executeShift<Shift::DOUBLE, Shift::RIGHT, Shift::LOGICAL, Shift::FIXED, Shift::ADD32>(data); break;
         case UnifiedOpcode::OP_DSRA32: executeShift<Shift::DOUBLE, Shift::RIGHT, Shift::ARITHMETIC, Shift::FIXED, Shift::ADD32>(data); break;
+
+        // Coprocessor instructions
         case UnifiedOpcode::OP_MFCz: {
             auto cp = (data >> 26) & 0b11;
             if (cp != 0) throw Util::Error("Unsupported instruction on coprocessor {}", cp);
-            auto ops = std::bit_cast<CPU::TypeR>(data);
-            writeGpr(ops.rt, readCp0Reg(ops.rd));
+            auto ops = std::bit_cast<TypeR>(data);
+            writeGpr(ops.rt, m_cp0->readReg(ops.rd));
             break;
         }
         case UnifiedOpcode::OP_MTCz: {
             auto cp = (data >> 26) & 0b11;
             if (cp != 0) throw Util::Error("Unsupported instruction on coprocessor {}", cp);
-            auto ops = std::bit_cast<CPU::TypeR>(data);
-            writeCp0Reg(ops.rd, readGpr(ops.rt));
+            auto ops = std::bit_cast<TypeR>(data);
+            m_cp0->writeReg(ops.rd, readGpr(ops.rt));
             break;
         }
         case UnifiedOpcode::OP_CFCz: {
             auto cp  = (data >> 26) & 0b11;
-            auto ops = std::bit_cast<CPU::TypeR>(data);
+            auto ops = std::bit_cast<TypeR>(data);
             if (cp == 1 && ops.rd == 31) {
                 writeGpr(ops.rt, 0);
                 break;
@@ -163,44 +183,63 @@ auto VR4300::runInstruction() -> void {
         }
         case UnifiedOpcode::OP_CTCz: {
             auto cp  = (data >> 26) & 0b11;
-            auto ops = std::bit_cast<CPU::TypeR>(data);
+            auto ops = std::bit_cast<TypeR>(data);
             if (cp == 1 && ops.rd == 31) {
                 writeGpr(ops.rt, 0);
                 break;
             }
             throw Util::Error("Unsupported instruction on coprocessor {}", cp);
         }
+
+        // Misc. instructions
         case UnifiedOpcode::OP_TLBR: [[fallthrough]];
         case UnifiedOpcode::OP_TLBWI: [[fallthrough]];
         case UnifiedOpcode::OP_TLBWR: [[fallthrough]];
         case UnifiedOpcode::OP_TLBP: [[fallthrough]];
-        case UnifiedOpcode::OP_CACHE: break;
+        case UnifiedOpcode::OP_CACHE:
+            IF_LOG_ENABLED(m_logger) {
+                m_logger->log<Util::Verbosity::MED>("Warning: ignored instruction {}", inst);
+            }
+            break;
         case UnifiedOpcode::OP_ERET: {
-            auto status = std::bit_cast<CP0_STATUS>(readCp0Reg<ISA::CP0_REG::STATUS>());
+            auto status = m_cp0->readReg<CP0::Registers::STATUS>();
             if (status.erl) {
-                writePc(readCp0Reg<ISA::CP0_REG::ERROREPC>());
+                writePc(m_cp0->readReg(CP0::Registers::ERROREPC));
                 status.erl = 0;
             } else {
-                writePc(readCp0Reg<ISA::CP0_REG::EPC>());
+                writePc(m_cp0->readReg(CP0::Registers::EPC));
                 status.exl = 0;
             }
-            writeCp0Reg<ISA::CP0_REG::STATUS>(std::bit_cast<uint32_t>(status));
+            pcSetOverride = true;
+            m_cp0->writeReg(status);
             break;
         }
-        default: throw Util::Error("Unimplemented instruction @ PC 0x{:08x}: {}", m_regs.pc, inst);
+        default:
+            throw Util::Error("Unimplemented instruction @ PC {:#08x}: {} ({:#08x})", m_regs.pc, inst, data);
     }
 
+    // hang detection
     if (op == UnifiedOpcode::OP_BGEZAL) {
-        auto ops = std::bit_cast<CPU::TypeI>(data);
-        if (ops.rs == static_cast<uint32_t>(CPU_REG::zero) && static_cast<int16_t>(ops.imm) == -1 &&
-            m_memory->read<uint32_t>(m_regs.pc - 4) == 0) {
-            throw Util::Error("Detected infinite looping BGEZAL->NOP, likely boot checksum fail.");
+        auto ops = std::bit_cast<TypeI>(data);
+        if (static_cast<int16_t>(ops.imm) == -1 &&                 // branches to previous instruction
+            !m_hasBooted &&                                        // in early boot
+            ops.rs == static_cast<uint32_t>(ISA::CPU_REG::zero) && // is unconditional branch
+            m_memory->read<uint32_t>(m_regs.pc - 4) == 0)          // branches to NOP
+        {
+            throw Util::Error("Detected infinite looping BGEZAL @ PC {:#08x}, likely boot checksum fail.", m_regs.pc);
         }
     }
+
+    // handle PC updates
     if (m_delaySlotPc) {
         writePc(*m_delaySlotPc);
         m_delaySlotPc.reset();
-    } else
+    } else if (!pcSetOverride) {
         m_regs.pc += 4;
-    if (pcJumpValue) m_delaySlotPc = pcJumpValue;
+    }
+    if (pcJumpValue) {
+        m_delaySlotPc = pcJumpValue;
+    }
 }
+
+} // namespace CPU
