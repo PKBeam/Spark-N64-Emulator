@@ -24,6 +24,10 @@ consteval auto annotationOf(std::meta::info i) {
     return std::meta::annotations_of(i).front();
 }
 
+consteval auto removeCvref(std::meta::info i) {
+    return std::meta::remove_cv(std::meta::remove_reference(i));
+}
+
 // extracts the dealiased reflected type `T`, from an annotation `[[=^^T]]`.
 consteval auto dealiasedTypeOf(std::meta::info annotation) //
     pre(std::meta::is_annotation(annotation))              //

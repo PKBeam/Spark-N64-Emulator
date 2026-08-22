@@ -7,6 +7,8 @@ import std;
 import CP0;
 import CPU;
 import Rom;
+import RSP;
+import RspControl;
 import Interfaces;
 import ISA;
 import Memory;
@@ -20,6 +22,7 @@ export class Emulator {
         std::shared_ptr<Util::Logger> logger       = nullptr;
         std::size_t                   memorySize   = 0;
         bool                          dumpRom      = false;
+        bool                          dumpPifRom   = false;
         bool                          logAfterBoot = false;
     };
 
@@ -38,7 +41,10 @@ export class Emulator {
     void*                  m_memory;
     CPU::CPU*              m_cpu;
     CP0::CP0*              m_cp0;
+    RSP::RSP*              m_rsp;
+    RSP::Control*          m_rspControl;
     std::optional<RomFile> m_rom;
+    std::optional<RomFile> m_pifRom;
     Memory::Memory*        m_memoryManager;
 
     Interfaces::AudioInterface*      m_audioInterface;
@@ -51,6 +57,14 @@ export class Emulator {
 };
 
 constexpr auto Emulator::emulateInitialBoot() -> void {
+    if (m_pifRom) {
+        m_cpu->writePc(static_cast<uint32_t>(0xBFC00000));
+        return;
+    }
+
+    IF_LOG_ENABLED(m_logger) {
+        m_logger->log<Util::Verbosity::MED>("No PIF ROM found, simulating initial boot instead");
+    }
     // DMA 1 MiB of ROM code into RSP DMEM
     // these need to be done in 32-bit chunks to ensure correct endianness
     for (auto i = 0uz; i < 0x1000; i += 4) {
@@ -76,20 +90,39 @@ constexpr auto Emulator::emulateInitialBoot() -> void {
 }
 
 constexpr Emulator::Emulator(Config config) : m_config(config) {
+    if (std::filesystem::exists("data/PIF_NTSC_U.bin")) {
+        m_pifRom.emplace("data/PIF_NTSC_U.bin");
+
+        if (m_config.dumpPifRom) {
+            Util::Logger romDumper{"./pifRom.txt"};
+            romDumper.setVerbosity(Util::Verbosity::MAX);
+            for (auto i = 0uz; i < m_pifRom->size(); i += 4) {
+                const auto word = m_pifRom->read<uint32_t>(i);
+                romDumper.logUnstructured("0x{:08x}: {}", i, ISA::Instruction(word));
+            }
+            romDumper.flush();
+            std::println("Dumped PIF ROM to pifRom.txt, exiting...");
+            std::terminate();
+        }
+    }
+
     m_logger        = config.logger;
     m_memory        = std::malloc(m_config.memorySize);
     m_memoryManager = new Memory::Memory(m_logger, reinterpret_cast<std::byte*>(m_memory));
 
-    m_cp0 = new CP0::CP0(m_logger);
-    m_cpu = new CPU::CPU(m_logger, m_cp0, m_memoryManager);
+    m_cp0        = new CP0::CP0(m_logger);
+    m_rspControl = new RSP::Control(m_logger);
+    m_cpu        = new CPU::CPU(m_logger, m_memoryManager, m_cp0);
+    m_rsp        = new RSP::RSP(m_logger, m_memoryManager, m_rspControl);
 
     m_mipsInterface       = new Interfaces::MipsInterface(m_logger, m_cp0);
     m_rdramInterface      = new Interfaces::RdramInterface(m_logger);
     m_videoInterface      = new Interfaces::VideoInterface(m_logger);
     m_audioInterface      = new Interfaces::AudioInterface(m_logger, m_mipsInterface);
-    m_rspRegisters        = new Interfaces::RspRegisters(m_logger, m_mipsInterface);
+    m_rspRegisters        = new Interfaces::RspRegisters(m_logger, reinterpret_cast<std::byte*>(m_memory), m_mipsInterface, m_rspControl);
     m_peripheralInterface = new Interfaces::PeripheralInterface(m_logger, reinterpret_cast<std::byte*>(m_memory), m_mipsInterface);
     m_serialInterface     = new Interfaces::SerialInterface(m_logger, reinterpret_cast<std::byte*>(m_memory), m_mipsInterface);
+    m_serialInterface->loadPifRom(m_pifRom ? &(*(m_pifRom)) : nullptr);
 
     m_memoryManager->registerAudioInterface(m_audioInterface);
     m_memoryManager->registerMipsInterface(m_mipsInterface);
@@ -103,7 +136,9 @@ constexpr Emulator::Emulator(Config config) : m_config(config) {
 Emulator::~Emulator() {
     std::free(m_memory);
     delete m_cp0;
+    delete m_rspControl;
     delete m_cpu;
+    delete m_rsp;
     delete m_memoryManager;
     delete m_audioInterface;
     delete m_mipsInterface;
@@ -144,6 +179,7 @@ constexpr auto Emulator::loadRom(std::filesystem::path path) -> void {
         while (true) {
             m_cpu->handleInterrupts();
             m_cpu->runInstruction();
+            m_rsp->runInstruction();
         }
     } catch (const std::runtime_error& e) {
         if (m_logger) {

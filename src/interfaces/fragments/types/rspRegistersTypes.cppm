@@ -40,19 +40,17 @@ struct RSP_DMA_RAMADDR {
 };
 
 struct RSP_DMA_RDLEN {
-    uint32_t            : 3;
-    uint32_t rdlen_11_3 : 9;
-    uint32_t count_7_0  : 8;
-    uint32_t            : 3;
-    uint32_t skip_11_3  : 9;
+    uint32_t rdlen     : 12;
+    uint32_t count     : 8;
+    uint32_t           : 3;
+    uint32_t skip_11_3 : 9;
 };
 
 struct RSP_DMA_WRLEN {
-    uint32_t            : 3;
-    uint32_t wrlen_11_3 : 9;
-    uint32_t count_7_0  : 8;
-    uint32_t            : 3;
-    uint32_t skip_11_3  : 9;
+    uint32_t wrlen     : 12;
+    uint32_t count     : 8;
+    uint32_t           : 3;
+    uint32_t skip_11_3 : 9;
 };
 
 struct RSP_STATUS {

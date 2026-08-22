@@ -23,16 +23,23 @@ struct info {};
 
 #define IF_LOG_ENABLED(logger) if (logger && logger->enabled())
 
-#define WITH_LOG_DISABLED(logger, expr) \
-    [&]() {                             \
-        bool was_enabled = false;       \
-        IF_LOG_ENABLED(logger) {        \
-            was_enabled = true;         \
-            logger->disable();          \
-        }                               \
-        auto result = expr;             \
-        if (was_enabled) {              \
-            logger->enable();           \
-        }                               \
-        return result;                  \
+#define WITH_LOG_DISABLED(logger, expr)         \
+    [&]<typename Result = decltype(expr)>() {   \
+        bool was_enabled = false;               \
+        IF_LOG_ENABLED(logger) {                \
+            was_enabled = true;                 \
+            logger->disable();                  \
+        }                                       \
+        if constexpr (std::is_void_v<Result>) { \
+            expr;                               \
+            if (was_enabled) {                  \
+                logger->enable();               \
+            }                                   \
+        } else {                                \
+            auto result = expr;                 \
+            if (was_enabled) {                  \
+                logger->enable();               \
+            }                                   \
+            return result;                      \
+        }                                       \
     }();

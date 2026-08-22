@@ -77,7 +77,7 @@ auto Interface::logOperation(this Self&& self, std::shared_ptr<Util::Logger> log
     IF_LOG_ENABLED(logger) {
         auto name = getRegisterName<RegAddrStruct>(addr);
         logger->log<Util::Verbosity::MED>(
-            std::tuple{"sys", std::meta::display_string_of(^^Self)},
+            std::tuple{"sys", std::meta::display_string_of(Util::removeCvref(^^Self))},
             std::tuple{"op", operationName},
             std::tuple{"reg", "{}", name},
             std::tuple{"data", "0x{:08x}", data});
@@ -89,7 +89,7 @@ auto Interface::logWarnOnWriteToReadOnlyRegister(this Self&& self, std::shared_p
     IF_LOG_ENABLED(logger) {
         auto name = getRegisterName<RegAddrStruct>(addr);
         logger->log<Util::Verbosity::MED>(
-            std::tuple{"sys", std::meta::display_string_of(^^Self)},
+            std::tuple{"sys", std::meta::display_string_of(Util::removeCvref(^^Self))},
             std::tuple{"warning", "Attempted to write to read-only register {}", name});
     }
 }
@@ -99,7 +99,7 @@ auto Interface::logWarnOnIgnoredRegister(this Self&& self, std::shared_ptr<Util:
     IF_LOG_ENABLED(logger) {
         auto name = getRegisterName<RegAddrStruct>(addr);
         logger->log<Util::Verbosity::MED>(
-            std::tuple{"sys", std::meta::display_string_of(^^Self)},
+            std::tuple{"sys", std::meta::display_string_of(Util::removeCvref(^^Self))},
             std::tuple{"warning", "Ignoring access to register {}", name});
     }
 }

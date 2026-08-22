@@ -17,10 +17,20 @@ export class Memory {
     Memory(std::shared_ptr<Util::Logger> logger, std::byte* memory) : m_logger(logger), m_hostMemory(memory) {}
 
     template <std::integral T>
-    auto read(VirtualAddr addr) const -> T;
+    auto readPhysical(PhysicalAddr addr) const -> T;
 
     template <std::integral T>
-    auto write(VirtualAddr addr, T data) const -> void;
+    auto writePhysical(PhysicalAddr addr, T data) const -> void;
+
+    template <std::integral T>
+    auto read(VirtualAddr addr) const -> T {
+        return readPhysical<T>(translate<T>(addr));
+    }
+
+    template <std::integral T>
+    auto write(VirtualAddr addr, T data) const -> void {
+        writePhysical<T>(translate<T>(addr), data);
+    }
 
     auto data() const -> void*;
 
@@ -75,8 +85,7 @@ auto getPhysicalSegment(PhysicalAddr paddr) -> PhysSeg {
 } // namespace Impl
 
 template <std::integral T>
-auto Memory::read(VirtualAddr addr) const -> T { // TODO improve performance
-    const auto paddr    = translate<T>(addr);
+auto Memory::readPhysical(PhysicalAddr paddr) const -> T { // TODO improve performance
     const auto hostAddr = m_hostMemory + paddr;
 
     T data{};
@@ -92,6 +101,12 @@ auto Memory::read(VirtualAddr addr) const -> T { // TODO improve performance
         case PhysSeg::RDRAM_REG: {
             IF_LOG_ENABLED(m_logger) {
                 m_logger->log<Util::Verbosity::MED>(std::tuple{"warning", "Ignoring RDRAM register read"});
+            }
+            break;
+        }
+        case PhysSeg::RDP_CMD_REG: {
+            IF_LOG_ENABLED(m_logger) {
+                m_logger->log<Util::Verbosity::MED>(std::tuple{"warning", "Ignoring RDP command register read"});
             }
             break;
         }
@@ -120,8 +135,7 @@ auto Memory::read(VirtualAddr addr) const -> T { // TODO improve performance
         m_logger->log<Util::Verbosity::MED>(
             std::tuple{"op", "read"},
             std::tuple{"size", sizeof(T)},
-            std::tuple{"vAddr", "0x{:08x}", addr},
-            std::tuple{"pAddr", "0x{:08x}", paddr},
+            std::tuple{"addr", "0x{:08x}", paddr},
             std::tuple{"ptr", "{:p}", (void*)hostAddr},
             std::tuple{"data", "0x{:08x}", static_cast<std::make_unsigned_t<T>>(data)});
     }
@@ -129,8 +143,7 @@ auto Memory::read(VirtualAddr addr) const -> T { // TODO improve performance
 }
 
 template <std::integral T>
-auto Memory::write(VirtualAddr addr, T data) const -> void {
-    const auto paddr    = translate<T>(addr);
+auto Memory::writePhysical(PhysicalAddr paddr, T data) const -> void {
     const auto hostAddr = m_hostMemory + paddr;
 
     switch (Impl::getPhysicalSegment(paddr)) {
@@ -154,10 +167,10 @@ auto Memory::write(VirtualAddr addr, T data) const -> void {
         case PhysSeg::PERIPHERAL_INTERFACE: m_peripheralInterface->sizedWrite(paddr, sizeof(T), data); break;
         case PhysSeg::SERIAL_INTERFACE: m_serialInterface->sizedWrite(paddr, sizeof(T), data); break;
         case PhysSeg::PI_BUS:
-            data = dynamic_cast<Interfaces::PeripheralInterface*>(m_peripheralInterface)->readBus<T>(paddr);
+            dynamic_cast<Interfaces::PeripheralInterface*>(m_peripheralInterface)->writeBus<T>(paddr, data);
             break;
         case PhysSeg::SI_BUS:
-            data = dynamic_cast<Interfaces::SerialInterface*>(m_serialInterface)->readBus<T>(paddr);
+            dynamic_cast<Interfaces::SerialInterface*>(m_serialInterface)->writeBus<T>(paddr, data);
             break;
         default:
             throw Util::Error(
@@ -176,8 +189,7 @@ auto Memory::write(VirtualAddr addr, T data) const -> void {
         m_logger->log<Util::Verbosity::MED>(
             std::tuple{"op", "write"},
             std::tuple{"size", sizeof(T)},
-            std::tuple{"vAddr", "0x{:08x}", addr},
-            std::tuple{"pAddr", "0x{:08x}", paddr},
+            std::tuple{"addr", "0x{:08x}", paddr},
             std::tuple{"ptr", "{:p}", (void*)hostAddr},
             std::tuple{"data", "0x{:08x}", static_cast<std::make_unsigned_t<T>>(printData)});
     }

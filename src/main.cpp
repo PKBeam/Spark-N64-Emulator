@@ -45,6 +45,9 @@ int main(int argc, char* argv[]) {
         if (arg == "--dump-rom"sv) {
             emulatorConfig.dumpRom = true;
         }
+        if (arg == "--dump-pif-rom"sv) {
+            emulatorConfig.dumpPifRom = true;
+        }
     }
 
     if (logLevel) {

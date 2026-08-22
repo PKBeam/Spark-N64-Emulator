@@ -3,6 +3,7 @@ module;
 export module Interfaces:SerialInterface;
 
 import std;
+import Rom;
 import Util;
 
 import :Interface;
@@ -19,6 +20,8 @@ export class SerialInterface : public Interface {
         MipsInterface*                mipsInterface)
         : m_logger(logger), m_memory(memory), m_mipsInterface(mipsInterface) {}
 
+    auto loadPifRom(const RomFile* rom) -> void;
+
     auto read(uint32_t addr) -> uint32_t override;
     auto write(uint32_t addr, uint32_t data) -> void override;
 
@@ -28,16 +31,23 @@ export class SerialInterface : public Interface {
     template <std::integral T>
     auto writeBus(uint32_t addr, T data) -> void;
 
+  private:
     auto dmaMemcpy(uint32_t dst, uint32_t src) -> void;
 
-  private:
     std::shared_ptr<Util::Logger> m_logger;
+    const RomFile*                m_pifRom;
     std::byte*                    m_memory;
     MipsInterface*                m_mipsInterface;
     uint32_t                      m_dramAddr;
     uint32_t                      m_pifAddr;
     SI_STATUS                     m_status;
+
+    bool m_pifCmdPending = false;
 };
+
+auto SerialInterface::loadPifRom(const RomFile* rom) -> void {
+    m_pifRom = rom;
+}
 
 auto SerialInterface::read(uint32_t addr) -> uint32_t {
     contract_assert(addr % 4 == 0 &&
@@ -96,34 +106,55 @@ auto SerialInterface::write(uint32_t addr, uint32_t data) -> void {
 
 template <std::integral T>
 auto SerialInterface::readBus(uint32_t addr) -> T {
-    const auto [e, _] = Util::getRange<SiDmaRanges>(addr);
+    static bool f;
+    const auto [e, range] = Util::getRange<SiDmaRanges>(addr);
     switch (e) {
         case SiDmaRanges::PIF_ROM:
             IF_LOG_ENABLED(m_logger) {
-                m_logger->log<Util::Verbosity::MED>(
-                    std::tuple{"sys", std::meta::display_string_of(^^SerialInterface)},
-                    std::tuple{"warning", "Ignoring access to PIF ROM @ {:#08x}", addr});
+                if (!m_pifRom) {
+                    m_logger->log<Util::Verbosity::MED>(
+                        std::tuple{"sys", std::meta::display_string_of(^^SerialInterface)},
+                        std::tuple{"warning", "Skipping read of missing PIF ROM"});
+                }
             }
-            return 0;
+            return m_pifRom ? m_pifRom->read<T>(addr - range.lower) : 0;
         case SiDmaRanges::PIF_RAM:
+            if (addr - range.lower == 0x24) {
+                return static_cast<T>(0x0000913F); // TODO add other CIC values
+            } else if (addr - range.lower >= 0x30 && addr - range.lower < 0x40) {
+                m_pifCmdPending = !m_pifCmdPending; // workaround to simulate processing time
+                return static_cast<T>(m_pifCmdPending << 7);
+            }
             IF_LOG_ENABLED(m_logger) {
                 m_logger->log<Util::Verbosity::MED>(
                     std::tuple{"sys", std::meta::display_string_of(^^SerialInterface)},
                     std::tuple{"warning", "Ignoring access to PIF RAM @ {:#08x}", addr});
             }
             return 0;
+        default:
+            throw Util::Error("SI: Read from unknown address {:#08x}", addr);
     }
     return 0;
 }
 
 template <std::integral T>
 auto SerialInterface::writeBus(uint32_t addr, T data) -> void {
-    const auto [e, _] = Util::getRange<SiDmaRanges>(addr);
+    const auto [e, range] = Util::getRange<SiDmaRanges>(addr);
     switch (e) {
         case SiDmaRanges::PIF_ROM:
             throw Util::Error("SI: Attempt to write to read-only memory (PIF_ROM)");
         case SiDmaRanges::PIF_RAM:
-            throw Util::Error("SI: Write to unimplemented PIF_RAM");
+            if (addr - range.lower >= 0x30 && addr - range.lower < 0x40) {
+                return;
+            }
+            IF_LOG_ENABLED(m_logger) {
+                m_logger->log<Util::Verbosity::MED>(
+                    std::tuple{"sys", std::meta::display_string_of(^^SerialInterface)},
+                    std::tuple{"warning", "Ignoring write to PIF RAM @ {:#08x}", addr});
+            }
+            break;
+        default:
+            throw Util::Error("SI: Write to unknown address {:#08x}", addr);
     }
 }
 

@@ -38,8 +38,8 @@ export namespace CPU {
 class CPU {
   public:
     CPU(std::shared_ptr<Util::Logger> logger,
-        CP0::CP0*                     cp0,
-        Memory::Memory*               memory);
+        Memory::Memory*               memory,
+        CP0::CP0*                     cp0);
 
     auto registerBootCallback(uint32_t callbackBootAddress, std::function<void()> callback) -> void;
 
@@ -127,7 +127,7 @@ class CPU {
     auto executeDivide(uint32_t inst) -> void;
 };
 
-CPU::CPU(std::shared_ptr<Util::Logger> logger, CP0::CP0* cp0, Memory::Memory* memory) {
+CPU::CPU(std::shared_ptr<Util::Logger> logger, Memory::Memory* memory, CP0::CP0* cp0) {
     m_memory    = memory;
     m_logger    = logger;
     m_cp0       = cp0;

@@ -40,7 +40,13 @@ enum class PhysSeg {
 template <typename T>
     requires std::is_enum_v<T>
 constexpr auto rangeOf(T seg) -> Util::Range {
-    return std::meta::extract<Util::Range>(Util::annotationOf(^^seg));
+    constexpr static auto enumerators = Util::staticEnumeratorsOf(^^T);
+    template for (constexpr auto e : enumerators) {
+        if (seg == std::meta::extract<T>(e)) {
+            return std::meta::extract<Util::Range>(Util::annotationOf(e));
+        }
+    }
+    throw Util::Error("No range found for segment {}", Util::enumName(seg).value_or("unknown"));
 }
 
 } // namespace Memory

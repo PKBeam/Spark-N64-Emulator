@@ -1,0 +1,5 @@
+add_subdirectory(cp0)
+add_subdirectory(cpu)
+add_subdirectory(cpu_isa)
+add_subdirectory(rsp)
+add_subdirectory(rsp_control)

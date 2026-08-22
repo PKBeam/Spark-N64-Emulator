@@ -33,7 +33,9 @@ auto CPU::executeBranch(uint32_t inst, Function&& func) -> std::optional<uint64_
     auto ops = std::bit_cast<ISA::CPU::TypeI>(inst);
     if (func(readGpr(ops.rs), readGpr(ops.rt))) {
         auto instOffset = Util::signExt32<int16_t>(ops.imm);
-        if (instOffset == -1) {
+        if (instOffset == -1 &&                           // branches to previous instruction
+            m_memory->read<uint32_t>(m_regs.pc - 4) == 0) // branches to NOP
+        {
             throw Util::Error("Detected infinite loop @ PC {:#08x}: {:#08x}", m_regs.pc, inst);
         }
         return (m_regs.pc + 4) + (instOffset << 2);

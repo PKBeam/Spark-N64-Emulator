@@ -33,8 +33,6 @@ export class PeripheralInterface : public Interface {
     template <std::integral T>
     auto writeBus(uint32_t addr, T data) -> void;
 
-    auto dmaMemcpy(uint32_t dest, uint32_t src, std::size_t len) -> void;
-
   private:
     std::shared_ptr<Util::Logger> m_logger;
     const RomFile*                m_romFile;
@@ -44,6 +42,7 @@ export class PeripheralInterface : public Interface {
     uint32_t                      m_cartAddr = 0;
     MipsInterface*                m_mipsInterface;
 
+    auto dmaMemcpy(uint32_t dest, uint32_t src, std::size_t len) -> void;
     auto readRegister(uint32_t addr) -> uint32_t;
     auto writeRegister(uint32_t addr, uint32_t data) -> void;
 };
@@ -68,7 +67,12 @@ auto PeripheralInterface::readBus(uint32_t addr) -> T {
         case PiDmaRanges::PI_REG:
             throw Util::Error("PI regs must not be accessed via the bus");
         case PiDmaRanges::SRAM:
-            throw Util::Error("SRAM not implemented");
+            IF_LOG_ENABLED(m_logger) {
+                m_logger->log<Util::Verbosity::MED>(
+                    std::tuple{"sys", "PI"},
+                    std::tuple{"warning", "Ignoring read from SRAM"});
+            }
+            return static_cast<T>(0); // TODO implement SRAM
         case PiDmaRanges::ROM:
             m_dramAddr += sizeof(T);
             m_cartAddr += sizeof(T);
@@ -95,7 +99,12 @@ auto PeripheralInterface::writeBus(uint32_t addr, T data) -> void {
         case PiDmaRanges::PI_REG:
             throw Util::Error("PI regs must not be accessed via the bus");
         case PiDmaRanges::SRAM:
-            throw Util::Error("SRAM not implemented");
+            IF_LOG_ENABLED(m_logger) {
+                m_logger->log<Util::Verbosity::MED>(
+                    std::tuple{"sys", "PI"},
+                    std::tuple{"warning", "Ignoring write to SRAM"});
+            }
+            return;
         case PiDmaRanges::ROM:
             return; // ignore
         case PiDmaRanges::N64DD_CTRL_REG: [[fallthrough]];
