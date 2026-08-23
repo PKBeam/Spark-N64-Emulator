@@ -35,12 +35,12 @@ export class SerialInterface : public Interface {
     auto dmaMemcpy(uint32_t dst, uint32_t src) -> void;
 
     std::shared_ptr<Util::Logger> m_logger;
-    const RomFile*                m_pifRom;
-    std::byte*                    m_memory;
-    MipsInterface*                m_mipsInterface;
-    uint32_t                      m_dramAddr;
-    uint32_t                      m_pifAddr;
-    SI_STATUS                     m_status;
+    const RomFile*                m_pifRom{};
+    std::byte*                    m_memory{};
+    MipsInterface*                m_mipsInterface{};
+    uint32_t                      m_dramAddr{};
+    uint32_t                      m_pifAddr{};
+    SI_STATUS                     m_status{};
 
     bool m_pifCmdPending = false;
 };
@@ -72,7 +72,7 @@ auto SerialInterface::read(uint32_t addr) -> uint32_t {
 
     auto data = readReg(addr);
 
-    logOperation<SI_REG_ADDR>(m_logger, "read", addr, data);
+    logOperation<Sys::SI, SI_REG_ADDR>(m_logger, "read", addr, data);
 
     return data;
 }
@@ -81,7 +81,7 @@ auto SerialInterface::write(uint32_t addr, uint32_t data) -> void {
     contract_assert(addr % 4 == 0 &&
                     SI_REG_ADDR::BASE <= addr && addr <= SI_REG_ADDR::END);
 
-    logOperation<SI_REG_ADDR>(m_logger, "write", addr, data);
+    logOperation<Sys::SI, SI_REG_ADDR>(m_logger, "write", addr, data);
 
     switch (addr) {
         case SI_REG_ADDR::SI_DRAM_ADDR:
@@ -96,7 +96,7 @@ auto SerialInterface::write(uint32_t addr, uint32_t data) -> void {
         case SI_REG_ADDR::SI_PIF_AD_WR4B: [[fallthrough]];
         case SI_REG_ADDR::SI_PIF_AD_WR64B: [[fallthrough]];
         case SI_REG_ADDR::SI_PIF_AD_RD4B:
-            logWarnOnIgnoredRegister<SI_REG_ADDR>(m_logger, addr);
+            logWarnOnIgnoredRegister<Sys::SI, SI_REG_ADDR>(m_logger, addr);
             break;
         case SI_REG_ADDR::SI_STATUS:
             m_mipsInterface->setInterrupt<^^MI_INTERRUPT::si>(false);
@@ -112,9 +112,7 @@ auto SerialInterface::readBus(uint32_t addr) -> T {
         case SiDmaRanges::PIF_ROM:
             IF_LOG_ENABLED(m_logger) {
                 if (!m_pifRom) {
-                    m_logger->log<Util::Verbosity::MED>(
-                        std::tuple{"sys", std::meta::display_string_of(^^SerialInterface)},
-                        std::tuple{"warning", "Skipping read of missing PIF ROM"});
+                    m_logger->log<Level::HIGH, Sev::WARNING, Sys::SI>("Skipping read of missing PIF ROM");
                 }
             }
             return m_pifRom ? m_pifRom->read<T>(addr - range.lower) : 0;
@@ -126,9 +124,7 @@ auto SerialInterface::readBus(uint32_t addr) -> T {
                 return static_cast<T>(m_pifCmdPending << 7);
             }
             IF_LOG_ENABLED(m_logger) {
-                m_logger->log<Util::Verbosity::MED>(
-                    std::tuple{"sys", std::meta::display_string_of(^^SerialInterface)},
-                    std::tuple{"warning", "Ignoring access to PIF RAM @ {:#08x}", addr});
+                m_logger->log<Level::HIGH, Sev::WARNING, Sys::SI>("Ignoring access to PIF RAM @ {:#08x}", addr);
             }
             return 0;
         default:
@@ -148,9 +144,7 @@ auto SerialInterface::writeBus(uint32_t addr, T data) -> void {
                 return;
             }
             IF_LOG_ENABLED(m_logger) {
-                m_logger->log<Util::Verbosity::MED>(
-                    std::tuple{"sys", std::meta::display_string_of(^^SerialInterface)},
-                    std::tuple{"warning", "Ignoring write to PIF RAM @ {:#08x}", addr});
+                m_logger->log<Level::HIGH, Sev::WARNING, Sys::SI>("Ignoring write to PIF RAM @ {:#08x}", addr);
             }
             break;
         default:

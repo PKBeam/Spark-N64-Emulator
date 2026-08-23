@@ -8,5 +8,5 @@ target_sources(rsp PUBLIC
 )
 target_compile_options(rsp PUBLIC ${CXX_COMPILE_OPTIONS})
 target_include_directories(rsp PUBLIC ${CMAKE_SOURCE_DIR}/src)
-target_link_libraries(rsp PUBLIC memory rsp_control util)
+target_link_libraries(rsp PUBLIC cpu memory rsp_control util)
 

@@ -60,14 +60,14 @@ export class Memory {
 
   private:
     std::shared_ptr<Util::Logger> m_logger;
-    std::byte*                    m_hostMemory;
+    std::byte*                    m_hostMemory{};
 
-    Interfaces::Interface* m_audioInterface;
-    Interfaces::Interface* m_mipsInterface;
-    Interfaces::Interface* m_rdramInterface;
-    Interfaces::Interface* m_rspRegisters;
-    Interfaces::Interface* m_peripheralInterface;
-    Interfaces::Interface* m_serialInterface;
+    Interfaces::Interface* m_audioInterface{};
+    Interfaces::Interface* m_mipsInterface{};
+    Interfaces::Interface* m_rdramInterface{};
+    Interfaces::Interface* m_rspRegisters{};
+    Interfaces::Interface* m_peripheralInterface{};
+    Interfaces::Interface* m_serialInterface{};
     Interfaces::Interface* m_videoInterface;
 };
 
@@ -100,13 +100,13 @@ auto Memory::readPhysical(PhysicalAddr paddr) const -> T { // TODO improve perfo
             break;
         case PhysSeg::RDRAM_REG: {
             IF_LOG_ENABLED(m_logger) {
-                m_logger->log<Util::Verbosity::MED>(std::tuple{"warning", "Ignoring RDRAM register read"});
+                m_logger->log<Level::HIGH, Sev::WARNING, Sys::RDRAM>("Ignoring RDRAM register read");
             }
             break;
         }
         case PhysSeg::RDP_CMD_REG: {
             IF_LOG_ENABLED(m_logger) {
-                m_logger->log<Util::Verbosity::MED>(std::tuple{"warning", "Ignoring RDP command register read"});
+                m_logger->log<Level::HIGH, Sev::WARNING, Sys::RDRAM>("Ignoring RDP command register read");
             }
             break;
         }
@@ -132,7 +132,7 @@ auto Memory::readPhysical(PhysicalAddr paddr) const -> T { // TODO improve perfo
     }
 
     IF_LOG_ENABLED(m_logger) {
-        m_logger->log<Util::Verbosity::MED>(
+        m_logger->log<Level::HIGH, Sys::RDRAM>(
             std::tuple{"op", "read"},
             std::tuple{"size", sizeof(T)},
             std::tuple{"addr", "0x{:08x}", paddr},
@@ -159,7 +159,7 @@ auto Memory::writePhysical(PhysicalAddr paddr, T data) const -> void {
         case PhysSeg::RDRAM_INTERFACE: m_rdramInterface->sizedWrite(paddr, sizeof(T), data); break;
         case PhysSeg::RDRAM_REG: {
             IF_LOG_ENABLED(m_logger) {
-                m_logger->log<Util::Verbosity::MED>(std::tuple{"warning", "Ignoring RDRAM register write"});
+                m_logger->log<Level::HIGH, Sev::WARNING, Sys::RDRAM>("Ignoring RDRAM register write");
             }
             break;
         }
@@ -186,7 +186,7 @@ auto Memory::writePhysical(PhysicalAddr paddr, T data) const -> void {
                 Util::byteswapIfLittleEndian(printData);
             default: break;
         }
-        m_logger->log<Util::Verbosity::MED>(
+        m_logger->log<Level::HIGH, Sys::RDRAM>(
             std::tuple{"op", "write"},
             std::tuple{"size", sizeof(T)},
             std::tuple{"addr", "0x{:08x}", paddr},
@@ -197,8 +197,10 @@ auto Memory::writePhysical(PhysicalAddr paddr, T data) const -> void {
 
 template <std::integral T>
 auto Memory::translate(VirtualAddr vaddr) const -> PhysicalAddr {
-    if (vaddr % sizeof(T) != 0) {
-        throw Util::Error("Unaligned N64 virtual address access {:#08x}, size {}", vaddr, sizeof(T));
+    IF_LOG_ENABLED(m_logger) {
+        if (vaddr % sizeof(T) != 0) {
+            m_logger->log<Level::HIGH, Sev::WARNING, Sys::RDRAM>("Unaligned virtual address access {:#08x}, size {}", vaddr, sizeof(T));
+        }
     }
 
     template for (constexpr auto e : Util::staticEnumeratorsOf(^^VirtSeg)) {

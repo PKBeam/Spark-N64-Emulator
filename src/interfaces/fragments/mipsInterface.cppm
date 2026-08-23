@@ -29,7 +29,7 @@ export class MipsInterface : public Interface {
     auto updateInterrupt() -> void;
 
     std::shared_ptr<Util::Logger> m_logger;
-    CP0::CP0*                     m_cp0;
+    CP0::CP0*                     m_cp0{};
 
     MI_MODE      m_mode{};
     MI_INTERRUPT m_interrupt{};
@@ -50,8 +50,7 @@ auto MipsInterface::updateInterrupt() -> void {
 template <std::meta::info IntrField>
 auto MipsInterface::setInterrupt(bool enable) -> void {
     IF_LOG_ENABLED(m_logger) {
-        m_logger->log<Util::Verbosity::MED>(
-            std::tuple{"sys", "MI"},
+        m_logger->log<Level::HIGH, Sys::MI>(
             std::tuple{"op", enable ? "setInterrupt" : "clearInterrupt"},
             std::tuple{"interrupt", std::meta::identifier_of(IntrField)});
     }
@@ -83,7 +82,7 @@ auto MipsInterface::read(uint32_t addr) -> uint32_t {
 
     auto data = readReg(addr);
 
-    logOperation<MI_REG_ADDR>(m_logger, "read", addr, data);
+    logOperation<Sys::MI, MI_REG_ADDR>(m_logger, "read", addr, data);
 
     return data;
 }
@@ -93,7 +92,7 @@ auto MipsInterface::write(uint32_t addr, uint32_t data) -> void {
                     MI_REG_ADDR::BASE <= addr && addr <= MI_REG_ADDR::END);
 
     addr = MI_REG_ADDR::BASE + (addr & 0xF);
-    logOperation<MI_REG_ADDR>(m_logger, "write", addr, data);
+    logOperation<Sys::MI, MI_REG_ADDR>(m_logger, "write", addr, data);
 
     switch (addr) {
         case MI_REG_ADDR::MI_MODE: {
@@ -111,7 +110,7 @@ auto MipsInterface::write(uint32_t addr, uint32_t data) -> void {
         }
         case MI_REG_ADDR::MI_VERSION: [[fallthrough]];
         case MI_REG_ADDR::MI_INTERRUPT: {
-            logWarnOnWriteToReadOnlyRegister<MI_REG_ADDR>(m_logger, addr);
+            logWarnOnWriteToReadOnlyRegister<Sys::MI, MI_REG_ADDR>(m_logger, addr);
             return;
         }
         case MI_REG_ADDR::MI_MASK: {

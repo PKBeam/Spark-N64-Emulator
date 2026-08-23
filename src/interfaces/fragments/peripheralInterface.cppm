@@ -35,12 +35,12 @@ export class PeripheralInterface : public Interface {
 
   private:
     std::shared_ptr<Util::Logger> m_logger;
-    const RomFile*                m_romFile;
-    std::byte*                    m_memory;
+    const RomFile*                m_romFile{};
+    std::byte*                    m_memory{};
     PI_STATUS                     m_status{};
     uint32_t                      m_dramAddr = 0;
     uint32_t                      m_cartAddr = 0;
-    MipsInterface*                m_mipsInterface;
+    MipsInterface*                m_mipsInterface{};
 
     auto dmaMemcpy(uint32_t dest, uint32_t src, std::size_t len) -> void;
     auto readRegister(uint32_t addr) -> uint32_t;
@@ -68,9 +68,7 @@ auto PeripheralInterface::readBus(uint32_t addr) -> T {
             throw Util::Error("PI regs must not be accessed via the bus");
         case PiDmaRanges::SRAM:
             IF_LOG_ENABLED(m_logger) {
-                m_logger->log<Util::Verbosity::MED>(
-                    std::tuple{"sys", "PI"},
-                    std::tuple{"warning", "Ignoring read from SRAM"});
+                m_logger->log<Level::HIGH, Sev::WARNING, Sys::PI>("Ignoring read from SRAM");
             }
             return static_cast<T>(0); // TODO implement SRAM
         case PiDmaRanges::ROM:
@@ -80,9 +78,7 @@ auto PeripheralInterface::readBus(uint32_t addr) -> T {
         case PiDmaRanges::N64DD_CTRL_REG: [[fallthrough]];
         case PiDmaRanges::N64DD_IPL_ROM:
             IF_LOG_ENABLED(m_logger) {
-                m_logger->log<Util::Verbosity::MED>(
-                    std::tuple{"sys", "PI"},
-                    std::tuple{"warning", "Ignoring read from N64DD memory range"});
+                m_logger->log<Level::HIGH, Sev::WARNING, Sys::PI>("Ignoring read from N64DD memory range");
             }
             break;
     }
@@ -100,9 +96,7 @@ auto PeripheralInterface::writeBus(uint32_t addr, T data) -> void {
             throw Util::Error("PI regs must not be accessed via the bus");
         case PiDmaRanges::SRAM:
             IF_LOG_ENABLED(m_logger) {
-                m_logger->log<Util::Verbosity::MED>(
-                    std::tuple{"sys", "PI"},
-                    std::tuple{"warning", "Ignoring write to SRAM"});
+                m_logger->log<Level::HIGH, Sev::WARNING, Sys::PI>("Ignoring write to SRAM");
             }
             return;
         case PiDmaRanges::ROM:
@@ -110,9 +104,7 @@ auto PeripheralInterface::writeBus(uint32_t addr, T data) -> void {
         case PiDmaRanges::N64DD_CTRL_REG: [[fallthrough]];
         case PiDmaRanges::N64DD_IPL_ROM:
             IF_LOG_ENABLED(m_logger) {
-                m_logger->log<Util::Verbosity::MED>(
-                    std::tuple{"sys", "PI"},
-                    std::tuple{"warning", "Ignoring write to N64DD memory range"});
+                m_logger->log<Level::HIGH, Sev::WARNING, Sys::PI>("Ignoring write to N64DD memory range");
             }
             return; // ignore
     }
@@ -152,7 +144,7 @@ auto PeripheralInterface::read(uint32_t addr) -> uint32_t {
         };
     };
     auto data = readReg(addr);
-    logOperation<PI_REG_ADDR>(m_logger, "read", addr, data);
+    logOperation<Sys::PI, PI_REG_ADDR>(m_logger, "read", addr, data);
     return data;
 }
 
@@ -160,15 +152,13 @@ auto PeripheralInterface::write(uint32_t addr, uint32_t data) -> void {
     contract_assert(addr % 4 == 0 &&
                     PI_REG_ADDR::BASE <= addr && addr <= PI_REG_ADDR::END);
 
-    logOperation<PI_REG_ADDR>(m_logger, "write", addr, data);
+    logOperation<Sys::PI, PI_REG_ADDR>(m_logger, "write", addr, data);
 
     switch (addr) {
         case PI_REG_ADDR::PI_DRAM_ADDR:
             m_dramAddr = data;
             if (m_logger && m_logger->enabled() && data % 8 != 0) {
-                m_logger->log<Util::Verbosity::MED>(
-                    std::tuple{"sys", "PI"},
-                    std::tuple{"warning", "PI DMA RDRAM address not aligned to 8-byte boundary"});
+                m_logger->log<Level::HIGH, Sev::WARNING, Sys::PI>("PI DMA RDRAM address not aligned to 8-byte boundary");
             }
             break;
         case PI_REG_ADDR::PI_CART_ADDR:
@@ -204,7 +194,7 @@ auto PeripheralInterface::write(uint32_t addr, uint32_t data) -> void {
         case PI_REG_ADDR::PI_BSD_DOM2_PWD: [[fallthrough]];
         case PI_REG_ADDR::PI_BSD_DOM2_PGS: [[fallthrough]];
         case PI_REG_ADDR::PI_BSD_DOM2_RLS:
-            logWarnOnIgnoredRegister<PI_REG_ADDR>(m_logger, addr);
+            logWarnOnIgnoredRegister<Sys::PI, PI_REG_ADDR>(m_logger, addr);
             break;
         default:
             throw Util::Error("No PI register found for addr {:#08x}", addr);
@@ -213,9 +203,7 @@ auto PeripheralInterface::write(uint32_t addr, uint32_t data) -> void {
 
 auto PeripheralInterface::dmaMemcpy(uint32_t dst, uint32_t src, std::size_t len) -> void {
     if (m_logger && m_logger->enabled() && len % 2 != 0) {
-        m_logger->log<Util::Verbosity::MED>(
-            std::tuple{"sys", "PI"},
-            std::tuple{"warning", "PI DMA length not an even number"});
+        m_logger->log<Level::HIGH, Sev::WARNING, Sys::PI>("PI DMA length not an even number");
     }
 
     for (auto i = 0u; i < len; ++i) {

@@ -20,8 +20,8 @@ struct Error : std::runtime_error {
 };
 
 struct Range {
-    uint32_t lower;
-    uint32_t upper;
+    uint32_t lower{};
+    uint32_t upper{};
 
     constexpr auto size() const -> std::size_t {
         return upper - lower + 1;

@@ -20,13 +20,13 @@ export class AudioInterface : public Interface {
 
   private:
     std::shared_ptr<Util::Logger> m_logger;
-    MipsInterface*                m_mipsInterface;
+    MipsInterface*                m_mipsInterface{};
 
-    uint32_t  m_dramAddr;
-    uint32_t  m_length;
-    uint8_t   m_bitrate;
-    uint16_t  m_dacRate;
-    AI_STATUS m_status;
+    uint32_t  m_dramAddr{};
+    uint32_t  m_length{};
+    uint8_t   m_bitrate{};
+    uint16_t  m_dacRate{};
+    AI_STATUS m_status{};
     bool      m_enabled = false;
 };
 
@@ -53,7 +53,7 @@ auto AudioInterface::read(uint32_t addr) -> uint32_t {
 
     auto data = readReg(addr);
 
-    logOperation<AI_REG_ADDR>(m_logger, "read", addr, data);
+    logOperation<Sys::AI, AI_REG_ADDR>(m_logger, "read", addr, data);
 
     return data;
 }
@@ -63,7 +63,7 @@ auto AudioInterface::write(uint32_t addr, uint32_t data) -> void {
                     AI_REG_ADDR::BASE <= addr && addr <= AI_REG_ADDR::END);
 
     addr = AI_REG_ADDR::BASE + (addr & 0x1F);
-    logOperation<AI_REG_ADDR>(m_logger, "write", addr, data);
+    logOperation<Sys::AI, AI_REG_ADDR>(m_logger, "write", addr, data);
 
     switch (addr) {
         case AI_REG_ADDR::AI_DRAM_ADDR: {

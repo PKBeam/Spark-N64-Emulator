@@ -11,40 +11,40 @@ import Util;
 export namespace CP0 {
 
 struct Status {
-    uint32_t ie  : 1;
-    uint32_t exl : 1;
+    uint32_t ie  : 1 = 0;
+    uint32_t exl : 1 = 0;
     uint32_t erl : 1 = 1;
-    uint32_t ksu : 2;
-    uint32_t ux  : 1;
-    uint32_t sx  : 1;
-    uint32_t kx  : 1;
-    uint32_t im  : 8;
+    uint32_t ksu : 2 = 0;
+    uint32_t ux  : 1 = 0;
+    uint32_t sx  : 1 = 0;
+    uint32_t kx  : 1 = 0;
+    uint32_t im  : 8 = 0;
     // Diagnostic Status bits
-    uint32_t de  : 1;
-    uint32_t ce  : 1;
-    uint32_t ch  : 1;
+    uint32_t de  : 1 = 0;
+    uint32_t ce  : 1 = 0;
+    uint32_t ch  : 1 = 0;
     uint32_t     : 1;
     uint32_t sr  : 1 = 0; // TODO set 1 on soft reset/NMI interrupt
     uint32_t ts  : 1 = 0;
     uint32_t bev : 1 = 1;
     uint32_t     : 1;
-    uint32_t its : 1;
+    uint32_t its : 1 = 0;
     //
-    uint32_t re : 1;
-    uint32_t fr : 1;
+    uint32_t re : 1 = 0;
+    uint32_t fr : 1 = 0;
     uint32_t rp : 1 = 0;
-    uint32_t cu : 4;
+    uint32_t cu : 4 = 0;
 };
 
 struct Cause {
     uint32_t     : 2;
-    uint32_t exc : 5;
+    uint32_t exc : 5 = 0;
     uint32_t     : 1;
-    uint32_t ip  : 8;
+    uint32_t ip  : 8 = 0;
     uint32_t     : 12;
-    uint32_t ce  : 2;
+    uint32_t ce  : 2 = 0;
     uint32_t     : 1;
-    uint32_t bd  : 1;
+    uint32_t bd  : 1 = 0;
 };
 
 enum class ExceptionCode : uint8_t {
@@ -142,7 +142,7 @@ auto CP0::readReg(std::size_t index) -> T {
     auto value = static_cast<T>(m_regs[index]);
     IF_LOG_ENABLED(m_logger) {
         const auto enumName = Util::enumName(regName);
-        m_logger->log<Util::Verbosity::MED>(
+        m_logger->log<Level::HIGH, Sys::CPU>(
             std::tuple{"op", "read"},
             std::tuple{"reg", "CP0 {}", static_cast<Registers>(index)},
             std::tuple{"data", "0x{:08X}", static_cast<uint32_t>(value)});
@@ -169,19 +169,19 @@ template <std::integral T>
 auto CP0::writeReg(std::size_t index, T value) -> void {
     const auto regName = static_cast<Registers>(index);
     if (m_logger && regName == Registers::RANDOM) {
-        m_logger->log<Util::Verbosity::HIGH>(std::tuple{"warning", "Attempted to write to read-only register CP0_REG::RANDOM!"});
+        m_logger->log<Level::HIGH, Sys::CPU>(std::tuple{"warning", "Attempted to write to read-only register CP0_REG::RANDOM!"});
         return;
     }
     if (m_logger && regName == Registers::STATUS) {
         auto status = std::bit_cast<Status>(static_cast<uint32_t>(value));
         if (status.kx || status.sx || status.ux) {
-            m_logger->log<Util::Verbosity::HIGH>(std::tuple{"warning", "Enabled 64-bit mode in CP0_REG::STATUS, which is not fully supported yet"});
+            m_logger->log<Level::HIGH, Sys::CPU>(std::tuple{"warning", "Enabled 64-bit mode in CP0_REG::STATUS, which is not fully supported yet"});
         }
     }
     m_regs[index] = Util::signExt32(value);
     IF_LOG_ENABLED(m_logger) {
         const auto enumName = Util::enumName(regName);
-        m_logger->log<Util::Verbosity::MED>(
+        m_logger->log<Level::HIGH, Sys::CPU>(
             std::tuple{"op", "write"},
             std::tuple{"reg", "CP0 {}", static_cast<Registers>(index)},
             std::tuple{"data", "0x{:08X}", static_cast<uint32_t>(value)});

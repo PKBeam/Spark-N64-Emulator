@@ -5,9 +5,9 @@ target_sources(cpu PUBLIC
     FILES
         module.cppm
         fragments/cpu.cppm
+        fragments/instructionExecutor.cppm
+        fragments/registers.cppm
 )
-target_sources(cpu PRIVATE
-    fragments/cpuExecuteInstruction.cppm)
 target_compile_options(cpu PUBLIC ${CXX_COMPILE_OPTIONS})
 target_include_directories(cpu PUBLIC ${CMAKE_SOURCE_DIR}/src)
 target_link_libraries(cpu PUBLIC isa cp0 util rom memory)

@@ -33,12 +33,12 @@ export class RspRegisters : public Interface {
     auto dmaMemcpy(uint32_t dst, uint32_t src, std::size_t len, uint8_t count, uint16_t skip) -> void;
 
     std::shared_ptr<Util::Logger> m_logger;
-    MipsInterface*                m_mipsInterface;
-    RSP::Control*                 m_rsp;
-    std::byte*                    m_memory;
+    MipsInterface*                m_mipsInterface{};
+    RSP::Control*                 m_rsp{};
+    std::byte*                    m_memory{};
 
-    uint32_t m_rspAddr;
-    uint32_t m_ramAddr;
+    uint32_t m_rspAddr{};
+    uint32_t m_ramAddr{};
 };
 
 template <RspDmaDirection Dir>
@@ -106,17 +106,15 @@ auto RspRegisters::read(uint32_t addr) -> uint32_t {
             case RSP_REG_ADDR::RSP_DMA_BUSY: return 0;
             case RSP_REG_ADDR::RSP_SEMAPHORE:
                 // TODO
-                logWarnOnIgnoredRegister<RSP_REG_ADDR>(m_logger, addr);
+                logWarnOnIgnoredRegister<Sys::RSP_REG, RSP_REG_ADDR>(m_logger, addr);
                 return 0;
             case RSP_REG_ADDR::RSP_PC:
                 if (!m_rsp->getHalt()) {
                     IF_LOG_ENABLED(m_logger) {
-                        m_logger->log<Util::Verbosity::MED>(
-                            std::tuple{"sys", std::meta::display_string_of(^^decltype(*this))},
-                            std::tuple{"warning", "Attempted to read PC while RSP is not halted"});
+                        m_logger->log<Level::HIGH, Sev::WARNING, Sys::RSP_REG>("Attempted to read PC while RSP is not halted");
                     }
                 }
-                return m_rsp->getPc();
+                return m_rsp->getPc().value_or(0);
             default:
                 throw Util::Error("No RSP register found for addr {:#08x}", addr);
         }
@@ -124,7 +122,7 @@ auto RspRegisters::read(uint32_t addr) -> uint32_t {
 
     auto data = readReg(addr);
 
-    logOperation<RSP_REG_ADDR>(m_logger, "read", addr, data);
+    logOperation<Sys::RSP_REG, RSP_REG_ADDR>(m_logger, "read", addr, data);
 
     return data;
 }
@@ -133,7 +131,7 @@ auto RspRegisters::write(uint32_t addr, uint32_t data) -> void {
     contract_assert(addr % 4 == 0 &&
                     RSP_REG_ADDR::BASE <= addr && addr <= RSP_REG_ADDR::END);
 
-    logOperation<RSP_REG_ADDR>(m_logger, "write", addr, data);
+    logOperation<Sys::RSP_REG, RSP_REG_ADDR>(m_logger, "write", addr, data);
 
     switch (addr) {
         case RSP_REG_ADDR::RSP_DMA_SPADDR: m_rspAddr = data; return;
@@ -181,7 +179,7 @@ auto RspRegisters::write(uint32_t addr, uint32_t data) -> void {
         case RSP_REG_ADDR::RSP_DMA_BUSY: [[fallthrough]];
         case RSP_REG_ADDR::RSP_SEMAPHORE:
             // TODO
-            logWarnOnIgnoredRegister<RSP_REG_ADDR>(m_logger, addr);
+            logWarnOnIgnoredRegister<Sys::RSP_REG, RSP_REG_ADDR>(m_logger, addr);
             break;
         case RSP_REG_ADDR::RSP_PC:
             m_rsp->setPc(data);

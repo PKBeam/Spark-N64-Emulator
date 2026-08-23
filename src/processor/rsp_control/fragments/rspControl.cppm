@@ -33,7 +33,8 @@ class Control {
 
     auto setPc(uint32_t pc) -> void //
         pre(m_halt);
-    auto getPc() -> uint32_t;
+    auto getPc() -> std::optional<uint32_t>;
+    auto clearPc() -> void;
     auto incrementPc() -> void;
     auto setSingleStep(bool value) -> void;
     auto getSingleStep() -> bool;
@@ -46,7 +47,7 @@ class Control {
 
   private:
     std::shared_ptr<Util::Logger> m_logger;
-    uint32_t                      m_pc               = 0;
+    std::optional<uint32_t>       m_pc               = 0;
     SignalSet                     m_signals          = {};
     bool                          m_broke            = false;
     bool                          m_halt             = true;
@@ -58,13 +59,12 @@ auto Control::setPc(uint32_t pc) -> void {
     m_pc = pc;
 }
 
-auto Control::getPc() -> uint32_t {
+auto Control::getPc() -> std::optional<uint32_t> {
     return m_pc;
 }
 
-auto Control::incrementPc() -> void {
-    m_pc += 4;
-    m_pc &= 0xFFF; // wrap around IMEM
+auto Control::clearPc() -> void {
+    m_pc.reset();
 }
 
 auto Control::setSignal(std::size_t signal, bool value) -> void {

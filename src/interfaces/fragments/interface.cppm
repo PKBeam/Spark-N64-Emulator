@@ -25,13 +25,13 @@ class Interface {
     virtual auto read(uint32_t addr) -> uint32_t             = 0;
     virtual auto write(uint32_t addr, uint32_t data) -> void = 0;
 
-    template <typename RegAddrEnum, typename Self>
+    template <Sys S, typename RegAddrStruct, typename Self>
     auto logOperation(this Self&& self, std::shared_ptr<Util::Logger> logger, std::string_view operationName, uint32_t addr, uint32_t data) -> void;
 
-    template <typename RegAddrStruct, typename Self>
+    template <Sys S, typename RegAddrStruct, typename Self>
     auto logWarnOnWriteToReadOnlyRegister(this Self&& self, std::shared_ptr<Util::Logger> logger, uint32_t addr) -> void;
 
-    template <typename RegAddrStruct, typename Self>
+    template <Sys S, typename RegAddrStruct, typename Self>
     auto logWarnOnIgnoredRegister(this Self&& self, std::shared_ptr<Util::Logger> logger, uint32_t addr) -> void;
 };
 
@@ -72,35 +72,30 @@ auto getRegisterName(uint32_t addr) -> std::string {
     return Util::enumName(static_cast<RegAddrStruct::Address>(addr)).value_or(std::format("{:#08x}", addr));
 }
 
-template <typename RegAddrStruct, typename Self>
+template <Sys S, typename RegAddrStruct, typename Self>
 auto Interface::logOperation(this Self&& self, std::shared_ptr<Util::Logger> logger, std::string_view operationName, uint32_t addr, uint32_t data) -> void {
     IF_LOG_ENABLED(logger) {
         auto name = getRegisterName<RegAddrStruct>(addr);
-        logger->log<Util::Verbosity::MED>(
-            std::tuple{"sys", std::meta::display_string_of(Util::removeCvref(^^Self))},
+        logger->log<Level::HIGH, S>(
             std::tuple{"op", operationName},
             std::tuple{"reg", "{}", name},
             std::tuple{"data", "0x{:08x}", data});
     }
 }
 
-template <typename RegAddrStruct, typename Self>
+template <Sys S, typename RegAddrStruct, typename Self>
 auto Interface::logWarnOnWriteToReadOnlyRegister(this Self&& self, std::shared_ptr<Util::Logger> logger, uint32_t addr) -> void {
     IF_LOG_ENABLED(logger) {
         auto name = getRegisterName<RegAddrStruct>(addr);
-        logger->log<Util::Verbosity::MED>(
-            std::tuple{"sys", std::meta::display_string_of(Util::removeCvref(^^Self))},
-            std::tuple{"warning", "Attempted to write to read-only register {}", name});
+        logger->log<Level::HIGH, Sev::WARNING, S>("Attempted to write to read-only register {}", name);
     }
 }
 
-template <typename RegAddrStruct, typename Self>
+template <Sys S, typename RegAddrStruct, typename Self>
 auto Interface::logWarnOnIgnoredRegister(this Self&& self, std::shared_ptr<Util::Logger> logger, uint32_t addr) -> void {
     IF_LOG_ENABLED(logger) {
         auto name = getRegisterName<RegAddrStruct>(addr);
-        logger->log<Util::Verbosity::MED>(
-            std::tuple{"sys", std::meta::display_string_of(Util::removeCvref(^^Self))},
-            std::tuple{"warning", "Ignoring access to register {}", name});
+        logger->log<Level::HIGH, Sev::WARNING, S>("Ignoring access to register {}", name);
     }
 }
 } // namespace Interfaces

@@ -22,16 +22,16 @@ int main(int argc, char* argv[]) {
     emulatorConfig.memorySize = 0x1FD00000; // maximum size of usable physical memory in N64
 
     // handle logging
-    std::optional<Util::Verbosity> logLevel{};
+    std::optional<Level> logLevel{};
     for (const auto arg : args) {
         if (arg == "--log"sv) {
-            logLevel = Util::Verbosity::MED;
+            logLevel = Level::MED;
         } else if (arg.starts_with("--log=")) {
             auto level = std::string{arg.substr(6)};
             try {
-                logLevel = static_cast<Util::Verbosity>(std::stoi(level));
+                logLevel = static_cast<Level>(std::stoi(level));
             } catch (const std::exception& _) {
-                template for (constexpr auto e : Util::staticEnumeratorsOf(^^Util::Verbosity)) {
+                template for (constexpr auto e : Util::staticEnumeratorsOf(^^Level)) {
                     if (std::meta::identifier_of(e) == level) {
                         logLevel = [:e:];
                         break;
@@ -52,7 +52,7 @@ int main(int argc, char* argv[]) {
 
     if (logLevel) {
         emulatorConfig.logger = std::make_shared<Util::Logger>("log.json"sv);
-        emulatorConfig.logger->setVerbosity(*logLevel);
+        emulatorConfig.logger->setLevel(*logLevel);
     }
     if (emulatorConfig.logAfterBoot) {
         contract_assert(emulatorConfig.logger != nullptr);

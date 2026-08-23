@@ -58,7 +58,7 @@ auto RdramInterface::read(uint32_t addr) -> uint32_t {
 
     auto data = readReg(addr);
 
-    logOperation<RI_REG_ADDR>(m_logger, "read", addr, data);
+    logOperation<Sys::RI, RI_REG_ADDR>(m_logger, "read", addr, data);
 
     return data;
 }
@@ -69,7 +69,7 @@ auto RdramInterface::write(uint32_t addr, uint32_t data) -> void {
 
     addr = RI_REG_ADDR::BASE + (addr & 0xFF);
 
-    logOperation<RI_REG_ADDR>(m_logger, "write", addr, data);
+    logOperation<Sys::RI, RI_REG_ADDR>(m_logger, "write", addr, data);
 
     contract_assert(RI_REG_ADDR::BASE <= addr && addr <= RI_REG_ADDR::END);
     switch (addr) {
@@ -81,7 +81,7 @@ auto RdramInterface::write(uint32_t addr, uint32_t data) -> void {
             break;
         case RI_REG_ADDR::RI_CURRENT_LOAD: {
             // unused-ish?
-            logWarnOnIgnoredRegister<RI_REG_ADDR>(m_logger, addr);
+            logWarnOnIgnoredRegister<Sys::RI, RI_REG_ADDR>(m_logger, addr);
             break;
         }
         case RI_REG_ADDR::RI_SELECT:

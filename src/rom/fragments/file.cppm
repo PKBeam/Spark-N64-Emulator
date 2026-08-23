@@ -25,8 +25,8 @@ export class RomFile {
 
   private:
     std::filesystem::path m_romFilePath;
-    std::size_t           m_size;
-    std::byte*            m_mappedFile;
+    std::size_t           m_size{};
+    std::byte*            m_mappedFile{};
 };
 
 // implementation

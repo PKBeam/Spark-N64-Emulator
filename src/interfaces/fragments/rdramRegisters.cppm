@@ -1,3 +1,5 @@
+module;
+#include <util/defines.hpp>
 export module Interfaces:RdramRegisters;
 
 import std;
@@ -23,14 +25,18 @@ export class RdramRegisters : public Interface {
 auto RdramRegisters::read(uint32_t addr) -> uint32_t {
     contract_assert(addr % 4 == 0 &&
                     RDRAM_REG_ADDR::BASE <= addr && addr <= RDRAM_REG_ADDR::END);
-    logWarnOnIgnoredRegister<RDRAM_REG_ADDR>(m_logger, addr);
+    IF_LOG_ENABLED(m_logger) {
+        m_logger->log<Level::HIGH, Sev::WARNING, Sys::RDRAM_REG>("Ignoring access to register {}", addr);
+    }
     return 0;
 }
 
 auto RdramRegisters::write(uint32_t addr, uint32_t data) -> void {
     contract_assert(addr % 4 == 0 &&
                     RDRAM_REG_ADDR::BASE <= addr && addr <= RDRAM_REG_ADDR::END);
-    logWarnOnIgnoredRegister<RDRAM_REG_ADDR>(m_logger, addr);
+    IF_LOG_ENABLED(m_logger) {
+        m_logger->log<Level::HIGH, Sev::WARNING, Sys::RDRAM_REG>("Ignoring access to register {}", addr);
+    }
 }
 
 } // namespace Interfaces

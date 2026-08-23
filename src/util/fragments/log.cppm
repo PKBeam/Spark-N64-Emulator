@@ -11,14 +11,44 @@ concept Tuple_c = requires { std::tuple_size<T>::value; };
 
 export namespace Util {
 
+auto toLower(std::string s) -> std::string {
+    return s | std::views::transform([](unsigned char c) { return std::tolower(c); }) | std::ranges::to<std::string>();
+}
+
 class Logger {
   public:
-    enum class Verbosity : uint8_t {
+    enum class Sys {
+        NONE,
+
+        // processors
+        CPU,
+        CP0,
+        RSP,
+
+        // memory
+        RDRAM,
+
+        // interfaces
+        AI,
+        MI,
+        PI,
+        RDRAM_REG,
+        RI,
+        RSP_REG,
+        SI,
+        VI,
+    };
+    enum class Level : uint8_t {
         MAX  = 255,
         HIGH = 3,
         MED  = 2,
         LOW  = 1,
         NONE = 0
+    };
+    enum class Severity {
+        INFO,
+        WARNING,
+        ERROR,
     };
 
     Logger(std::string_view file) //
@@ -31,35 +61,31 @@ class Logger {
 
     auto enabled() -> bool;
 
-    auto setVerbosity(Verbosity v) -> void;
+    auto setLevel(Level level) -> void;
 
     template <typename... Args>
-    auto logUnstructured(const char* fmt, Args... obj) -> void;
+    auto print(const char* fmt, Args... obj) -> void;
 
-    template <Verbosity v, Tuple_c... Args>
+    template <Logger::Level Level, Logger::Sys Sys = Logger::Sys::NONE, Tuple_c... Args>
     auto log(Args... args) -> void;
 
-    template <Verbosity v, class T>
-    auto log(T obj) -> void;
+    // template <Verbosity v, class T>
+    //     requires(!Tuple_c<T>)
+    // auto log(T obj) -> void;
 
-    template <Verbosity v>
-    auto log(std::string_view msg) -> void;
-
-    template <Verbosity v, typename... Args>
+    template <Logger::Level Level, Logger::Severity Sev, Logger::Sys Sys = Logger::Sys::NONE, typename... Args>
     auto log(const char* fmt, Args... obj) -> void;
 
     auto flush() -> void;
 
   private:
-    template <class T>
-    auto format(T obj) -> std::string;
+    // template <class T>
+    // auto format(T obj) -> std::string;
 
-    Verbosity  m_verbosity = Verbosity::MED;
-    std::FILE* m_file;
-    bool       m_enabled;
+    Level      m_level = Level::HIGH;
+    std::FILE* m_file{};
+    bool       m_enabled{};
 };
-
-using Verbosity = Util::Logger::Verbosity;
 
 // implementation
 
@@ -85,8 +111,8 @@ auto Logger::enabled() -> bool {
     return m_enabled;
 }
 
-auto Logger::setVerbosity(Verbosity v) -> void {
-    m_verbosity = v;
+auto Logger::setLevel(Level level) -> void {
+    m_level = level;
 }
 
 auto Logger::flush() -> void {
@@ -97,32 +123,36 @@ auto Logger::flush() -> void {
 }
 
 template <typename... Args>
-auto Logger::logUnstructured(const char* fmt, Args... args) -> void {
+auto Logger::print(const char* fmt, Args... args) -> void {
     if (!m_enabled) {
         return;
     }
     std::println(m_file, std::runtime_format(fmt), args...);
 }
 
-template <Logger::Verbosity v, class T>
-auto Logger::log(T obj) -> void {
-    if (!m_enabled || v > m_verbosity) {
-        return;
-    }
-    std::println(m_file,
-                 "{{\"level\": {}, \"{}\": {}}}",
-                 static_cast<int>(v),
-                 std::meta::display_string_of(^^T),
-                 format(obj));
-}
+// template <Logger::Verbosity v, class T>
+//     requires(!Tuple_c<T>)
+// auto Logger::log(T obj) -> void {
+//     if (!m_enabled || v > m_verbosity) {
+//         return;
+//     }
+//     std::println(m_file,
+//                  "{{\"level\": {}, \"{}\": {}}}",
+//                  static_cast<int>(v),
+//                  std::meta::display_string_of(^^T),
+//                  format(obj));
+// }
 
-template <Logger::Verbosity v, Tuple_c... Args>
+template <Logger::Level Level, Logger::Sys Sys, Tuple_c... Args>
 auto Logger::log(Args... args) -> void {
-    if (!m_enabled || v > m_verbosity) {
+    if (!m_enabled || Level < m_level) {
         return;
     }
     auto str = std::string{"{"};
-    str += std::format("\"level\": {}", static_cast<int>(v));
+    str += std::format("\"level\": \"{}\"", *Util::enumName(Level));
+    if constexpr (Sys != Logger::Sys::NONE) {
+        str += std::format(", \"sys\": \"{}\"", *Util::enumName(Sys));
+    }
     // clang-format off
     (
         (
@@ -147,32 +177,38 @@ auto Logger::log(Args... args) -> void {
     std::println(m_file, "{}", str);
 }
 
-template <Logger::Verbosity v>
-auto Logger::log(std::string_view msg) -> void {
-    if (!m_enabled || v > m_verbosity) {
-        return;
-    }
-    std::println(m_file,
-                 "{{\"level\": {}, \"message\": \"{}\"}}",
-                 static_cast<int>(v),
-                 msg);
-}
-
-template <Logger::Verbosity v, typename... Args>
+template <Logger::Level Level, Logger::Severity Sev, Logger::Sys Sys, typename... Args>
 auto Logger::log(const char* fmt, Args... args) -> void {
-    if (!m_enabled || v > m_verbosity) {
+    if (!m_enabled || Level < m_level) {
         return;
     }
     auto str = std::format(std::runtime_format(fmt), args...);
-    log<v>(std::string_view{str});
+    if constexpr (Sys != Logger::Sys::NONE) {
+        std::println(m_file,
+                     "{{\"level\": \"{}\", \"sys\": \"{}\", \"{}\": \"{}\"}}",
+                     *Util::enumName(Level),
+                     *Util::enumName(Sys),
+                     Util::toLower(*Util::enumName(Sev)),
+                     str);
+    } else {
+        std::println(m_file,
+                     "{{\"level\": \"{}\", \"{}\": \"{}\"}}",
+                     *Util::enumName(Level),
+                     Util::toLower(*Util::enumName(Sev)),
+                     str);
+    }
 }
 
-template <class T>
-auto Logger::format(T obj) -> std::string {
-    if constexpr (std::formattable<T, char>) {
-        return std::format("\"{}\"", std::format("{}", obj)); // TODO
-    }
-    return std::format("\"{}\"", std::meta::display_string_of(^^T)); // TODO
-}
+// template <class T>
+// auto Logger::format(T obj) -> std::string {
+//     if constexpr (std::formattable<T, char>) {
+//         return std::format("\"{}\"", std::format("{}", obj)); // TODO
+//     }
+//     return std::format("\"{}\"", std::meta::display_string_of(^^T)); // TODO
+// }
 
 } // namespace Util
+
+export using Level = Util::Logger::Level;
+export using Sev   = Util::Logger::Severity;
+export using Sys   = Util::Logger::Sys;
