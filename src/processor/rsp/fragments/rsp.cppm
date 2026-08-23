@@ -20,7 +20,7 @@ export namespace RSP {
 
 class RSP {
   public:
-    RSP(std::shared_ptr<Util::Logger> logger, Memory::Memory* memory, CP0::CP0* cp0, Control* control)
+    RSP(std::shared_ptr<Util::Logger> logger, Memory::Memory* memory, CP0::CP0<Sys::RSP>* cp0, Control* control)
         : m_logger(logger), m_memory(memory), m_regs(logger), m_cp0(cp0), m_control(control), m_exec(m_logger, &m_regs, m_memory) {};
 
     auto runInstruction() -> void;
@@ -31,7 +31,7 @@ class RSP {
     std::shared_ptr<Util::Logger>                      m_logger;
     Memory::Memory*                                    m_memory{};
     CPU::Registers<Sys::RSP>                           m_regs;
-    CP0::CP0*                                          m_cp0{};
+    CP0::CP0<Sys::RSP>*                                m_cp0{};
     Control*                                           m_control{};
     InstructionExecutor::InstructionExecutor<Sys::RSP> m_exec;
     std::optional<VirtualAddr>                         m_delaySlotPc;
@@ -51,7 +51,7 @@ auto RSP::runInstruction() -> void {
     const auto inst = ISA::Instruction(instBits);
     IF_LOG_ENABLED(m_logger) {
         m_logger->log<Level::HIGH, Sys::RSP>(
-            std::tuple{"PC", "0x{:08x}", static_cast<uint32_t>(m_regs.readPc())},
+            std::tuple{"PC", "0x{:04x}", static_cast<uint32_t>(m_regs.readPc())},
             std::tuple{"inst", "{}", inst});
     }
 
@@ -162,33 +162,16 @@ auto RSP::runInstruction() -> void {
             auto cp = (data >> 26) & 0b11;
             if (cp != 0) throw Util::Error("Unsupported instruction on coprocessor {}", cp);
             auto ops = std::bit_cast<TypeR>(data);
-            m_regs.writeGpr(ops.rt, m_cp0->readReg(ops.rd));
+            m_regs.writeGpr(ops.rt, m_control->readRegister(ops.rd));
+
             break;
         }
         case UnifiedOpcode::OP_MTCz: {
             auto cp = (data >> 26) & 0b11;
             if (cp != 0) throw Util::Error("Unsupported instruction on coprocessor {}", cp);
             auto ops = std::bit_cast<TypeR>(data);
-            m_cp0->writeReg(ops.rd, m_regs.readGpr(ops.rt));
+            m_control->writeRegister(ops.rd, m_regs.readGpr(ops.rt));
             break;
-        }
-        case UnifiedOpcode::OP_CFCz: {
-            auto cp  = (data >> 26) & 0b11;
-            auto ops = std::bit_cast<TypeR>(data);
-            if (cp == 1 && ops.rd == 31) {
-                m_regs.writeGpr(ops.rt, 0);
-                break;
-            }
-            throw Util::Error("Unsupported instruction on coprocessor {}", cp);
-        }
-        case UnifiedOpcode::OP_CTCz: {
-            auto cp  = (data >> 26) & 0b11;
-            auto ops = std::bit_cast<TypeR>(data);
-            if (cp == 1 && ops.rd == 31) {
-                m_regs.writeGpr(ops.rt, 0);
-                break;
-            }
-            throw Util::Error("Unsupported instruction on coprocessor {}", cp);
         }
 
         // Misc. instructions

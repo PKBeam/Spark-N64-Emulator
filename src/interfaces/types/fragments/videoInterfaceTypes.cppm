@@ -1,9 +1,7 @@
-export module Interfaces:VideoInterfaceTypes;
+export module InterfaceTypes:VideoInterfaceTypes;
 
 import std;
 import Util;
-
-import :Interface;
 
 export namespace Interfaces {
 

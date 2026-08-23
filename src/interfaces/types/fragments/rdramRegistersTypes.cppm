@@ -1,8 +1,7 @@
-export module Interfaces:RdramRegistersTypes;
+export module InterfaceTypes:RdramRegistersTypes;
 
 import std;
 import Util;
-import :Interface;
 
 export namespace Interfaces {
 

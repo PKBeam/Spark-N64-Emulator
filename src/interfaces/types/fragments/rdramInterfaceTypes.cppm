@@ -1,9 +1,7 @@
-export module Interfaces:RdramInterfaceTypes;
+export module InterfaceTypes:RdramInterfaceTypes;
 
 import std;
 import Util;
-
-import :Interface;
 
 export namespace Interfaces {
 

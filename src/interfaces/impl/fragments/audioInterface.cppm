@@ -5,7 +5,7 @@ import Util;
 
 import :Interface;
 import :MipsInterface;
-import :AudioInterfaceTypes;
+import InterfaceTypes;
 
 namespace Interfaces {
 

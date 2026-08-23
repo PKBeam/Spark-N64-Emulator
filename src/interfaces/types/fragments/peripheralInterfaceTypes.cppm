@@ -1,9 +1,7 @@
-export module Interfaces:PeripheralInterfaceTypes;
+export module InterfaceTypes:PeripheralInterfaceTypes;
 
 import std;
 import Util;
-
-import :Interface;
 
 export namespace Interfaces {
 

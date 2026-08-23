@@ -40,9 +40,9 @@ export class Emulator {
 
     void*                  m_memory{};
     CPU::CPU*              m_cpu{};
-    CP0::CP0*              m_cpuCp0{};
+    CP0::CP0<Sys::CPU>*    m_cpuCp0{};
     RSP::RSP*              m_rsp{};
-    CP0::CP0*              m_rspCp0{};
+    CP0::CP0<Sys::RSP>*    m_rspCp0{};
     RSP::Control*          m_rspControl{};
     std::optional<RomFile> m_rom;
     std::optional<RomFile> m_pifRom;
@@ -89,17 +89,17 @@ constexpr Emulator::Emulator(Config config) : m_config(config) {
     m_memory        = std::malloc(m_config.memorySize);
     m_memoryManager = new Memory::Memory(m_logger, reinterpret_cast<std::byte*>(m_memory));
 
-    m_cpuCp0     = new CP0::CP0(m_logger);
-    m_rspControl = new RSP::Control(m_logger);
+    m_cpuCp0     = new CP0::CP0<Sys::CPU>(m_logger);
+    m_rspControl = new RSP::Control(m_logger, reinterpret_cast<std::byte*>(m_memory));
     m_cpu        = new CPU::CPU(m_logger, m_memoryManager, m_cpuCp0);
-    m_rspCp0     = new CP0::CP0(m_logger);
+    m_rspCp0     = new CP0::CP0<Sys::RSP>(m_logger);
     m_rsp        = new RSP::RSP(m_logger, m_memoryManager, m_rspCp0, m_rspControl);
 
     m_mipsInterface       = new Interfaces::MipsInterface(m_logger, m_cpuCp0);
     m_rdramInterface      = new Interfaces::RdramInterface(m_logger);
     m_videoInterface      = new Interfaces::VideoInterface(m_logger);
     m_audioInterface      = new Interfaces::AudioInterface(m_logger, m_mipsInterface);
-    m_rspRegisters        = new Interfaces::RspRegisters(m_logger, reinterpret_cast<std::byte*>(m_memory), m_mipsInterface, m_rspControl);
+    m_rspRegisters        = new Interfaces::RspRegisters(m_logger, m_mipsInterface, m_rspControl);
     m_peripheralInterface = new Interfaces::PeripheralInterface(m_logger, reinterpret_cast<std::byte*>(m_memory), m_mipsInterface);
     m_serialInterface     = new Interfaces::SerialInterface(m_logger, reinterpret_cast<std::byte*>(m_memory), m_mipsInterface);
     m_serialInterface->loadPifRom(m_pifRom ? &(*(m_pifRom)) : nullptr);

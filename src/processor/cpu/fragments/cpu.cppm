@@ -19,7 +19,7 @@ class CPU {
   public:
     CPU(std::shared_ptr<Util::Logger> logger,
         Memory::Memory*               memory,
-        CP0::CP0*                     cp0)
+        CP0::CP0<Sys::CPU>*           cp0)
         : m_regs(logger), m_logger(logger), m_memory(memory), m_cp0(cp0), m_exec(logger, &m_regs, m_memory) {
         m_regs.writePc(0xBFC00000);
     }
@@ -35,7 +35,7 @@ class CPU {
     Registers<Sys::CPU>                                m_regs;
     std::shared_ptr<Util::Logger>                      m_logger;
     Memory::Memory*                                    m_memory;
-    CP0::CP0*                                          m_cp0;
+    CP0::CP0<Sys::CPU>*                                m_cp0;
     InstructionExecutor::InstructionExecutor<Sys::CPU> m_exec;
 
     bool                  m_hasBooted{};

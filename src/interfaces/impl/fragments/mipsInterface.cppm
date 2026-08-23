@@ -8,13 +8,13 @@ import ISA;
 import Util;
 
 import :Interface;
-import :MipsInterfaceTypes;
+import InterfaceTypes;
 
 namespace Interfaces {
 
 export class MipsInterface : public Interface {
   public:
-    MipsInterface(std::shared_ptr<Util::Logger> logger, CP0::CP0* cp0) : m_logger(logger), m_cp0(cp0) {};
+    MipsInterface(std::shared_ptr<Util::Logger> logger, CP0::CP0<Sys::CPU>* cp0) : m_logger(logger), m_cp0(cp0) {};
 
     auto read(uint32_t addr) -> uint32_t override;
     auto write(uint32_t addr, uint32_t data) -> void override;
@@ -29,7 +29,7 @@ export class MipsInterface : public Interface {
     auto updateInterrupt() -> void;
 
     std::shared_ptr<Util::Logger> m_logger;
-    CP0::CP0*                     m_cp0{};
+    CP0::CP0<Sys::CPU>*           m_cp0{};
 
     MI_MODE      m_mode{};
     MI_INTERRUPT m_interrupt{};

@@ -6,7 +6,7 @@ import std;
 import Util;
 
 import :Interface;
-import :VideoInterfaceTypes;
+import InterfaceTypes;
 
 namespace Interfaces {
 

@@ -6,7 +6,7 @@ import std;
 import Util;
 
 import :Interface;
-import :RdramRegistersTypes;
+import InterfaceTypes;
 
 namespace Interfaces {
 

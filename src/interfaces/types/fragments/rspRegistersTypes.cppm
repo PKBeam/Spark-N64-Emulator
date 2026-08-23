@@ -1,8 +1,7 @@
-export module Interfaces:RspRegistersTypes;
+export module InterfaceTypes:RspRegistersTypes;
 
 import std;
 import Util;
-import :Interface;
 
 export namespace Interfaces {
 

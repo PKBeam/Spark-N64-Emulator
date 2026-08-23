@@ -1,8 +1,7 @@
-export module Interfaces:MipsInterfaceTypes;
+export module InterfaceTypes:MipsInterfaceTypes;
 
 import std;
 import Util;
-import :Interface;
 
 export namespace Interfaces {
 

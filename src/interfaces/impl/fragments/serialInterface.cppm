@@ -8,7 +8,7 @@ import Util;
 
 import :Interface;
 import :MipsInterface;
-import :SerialInterfaceTypes;
+import InterfaceTypes;
 
 namespace Interfaces {
 

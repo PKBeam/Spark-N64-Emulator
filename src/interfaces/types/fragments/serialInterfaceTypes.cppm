@@ -1,9 +1,7 @@
-export module Interfaces:SerialInterfaceTypes;
+export module InterfaceTypes:SerialInterfaceTypes;
 
 import std;
 import Util;
-
-import :Interface;
 
 export namespace Interfaces {
 

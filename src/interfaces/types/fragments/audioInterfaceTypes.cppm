@@ -1,9 +1,7 @@
-export module Interfaces:AudioInterfaceTypes;
+export module InterfaceTypes:AudioInterfaceTypes;
 
 import std;
 import Util;
-
-import :Interface;
 
 export namespace Interfaces {
 

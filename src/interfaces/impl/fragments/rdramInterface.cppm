@@ -4,7 +4,7 @@ import std;
 import Util;
 
 import :Interface;
-import :RdramInterfaceTypes;
+import InterfaceTypes;
 
 namespace Interfaces {
 
