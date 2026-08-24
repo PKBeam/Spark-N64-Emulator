@@ -2,7 +2,7 @@ export module ISA:Instruction;
 
 import std;
 
-import :InstructionData;
+import :InstructionTypes;
 import :Opcodes;
 import :Registers;
 
@@ -47,8 +47,7 @@ constexpr auto opcodeFor(uint32_t bits) -> Opcodes::UnifiedOpcode {
             }
             [[fallthrough]];
 
-        case OPCODE::OP_COP1: [[fallthrough]];
-        case OPCODE::OP_COP2: {
+        case OPCODE::OP_COP1: {
             if ((bits >> 25) & 1) { // COPz
                 unifiedOpcode = static_cast<uint32_t>(UnifiedOpcode::OP_COPz);
                 break;
@@ -62,7 +61,15 @@ constexpr auto opcodeFor(uint32_t bits) -> Opcodes::UnifiedOpcode {
                 break;
             }
         }
-
+        case OPCODE::OP_LWC2: unifiedOpcode = UnifiedOpcodeBase::COP2_LOAD_BASE + instR.rd; break;
+        case OPCODE::OP_SWC2: unifiedOpcode = UnifiedOpcodeBase::COP2_STORE_BASE + instR.rd; break;
+        case OPCODE::OP_COP2:
+            if ((bits >> 25) & 1) { // COPz
+                unifiedOpcode = UnifiedOpcodeBase::COP2_VECTOR_BASE + static_cast<uint32_t>(instR.func);
+            } else {
+                unifiedOpcode = UnifiedOpcodeBase::COPz_rs_BASE + instR.rs;
+            }
+            break;
         default:
             unifiedOpcode = UnifiedOpcodeBase::OPCODE_BASE + static_cast<uint32_t>(opcode);
             break;
@@ -78,30 +85,27 @@ constexpr auto formatOps(Instruction inst) -> std::vector<std::string> {
             if constexpr (constexpr auto anns = Util::staticAnnotationsOf(e); !anns.empty()) {
                 constexpr auto operandType = Util::dealiasedTypeOf(anns.front());
 
-                constexpr static auto args = std::define_static_array(
+                constexpr static auto operands = std::define_static_array(
                     std::meta::template_arguments_of(operandType) | std::views::drop(1));
 
-                template for (constexpr auto a : args) {
+                template for (constexpr auto op : operands) {
+                    // extract the OpFormat annotation for the operand
+                    constexpr auto opFmt   = std::meta::extract<std::meta::info>(Util::annotationOf([:op:]));
+                    constexpr auto fmtStr  = [:std::meta::template_arguments_of(opFmt)[0]:];
+                    constexpr auto fmtType = std::meta::template_arguments_of(opFmt)[1];
+
                     auto instData = std::bit_cast<typename[:operandType:] ::InstType>(inst.data);
-                    // gcc bug prevents usage of instData.[:a:]
-                    // use this as workaround for now
-                    constexpr auto name = std::meta::identifier_of([:a:]);
-                    if constexpr (name == "rt") {
-                        result.push_back(std::format("{}", static_cast<ISA::CPU_REG>(instData.rt)));
-                    } else if constexpr (name == "rs") {
-                        result.push_back(std::format("{}", static_cast<ISA::CPU_REG>(instData.rs)));
-                    } else if constexpr (name == "imm") {
-                        result.push_back(std::format("{:#x}", static_cast<uint32_t>(instData.imm)));
-                    } else if constexpr (name == "tgt") {
-                        // shift left 2 and append high order 4 bits (always 0x8?)
-                        result.push_back(std::format("{:#x}", static_cast<uint32_t>(instData.tgt << 2)));
-                    } else if constexpr (name == "rd") {
-                        result.push_back(std::format("{}", static_cast<ISA::CPU_REG>(instData.rd)));
-                    } else if constexpr (name == "sa") {
-                        result.push_back(std::format("{}", static_cast<uint32_t>(instData.sa)));
-                    } else {
-                        static_assert(false, name);
+
+                    // TODO CP0 registers have different names
+                    if constexpr (fmtType == (^^ISA::CPU_REG)) {
+                        if ((inst.data >> 25) == 0b010000) {
+                            uint32_t opValue = instData.[:[:op:]:];
+                            result.push_back(std::format("r{}", opValue));
+                            continue;
+                        }
                     }
+
+                    result.push_back(std::format([:fmtStr:], static_cast<typename[:fmtType:]>(instData.[:[:op:]:])));
                 };
                 break;
             }

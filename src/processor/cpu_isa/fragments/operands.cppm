@@ -1,7 +1,7 @@
 export module ISA:Operands;
 
 import std;
-import :InstructionData;
+import :InstructionTypes;
 
 export namespace ISA {
 
@@ -14,7 +14,7 @@ struct Operands {
     std::array<std::meta::info, sizeof...(fields)> m_fields;
 };
 
-namespace CPUOpType {
+namespace OpType {
 // clang-format off
 using AluImm        = Operands<CPU::TypeI, ^^CPU::TypeI::rt, ^^CPU::TypeI::rs, ^^CPU::TypeI::imm>;
 using AluImmLoad    = Operands<CPU::TypeI, ^^CPU::TypeI::rt, ^^CPU::TypeI::imm>;
@@ -37,7 +37,11 @@ using Shift         = Operands<CPU::TypeR, ^^CPU::TypeR::rd, ^^CPU::TypeR::rt, ^
 using ShiftVar      = Operands<CPU::TypeR, ^^CPU::TypeR::rd, ^^CPU::TypeR::rt, ^^CPU::TypeR::rs>;
 using ThreeOp       = Operands<CPU::TypeR, ^^CPU::TypeR::rd, ^^CPU::TypeR::rs, ^^CPU::TypeR::rt>;
 using CP0Move       = Operands<CPU::TypeR, ^^CPU::TypeR::rt, ^^CPU::TypeR::rd>;
+
+using VecLoadStore  = Operands<RSP::TypeVI, ^^RSP::TypeVI::vt, ^^RSP::TypeVI::vtElem, ^^RSP::TypeVI::imm, ^^RSP::TypeVI::rs>;
+using VecAlu        = Operands<RSP::TypeVR, ^^RSP::TypeVR::vd, ^^RSP::TypeVR::vs, ^^RSP::TypeVR::vt, ^^RSP::TypeVR::vtElem>;
+using VecSingleLane = Operands<RSP::TypeVS, ^^RSP::TypeVS::vd, ^^RSP::TypeVS::vdElem, ^^RSP::TypeVS::vt, ^^RSP::TypeVS::vtElem>;
 // clang-format on
-} // namespace CPUOpType
+} // namespace OpType
 
 } // namespace ISA

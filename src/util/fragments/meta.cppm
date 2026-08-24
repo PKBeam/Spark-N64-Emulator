@@ -12,6 +12,11 @@ consteval auto isNull(std::meta::info i) {
     return i == std::meta::info{};
 }
 
+template <std::ranges::input_range R>
+consteval auto staticString(R&& s) {
+    return std::meta::reflect_constant_string(s);
+}
+
 consteval auto staticEnumeratorsOf(std::meta::info i) {
     return std::define_static_array(std::meta::enumerators_of(i));
 }

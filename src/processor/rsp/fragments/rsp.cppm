@@ -12,6 +12,8 @@ import Memory;
 import RspControl;
 import Util;
 
+import :Registers;
+
 using Control = RSP::Control;
 
 constexpr auto RSP_IMEM_BASE = Memory::rangeOf(Memory::PhysSeg::RSP_IMEM).lower;
@@ -20,21 +22,21 @@ export namespace RSP {
 
 class RSP {
   public:
-    RSP(std::shared_ptr<Util::Logger> logger, Memory::Memory* memory, CP0::CP0<Sys::RSP>* cp0, Control* control)
-        : m_logger(logger), m_memory(memory), m_regs(logger), m_cp0(cp0), m_control(control), m_exec(m_logger, &m_regs, m_memory) {};
+    RSP(std::shared_ptr<Util::Logger> logger, Memory::Memory* memory, Control* control)
+        : m_logger(logger), m_memory(memory), m_sRegs(logger), m_vRegs(logger), m_control(control), m_exec(m_logger, &m_sRegs, m_memory) {};
 
     auto runInstruction() -> void;
 
     auto halt() -> void;
 
   private:
-    std::shared_ptr<Util::Logger>                      m_logger;
-    Memory::Memory*                                    m_memory{};
-    CPU::Registers<Sys::RSP>                           m_regs;
-    CP0::CP0<Sys::RSP>*                                m_cp0{};
-    Control*                                           m_control{};
-    InstructionExecutor::InstructionExecutor<Sys::RSP> m_exec;
-    std::optional<VirtualAddr>                         m_delaySlotPc;
+    std::shared_ptr<Util::Logger>      m_logger;
+    Memory::Memory*                    m_memory{};
+    CPU::Registers<Sys::RSP>           m_sRegs;
+    ::RSP::Registers                   m_vRegs;
+    Control*                           m_control{};
+    CPU::InstructionExecutor<Sys::RSP> m_exec;
+    std::optional<VirtualAddr>         m_delaySlotPc;
 };
 
 auto RSP::runInstruction() -> void {
@@ -42,16 +44,16 @@ auto RSP::runInstruction() -> void {
         return;
     }
     if (auto pc = m_control->getPc()) { // starting from halt
-        m_regs.writePc(*pc);
+        m_sRegs.writePc(*pc);
         m_control->clearPc();
     }
 
-    const auto instBits = WITH_LOG_DISABLED(m_logger, m_memory->readPhysical<uint32_t>(m_regs.readPc() + RSP_IMEM_BASE));
+    const auto instBits = WITH_LOG_DISABLED(m_logger, m_memory->readPhysical<uint32_t>(m_sRegs.readPc() + RSP_IMEM_BASE));
 
     const auto inst = ISA::Instruction(instBits);
     IF_LOG_ENABLED(m_logger) {
         m_logger->log<Level::HIGH, Sys::RSP>(
-            std::tuple{"PC", "0x{:04x}", static_cast<uint32_t>(m_regs.readPc())},
+            std::tuple{"PC", "0x{:04x}", static_cast<uint32_t>(m_sRegs.readPc())},
             std::tuple{"inst", "{}", inst});
     }
 
@@ -59,8 +61,8 @@ auto RSP::runInstruction() -> void {
     const auto data = inst.data;
 
     using namespace Opcodes;
-    namespace P    = InstructionExecutor::Param;
-    namespace Func = InstructionExecutor::Function;
+    namespace P    = CPU::Param;
+    namespace Func = CPU::Function;
     using TypeI    = ISA::CPU::TypeI;
     using TypeR    = ISA::CPU::TypeR;
 
@@ -116,7 +118,7 @@ auto RSP::runInstruction() -> void {
         // Load/Store instructions
         case UnifiedOpcode::OP_LUI: {
             auto ops = std::bit_cast<TypeI>(data);
-            m_regs.writeGpr(ops.rt, Util::signExt32(ops.imm << 16));
+            m_sRegs.writeGpr(ops.rt, Util::signExt32(ops.imm << 16));
             break;
         }
         case UnifiedOpcode::OP_LB: m_exec.executeMemoryOperation<P::LOAD, int8_t>(data); break;
@@ -162,7 +164,7 @@ auto RSP::runInstruction() -> void {
             auto cp = (data >> 26) & 0b11;
             if (cp != 0) throw Util::Error("Unsupported instruction on coprocessor {}", cp);
             auto ops = std::bit_cast<TypeR>(data);
-            m_regs.writeGpr(ops.rt, m_control->readRegister(ops.rd));
+            m_sRegs.writeGpr(ops.rt, m_control->readRegister(ops.rd));
 
             break;
         }
@@ -170,7 +172,7 @@ auto RSP::runInstruction() -> void {
             auto cp = (data >> 26) & 0b11;
             if (cp != 0) throw Util::Error("Unsupported instruction on coprocessor {}", cp);
             auto ops = std::bit_cast<TypeR>(data);
-            m_control->writeRegister(ops.rd, m_regs.readGpr(ops.rt));
+            m_control->writeRegister(ops.rd, m_sRegs.readGpr(ops.rt));
             break;
         }
 
@@ -185,10 +187,10 @@ auto RSP::runInstruction() -> void {
             }
             break;
         default:
-            throw Util::Error("Unimplemented instruction @ PC {:#08x}: {} ({:#08x})", m_regs.readPc(), inst, data);
+            throw Util::Error("Unimplemented instruction @ PC {:#08x}: {} ({:#08x})", m_sRegs.readPc(), inst, data);
     }
 
-    m_regs.advancePc();
+    m_sRegs.advancePc();
 
     if (m_control->getSingleStep()) {
         halt();
@@ -197,7 +199,7 @@ auto RSP::runInstruction() -> void {
 
 auto RSP::halt() -> void {
     // save PC when halting
-    m_control->setPc(m_regs.readPc());
+    m_control->setPc(m_sRegs.readPc());
     m_control->setHalt(true);
 }
 

@@ -11,7 +11,7 @@ import Util;
 
 import :Registers;
 
-export namespace InstructionExecutor {
+export namespace CPU {
 
 namespace Param {
 // clang-format off
@@ -288,4 +288,4 @@ auto InstructionExecutor<System>::executeMemoryOperation(uint32_t inst) -> void 
         }
     }
 }
-} // namespace InstructionExecutor
+} // namespace CPU

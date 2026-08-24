@@ -94,7 +94,6 @@ enum class Registers : uint8_t {
     ERROREPC             = 30,
 };
 
-template <Sys System>
 class CP0 {
   public:
     CP0(std::shared_ptr<Util::Logger> logger);
@@ -131,21 +130,19 @@ class CP0 {
     std::array<uint32_t, 32>      m_regs{};
 };
 
-template <Sys System>
-CP0<System>::CP0(std::shared_ptr<Util::Logger> logger) {
+CP0::CP0(std::shared_ptr<Util::Logger> logger) {
     m_logger = logger;
     m_regs   = {};
 }
 
-template <Sys System>
 template <std::integral T>
-auto CP0<System>::readReg(std::size_t index) -> T {
+auto CP0::readReg(std::size_t index) -> T {
     const auto regName = static_cast<Registers>(index);
 
     auto value = static_cast<T>(m_regs[index]);
     IF_LOG_ENABLED(m_logger) {
         const auto enumName = Util::enumName(regName);
-        m_logger->log<Level::HIGH, System>(
+        m_logger->log<Level::HIGH, Sys::CPU>(
             std::tuple{"op", "read"},
             std::tuple{"reg", "CP0 {}", static_cast<Registers>(index)},
             std::tuple{"data", "0x{:08X}", static_cast<uint32_t>(value)});
@@ -153,9 +150,8 @@ auto CP0<System>::readReg(std::size_t index) -> T {
     return value;
 }
 
-template <Sys System>
 template <Registers R>
-auto CP0<System>::readReg() {
+auto CP0::readReg() {
     template for (constexpr auto e : Util::staticEnumeratorsOf(^^Registers)) {
         if constexpr (std::meta::extract<Registers>(e) == R) {
             uint32_t value = readReg(static_cast<uint8_t>(std::meta::extract<Registers>(e)));
@@ -169,24 +165,23 @@ auto CP0<System>::readReg() {
     }
 }
 
-template <Sys System>
 template <std::integral T>
-auto CP0<System>::writeReg(std::size_t index, T value) -> void {
+auto CP0::writeReg(std::size_t index, T value) -> void {
     const auto regName = static_cast<Registers>(index);
     if (m_logger && regName == Registers::RANDOM) {
-        m_logger->log<Level::HIGH, System>(std::tuple{"warning", "Attempted to write to read-only register CP0_REG::RANDOM!"});
+        m_logger->log<Level::HIGH, Sys::CPU>(std::tuple{"warning", "Attempted to write to read-only register CP0_REG::RANDOM!"});
         return;
     }
     if (m_logger && regName == Registers::STATUS) {
         auto status = std::bit_cast<Status>(static_cast<uint32_t>(value));
         if (status.kx || status.sx || status.ux) {
-            m_logger->log<Level::HIGH, System>(std::tuple{"warning", "Enabled 64-bit mode in CP0_REG::STATUS, which is not fully supported yet"});
+            m_logger->log<Level::HIGH, Sys::CPU>(std::tuple{"warning", "Enabled 64-bit mode in CP0_REG::STATUS, which is not fully supported yet"});
         }
     }
     m_regs[index] = Util::signExt32(value);
     IF_LOG_ENABLED(m_logger) {
         const auto enumName = Util::enumName(regName);
-        m_logger->log<Level::HIGH, System>(
+        m_logger->log<Level::HIGH, Sys::CPU>(
             std::tuple{"op", "write"},
             std::tuple{"reg", "CP0 {}", static_cast<Registers>(index)},
             std::tuple{"data", "0x{:08X}", static_cast<uint32_t>(value)});
@@ -196,10 +191,9 @@ auto CP0<System>::writeReg(std::size_t index, T value) -> void {
     }
 }
 
-template <Sys System>
 template <typename T>
     requires(!std::integral<T>)
-auto CP0<System>::writeReg(T value) -> void {
+auto CP0::writeReg(T value) -> void {
     template for (constexpr auto e : Util::staticEnumeratorsOf(^^Registers)) {
         if constexpr (std::meta::annotations_of(e).size() == 0) { // ICE if using Util::staticAnnotationsOf
             continue;
@@ -209,26 +203,22 @@ auto CP0<System>::writeReg(T value) -> void {
     }
 }
 
-template <Sys System>
 template <Registers R, std::integral T>
-auto CP0<System>::writeReg(T value) -> void {
+auto CP0::writeReg(T value) -> void {
     writeReg(static_cast<uint8_t>(R), value);
 }
 
-template <Sys System>
-auto CP0<System>::updateInterrupt() -> void {
+auto CP0::updateInterrupt() -> void {
     auto status    = WITH_LOG_DISABLED(m_logger, readReg<Registers::STATUS>());
     auto cause     = WITH_LOG_DISABLED(m_logger, readReg<Registers::CAUSE>());
     m_hasInterrupt = status.im & cause.ip && status.ie && !status.exl && !status.erl;
 }
 
-template <Sys System>
-auto CP0<System>::clearInterrupt() -> void {
+auto CP0::clearInterrupt() -> void {
     m_hasInterrupt = false;
 }
 
-template <Sys System>
-auto CP0<System>::hasInterrupt() -> bool {
+auto CP0::hasInterrupt() -> bool {
     return m_hasInterrupt;
 }
 

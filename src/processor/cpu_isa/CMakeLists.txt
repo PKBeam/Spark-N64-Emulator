@@ -5,7 +5,7 @@ target_sources(isa PUBLIC
     FILES
         module.cppm
         fragments/instruction.cppm 
-        fragments/instructionData.cppm
+        fragments/instructionTypes.cppm
         fragments/opcodes.cppm
         fragments/operands.cppm
         fragments/registers.cppm

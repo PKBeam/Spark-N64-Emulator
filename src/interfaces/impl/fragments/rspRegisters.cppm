@@ -84,7 +84,7 @@ auto RspRegisters::write(uint32_t addr, uint32_t data) -> void {
         case RSP_REG_ADDR::RSP_DMA_BUSY: m_rspCtrl->writeRegister(6, data); return;
         case RSP_REG_ADDR::RSP_SEMAPHORE: m_rspCtrl->writeRegister(7, data); return;
         case RSP_REG_ADDR::RSP_PC:
-            m_rspCtrl->setPc(data);
+            m_rspCtrl->setPc(data & 0xFFF);
             return;
         default:
             throw Util::Error("No RSP register found for addr {:#08x}", addr);
