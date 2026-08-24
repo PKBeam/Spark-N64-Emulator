@@ -62,10 +62,10 @@ auto CPU::emulateInitialBoot() -> void {
     m_regs.writeGpr<ISA::CPU_REG::sp>(static_cast<uint32_t>(0xA4001FF0));
     m_regs.writeGpr<ISA::CPU_REG::ra>(static_cast<uint32_t>(0xA4001000)); // from IPL2 stage
 
-    m_cp0->writeReg<CP0::Registers::RANDOM>(static_cast<uint32_t>(0x0000001F));
-    m_cp0->writeReg<CP0::Registers::STATUS>(static_cast<uint32_t>(0x34000000));
-    m_cp0->writeReg<CP0::Registers::PRID>(static_cast<uint32_t>(0x00000B00));
-    m_cp0->writeReg<CP0::Registers::CONFIG>(static_cast<uint32_t>(0x0006E463));
+    m_cp0->writeReg<ISA::CP0_REG::RANDOM>(static_cast<uint32_t>(0x0000001F));
+    m_cp0->writeReg<ISA::CP0_REG::STATUS>(static_cast<uint32_t>(0x34000000));
+    m_cp0->writeReg<ISA::CP0_REG::PRID>(static_cast<uint32_t>(0x00000B00));
+    m_cp0->writeReg<ISA::CP0_REG::CONFIG>(static_cast<uint32_t>(0x0006E463));
 }
 
 auto CPU::registerBootCallback(uint32_t callbackBootAddress, std::function<void()> callback) -> void {
@@ -75,16 +75,16 @@ auto CPU::registerBootCallback(uint32_t callbackBootAddress, std::function<void(
 
 auto CPU::checkInterrupts() -> void {
     if (m_cp0->hasInterrupt()) {
-        auto status = m_cp0->readReg<CP0::Registers::STATUS>();
+        auto status = m_cp0->readReg<ISA::CP0_REG::STATUS>();
         status.exl  = 1;
         m_cp0->writeReg(status);
         auto nextPc = m_regs.pcIsDelaySlot() ? m_regs.readPc() - 4 : m_regs.readPc();
-        m_cp0->writeReg<CP0::Registers::EPC>(nextPc);
+        m_cp0->writeReg<ISA::CP0_REG::EPC>(nextPc);
         m_regs.writePc(status.bev ? 0xBFC00000 : 0x80000000);
         IF_LOG_ENABLED(m_logger) {
             m_logger->log<Level::HIGH, Sys::CPU>(
                 std::tuple{"exceptionStatus", "{:#08x}", std::bit_cast<uint32_t>(status)},
-                std::tuple{"exceptionCause", "{:#08x}", std::bit_cast<uint32_t>(m_cp0->readReg<CP0::Registers::CAUSE>())},
+                std::tuple{"exceptionCause", "{:#08x}", std::bit_cast<uint32_t>(m_cp0->readReg<ISA::CP0_REG::CAUSE>())},
                 std::tuple{"returnPc", "{:#08x}", nextPc});
         }
     }
@@ -93,7 +93,7 @@ auto CPU::checkInterrupts() -> void {
 auto CPU::runInstruction() -> void {
     using namespace Opcodes;
     namespace P    = ::CPU::Param;
-    namespace Func = ::CPU::Function;
+    namespace Func = Util::Function;
     using TypeI    = ISA::CPU::TypeI;
     using TypeR    = ISA::CPU::TypeR;
 
@@ -253,12 +253,12 @@ auto CPU::runInstruction() -> void {
             }
             break;
         case UnifiedOpcode::OP_ERET: {
-            auto status = m_cp0->readReg<CP0::Registers::STATUS>();
+            auto status = m_cp0->readReg<ISA::CP0_REG::STATUS>();
             if (status.erl) {
-                m_regs.writePc(m_cp0->readReg<CP0::Registers::ERROREPC>());
+                m_regs.writePc(m_cp0->readReg<ISA::CP0_REG::ERROREPC>());
                 status.erl = 0;
             } else {
-                m_regs.writePc(m_cp0->readReg<CP0::Registers::EPC>());
+                m_regs.writePc(m_cp0->readReg<ISA::CP0_REG::EPC>());
                 status.exl = 0;
             }
             m_cp0->writeReg(status);

@@ -23,6 +23,7 @@ int main(int argc, char* argv[]) {
 
     // handle logging
     std::optional<Level> logLevel{};
+    std::optional<Sys>   logFilterSys{};
     for (const auto arg : args) {
         if (arg == "--log"sv) {
             logLevel = Level::MED;
@@ -42,6 +43,16 @@ int main(int argc, char* argv[]) {
         if (arg == "--log-after-boot"sv) {
             emulatorConfig.logAfterBoot = true;
         }
+
+        if (arg.starts_with("--log-sys=")) {
+            auto sys = std::string{arg.substr(10)};
+            template for (constexpr auto e : Util::staticEnumeratorsOf(^^Sys)) {
+                if (std::meta::identifier_of(e) == sys) {
+                    logFilterSys = [:e:];
+                    break;
+                }
+            }
+        }
         if (arg == "--dump-rom"sv) {
             emulatorConfig.dumpRom = true;
         }
@@ -57,6 +68,10 @@ int main(int argc, char* argv[]) {
     if (emulatorConfig.logAfterBoot) {
         contract_assert(emulatorConfig.logger != nullptr);
         emulatorConfig.logger->disable();
+    }
+    if (logFilterSys) {
+        contract_assert(emulatorConfig.logger != nullptr);
+        emulatorConfig.logger->setFilter(*logFilterSys);
     }
     auto emu = Emulator(emulatorConfig);
     emu.loadRom("/home/pkbeam/Legend of Zelda, The - Ocarina of Time (USA).z64");

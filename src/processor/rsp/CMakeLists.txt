@@ -5,6 +5,7 @@ target_sources(rsp PUBLIC
     FILES
         module.cppm
         fragments/rsp.cppm
+        fragments/instructionExecutor.cppm
         fragments/registers.cppm
 )
 target_compile_options(rsp PUBLIC ${CXX_COMPILE_OPTIONS})

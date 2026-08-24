@@ -78,6 +78,7 @@ constexpr auto opcodeFor(uint32_t bits) -> Opcodes::UnifiedOpcode {
 }
 
 constexpr auto formatOps(Instruction inst) -> std::vector<std::string> {
+    using namespace Opcodes;
     auto result = std::vector<std::string>{};
 
     template for (constexpr auto e : Util::staticEnumeratorsOf(^^Opcodes::UnifiedOpcode)) {
@@ -97,8 +98,9 @@ constexpr auto formatOps(Instruction inst) -> std::vector<std::string> {
                     auto instData = std::bit_cast<typename[:operandType:] ::InstType>(inst.data);
 
                     // TODO CP0 registers have different names
+                    constexpr auto opName = std::meta::identifier_of([:op:]);
                     if constexpr (fmtType == (^^ISA::CPU_REG)) {
-                        if ((inst.data >> 25) == 0b010000) {
+                        if ((inst.opcode == UnifiedOpcode::OP_MTCz && opName == "rd") || (inst.opcode == UnifiedOpcode::OP_MFCz && opName == "rt")) {
                             uint32_t opValue = instData.[:[:op:]:];
                             result.push_back(std::format("r{}", opValue));
                             continue;

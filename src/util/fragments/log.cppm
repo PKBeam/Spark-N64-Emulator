@@ -62,6 +62,7 @@ class Logger {
     auto enabled() -> bool;
 
     auto setLevel(Level level) -> void;
+    auto setFilter(Sys sys) -> void;
 
     template <typename... Args>
     auto print(const char* fmt, Args... obj) -> void;
@@ -82,9 +83,10 @@ class Logger {
     // template <class T>
     // auto format(T obj) -> std::string;
 
-    Level      m_level = Level::HIGH;
-    std::FILE* m_file{};
-    bool       m_enabled{};
+    Level              m_level = Level::HIGH;
+    std::FILE*         m_file{};
+    std::optional<Sys> m_sys{};
+    bool               m_enabled{};
 };
 
 // implementation
@@ -113,6 +115,10 @@ auto Logger::enabled() -> bool {
 
 auto Logger::setLevel(Level level) -> void {
     m_level = level;
+}
+
+auto Logger::setFilter(Sys sys) -> void {
+    m_sys = sys;
 }
 
 auto Logger::flush() -> void {
@@ -145,7 +151,7 @@ auto Logger::print(const char* fmt, Args... args) -> void {
 
 template <Logger::Level Level, Logger::Sys Sys, Tuple_c... Args>
 auto Logger::log(Args... args) -> void {
-    if (!m_enabled || Level < m_level) {
+    if (!m_enabled || Level < m_level || (m_sys && Sys != *m_sys)) {
         return;
     }
     auto str = std::string{"{"};
@@ -179,7 +185,7 @@ auto Logger::log(Args... args) -> void {
 
 template <Logger::Level Level, Logger::Severity Sev, Logger::Sys Sys, typename... Args>
 auto Logger::log(const char* fmt, Args... args) -> void {
-    if (!m_enabled || Level < m_level) {
+    if (!m_enabled || Level < m_level || (m_sys && Sys != *m_sys)) {
         return;
     }
     auto str = std::format(std::runtime_format(fmt), args...);

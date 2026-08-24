@@ -29,24 +29,6 @@ enum MemoryType       : bool    { LOAD, STORE };
 
 } // namespace Param
 
-namespace Function {
-constexpr auto ADD     = [](auto a, auto b) { return a + b; };
-constexpr auto SUB     = [](auto a, auto b) { return a - b; };
-constexpr auto AND     = [](auto a, auto b) { return a & b; };
-constexpr auto OR      = [](auto a, auto b) { return a | b; };
-constexpr auto NOR     = [](auto a, auto b) { return ~(a | b); };
-constexpr auto XOR     = [](auto a, auto b) { return a ^ b; };
-constexpr auto CMP_EQ  = [](auto a, auto b) { return a == b; };
-constexpr auto CMP_NE  = [](auto a, auto b) { return a != b; };
-constexpr auto CMP_LE  = [](auto a, auto b) { return a <= b; };
-constexpr auto CMP_LT  = [](auto a, auto b) { return a < b; };
-constexpr auto CMP_GE  = [](auto a, auto b) { return a >= b; };
-constexpr auto CMP_NEZ = [](auto a, auto _) { return a != 0; };
-constexpr auto CMP_LEZ = [](auto a, auto _) { return a <= 0; };
-constexpr auto CMP_LTZ = [](auto a, auto _) { return a < 0; };
-constexpr auto CMP_GEZ = [](auto a, auto _) { return a >= 0; };
-} // namespace Function
-
 template <Sys System>
 class InstructionExecutor {
   public:
