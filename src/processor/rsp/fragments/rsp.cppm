@@ -30,6 +30,8 @@ class RSP {
 
     auto halt() -> void;
 
+    auto dumpIMem(std::filesystem::path file) -> void;
+
   private:
     std::shared_ptr<Util::Logger> m_logger;
     Memory::Memory*               m_memory{};
@@ -44,14 +46,18 @@ auto RSP::runInstruction() -> void {
     if (m_control->getHalt()) {
         return;
     }
+
     if (auto pc = m_control->getPc()) { // starting from halt
         m_gprs.writePc(*pc);
         m_control->clearPc();
+
+        // static int imems = 0;
+        // dumpIMem(std::format("rsp_imem_{}.txt", imems++));
+        // std::println("RSP IMEM dumped to rsp_imem_{}.txt", imems - 1);
     }
 
     const auto instBits = WITH_LOG_DISABLED(m_logger, m_memory->readPhysical<uint32_t>(m_gprs.readPc() + RSP_IMEM_BASE));
-
-    const auto inst = ISA::Instruction(instBits);
+    const auto inst     = ISA::Instruction(instBits);
     IF_LOG_ENABLED(m_logger) {
         m_logger->log<Level::HIGH, Sys::RSP>(
             std::tuple{"PC", "0x{:04x}", static_cast<uint32_t>(m_gprs.readPc())},
@@ -62,7 +68,7 @@ auto RSP::runInstruction() -> void {
     const auto data = inst.data;
 
     using namespace Opcodes;
-    namespace P    = CPU::Param;
+    namespace P    = Param;
     namespace Func = Util::Function;
     using TypeI    = ISA::CPU::TypeI;
     using TypeR    = ISA::CPU::TypeR;
@@ -152,8 +158,6 @@ auto RSP::runInstruction() -> void {
         case UnifiedOpcode::OP_XORI: m_exec.cpuExec()->executeBivariateImmediate<P::ZERO_EXTEND>(data, Func::XOR); break;
         case UnifiedOpcode::OP_NOR: m_exec.cpuExec()->executeBivariate(data, Func::NOR); break;
 
-        case UnifiedOpcode::OP_VXOR: m_exec.executeBivariate(data, Func::XOR); break;
-
         // Shift instructions
         case UnifiedOpcode::OP_SLL: m_exec.cpuExec()->executeShift<P::WORD, P::LEFT, P::LOGICAL>(data); break;
         case UnifiedOpcode::OP_SRL: m_exec.cpuExec()->executeShift<P::WORD, P::RIGHT, P::LOGICAL>(data); break;
@@ -162,9 +166,26 @@ auto RSP::runInstruction() -> void {
         case UnifiedOpcode::OP_SRLV: m_exec.cpuExec()->executeShift<P::WORD, P::RIGHT, P::LOGICAL, P::VARIABLE>(data); break;
         case UnifiedOpcode::OP_SRAV: m_exec.cpuExec()->executeShift<P::WORD, P::RIGHT, P::ARITHMETIC, P::VARIABLE>(data); break;
 
+        // Vector instructions
+        case UnifiedOpcode::OP_VADDC: m_exec.executeBivariate<P::ACCUM_ZERO_EXT>(data, Func::ADD, [](uint32_t sum) { return sum >> 16; }); break;
+        case UnifiedOpcode::OP_VSUBC: m_exec.executeBivariate<P::ACCUM_ZERO_EXT>(data, Func::SUB, [](uint32_t sum) { return sum != 0; }); break;
+
+        case UnifiedOpcode::OP_VAND: m_exec.executeBivariate<P::ACCUM_ZERO_EXT>(data, Func::AND); break;
+        case UnifiedOpcode::OP_VNAND: m_exec.executeBivariate<P::ACCUM_ZERO_EXT>(data, Func::NAND); break;
+        case UnifiedOpcode::OP_VOR: m_exec.executeBivariate<P::ACCUM_ZERO_EXT>(data, Func::OR); break;
+        case UnifiedOpcode::OP_VNOR: m_exec.executeBivariate<P::ACCUM_ZERO_EXT>(data, Func::NOR); break;
+        case UnifiedOpcode::OP_VXOR: m_exec.executeBivariate<P::ACCUM_ZERO_EXT>(data, Func::XOR); break;
+        case UnifiedOpcode::OP_VNXOR: m_exec.executeBivariate<P::ACCUM_ZERO_EXT>(data, Func::NXOR); break;
+
         // Coprocessor instructions
         case UnifiedOpcode::OP_MFCz: {
             auto cp = (data >> 26) & 0b11;
+            if (cp == 2) {
+                IF_LOG_ENABLED(m_logger) {
+                    m_logger->log<Level::HIGH, Sev::WARNING, Sys::RSP>("ignored MFC2 instruction {}", inst);
+                }
+                break;
+            }
             if (cp != 0) throw Util::Error("Unsupported instruction on coprocessor {}", cp);
             auto ops = std::bit_cast<TypeR>(data);
             m_gprs.writeGpr(ops.rt, m_control->readRegister(ops.rd));
@@ -204,6 +225,16 @@ auto RSP::halt() -> void {
     // save PC when halting
     m_control->setPc(m_gprs.readPc());
     m_control->setHalt(true);
+}
+
+auto RSP::dumpIMem(std::filesystem::path file) -> void {
+    auto romDumper = Util::Logger(file);
+    romDumper.setLevel(Level::MAX);
+    for (auto i = 0uz; i < 0x1000; i += 4) {
+        const auto word = m_memory->readPhysical<uint32_t>(RSP_IMEM_BASE + i);
+        romDumper.print("{:#05x}: {}", i, ISA::Instruction(word));
+    }
+    romDumper.flush();
 }
 
 } // namespace RSP

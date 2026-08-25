@@ -92,14 +92,20 @@ auto CPU::checkInterrupts() -> void {
 
 auto CPU::runInstruction() -> void {
     using namespace Opcodes;
-    namespace P    = ::CPU::Param;
+    namespace P    = Param;
     namespace Func = Util::Function;
     using TypeI    = ISA::CPU::TypeI;
     using TypeR    = ISA::CPU::TypeR;
 
-    const auto instBits = WITH_LOG_DISABLED(m_logger, m_memory->read<uint32_t>(m_regs.readPc()));
+    // boot callback
+    if (!m_hasBooted && static_cast<uint32_t>(m_regs.readPc()) == m_bootAddress) {
+        m_hasBooted = true;
+        m_bootCallback();
+    }
 
-    const auto inst = ISA::Instruction(instBits);
+    const auto instBits = WITH_LOG_DISABLED(m_logger, m_memory->read<uint32_t>(m_regs.readPc()));
+    const auto inst     = ISA::Instruction(instBits);
+
     IF_LOG_ENABLED(m_logger) {
         m_logger->log<Level::HIGH, Sys::CPU>(
             std::tuple{"PC", "0x{:08x}", static_cast<uint32_t>(m_regs.readPc())},
@@ -266,12 +272,6 @@ auto CPU::runInstruction() -> void {
         }
         default:
             throw Util::Error("Unimplemented instruction @ PC {:#08x}: {} ({:#08x})", m_regs.readPc(), inst, data);
-    }
-
-    // boot callback
-    if (op == UnifiedOpcode::OP_JR && m_regs.getNextPc() == m_bootAddress) {
-        m_hasBooted = true;
-        m_bootCallback();
     }
 
     // hang detection

@@ -70,15 +70,8 @@ constexpr auto Emulator::emulateInitialBoot() -> void {
 constexpr Emulator::Emulator(Config config) : m_config(config) {
     if (std::filesystem::exists("data/PIF_NTSC_U.bin")) {
         m_pifRom.emplace("data/PIF_NTSC_U.bin");
-
         if (m_config.dumpPifRom) {
-            Util::Logger romDumper{"./pifRom.txt"};
-            romDumper.setLevel(Level::MAX);
-            for (auto i = 0uz; i < m_pifRom->size(); i += 4) {
-                const auto word = m_pifRom->read<uint32_t>(i);
-                romDumper.print("0x{:08x}: {}", i, ISA::Instruction(word));
-            }
-            romDumper.flush();
+            m_pifRom->dump("./pifRom.txt");
             std::println("Dumped PIF ROM to pifRom.txt, exiting...");
             std::terminate();
         }
@@ -131,13 +124,7 @@ constexpr auto Emulator::loadRom(std::filesystem::path path) -> void {
     m_rom.emplace(path);
 
     if (m_config.dumpRom) {
-        Util::Logger romDumper{"./rom.txt"};
-        romDumper.setLevel(Level::MAX);
-        for (auto i = 0uz; i < m_rom->size(); i += 4) {
-            const auto word = m_rom->read<uint32_t>(i);
-            romDumper.print("0x{:08x}: {}", i, ISA::Instruction(word));
-        }
-        romDumper.flush();
+        m_rom->dump("./rom.txt");
         std::println("Dumped ROM to rom.txt, exiting...");
         std::terminate();
     }

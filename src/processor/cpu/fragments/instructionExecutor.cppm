@@ -11,9 +11,7 @@ import Util;
 
 import :Registers;
 
-export namespace CPU {
-
-namespace Param {
+export namespace Param {
 // clang-format off
 enum ShiftType        : bool    { LOGICAL, ARITHMETIC };
 enum ShiftLen         : bool    { WORD, DOUBLE };
@@ -26,8 +24,9 @@ enum BranchLink       : bool    { NO_LINK, LINK };
 enum BranchSource     : bool    { IMM, REG };
 enum MemoryType       : bool    { LOAD, STORE };
 // clang-format on
-
 } // namespace Param
+
+export namespace CPU {
 
 template <Sys System>
 class InstructionExecutor {

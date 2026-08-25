@@ -77,7 +77,7 @@ constexpr auto opcodeFor(uint32_t bits) -> Opcodes::UnifiedOpcode {
     return static_cast<UnifiedOpcode>(unifiedOpcode);
 }
 
-constexpr auto formatOps(Instruction inst) -> std::vector<std::string> {
+constexpr auto formatOperands(Instruction inst) -> std::vector<std::string> {
     using namespace Opcodes;
     auto result = std::vector<std::string>{};
 
@@ -95,19 +95,23 @@ constexpr auto formatOps(Instruction inst) -> std::vector<std::string> {
                     constexpr auto fmtStr  = [:std::meta::template_arguments_of(opFmt)[0]:];
                     constexpr auto fmtType = std::meta::template_arguments_of(opFmt)[1];
 
-                    auto instData = std::bit_cast<typename[:operandType:] ::InstType>(inst.data);
+                    const auto instData = std::bit_cast<typename[:operandType:] ::InstType>(inst.data);
 
                     // TODO CP0 registers have different names
                     constexpr auto opName = std::meta::identifier_of([:op:]);
                     if constexpr (fmtType == (^^ISA::CPU_REG)) {
                         if ((inst.opcode == UnifiedOpcode::OP_MTCz && opName == "rd") || (inst.opcode == UnifiedOpcode::OP_MFCz && opName == "rt")) {
-                            uint32_t opValue = instData.[:[:op:]:];
-                            result.push_back(std::format("r{}", opValue));
+                            const uint32_t opValue = instData.[:[:op:]:];
+                            const auto     opStr   = std::format("$r{}", opValue);
+                            result.push_back(opStr);
                             continue;
                         }
                     }
 
-                    result.push_back(std::format([:fmtStr:], static_cast<typename[:fmtType:]>(instData.[:[:op:]:])));
+                    const auto opStr = std::format([:fmtStr:], static_cast<typename[:fmtType:]>(instData.[:[:op:]:]));
+                    if (!opStr.empty()) {
+                        result.push_back(opStr);
+                    }
                 };
                 break;
             }
@@ -139,16 +143,22 @@ constexpr auto formatInstruction(const Instruction& inst) -> std::string {
     }
 
     // print the operands
-    auto ops = Impl::formatOps(inst);
+    auto ops = Impl::formatOperands(inst);
     for (auto i = 0uz; i < ops.size(); ++i) {
-        // "offset, base" format used in Load/Store insts
-        if (i > 0 && ops[i - 1].substr(0, 2) == "0x") {
-            instStr += std::format("({})", ops[i]);
-        } else {
-            if (i > 0) {
-                instStr += std::format(", ");
+        const auto opIsVectorElem           = (ops[i].front() == '[' && ops[i].back() == ']');
+        const auto opIsLoadStoreAddrReg     = i > 0 && !ops[i - 1].empty() && ops[i - 1].substr(0, 2) == "0x";
+        const auto opIsEmptyLoadStoreOffset = i < ops.size() - 1 && !ops[i].empty() && ops[i] == "0x0";
+
+        // operands that should never be comma-separated from their preceding operand
+        if (i > 0 && !(opIsVectorElem || opIsLoadStoreAddrReg)) {
+            instStr += std::format(", ");
+        }
+        if (!opIsEmptyLoadStoreOffset) { // never print zero-offset load/stores
+            if (opIsLoadStoreAddrReg) {  // address registers should be parenthesised
+                instStr += std::format("({})", ops[i]);
+            } else {
+                instStr += std::format("{}", ops[i]);
             }
-            instStr += std::format("{}", ops[i]);
         }
     }
 

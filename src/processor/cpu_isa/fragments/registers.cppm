@@ -169,13 +169,11 @@ struct std::formatter<ISA::VEC_ELEM> {
     }
 
     auto format(const ISA::VEC_ELEM& elem, std::format_context& ctx) const {
-        if (elem == ISA::VEC_ELEM::NONE_0 || elem == ISA::VEC_ELEM::NONE_1) {
+        const auto enumName = Util::enumName(elem);
+        if (elem == ISA::VEC_ELEM::NONE_0 || elem == ISA::VEC_ELEM::NONE_1 || !enumName.has_value()) {
             return std::format_to(ctx.out(), "");
         }
-        if (auto str = Util::enumName(elem)) {
-            return std::format_to(ctx.out(), "e({})", str->substr(1)); // remove the leading 'e' from the enum name
-        }
-        return std::format_to(ctx.out(), "elem:{}", static_cast<uint8_t>(elem));
+        return std::format_to(ctx.out(), "[{}]", enumName->substr(1)); // remove the leading 'e' from the enum name
     }
 };
 

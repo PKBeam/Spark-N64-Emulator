@@ -51,7 +51,7 @@ class Logger {
         ERROR,
     };
 
-    Logger(std::string_view file) //
+    Logger(std::filesystem::path file) //
         post(m_file != nullptr);
 
     ~Logger();
@@ -62,7 +62,7 @@ class Logger {
     auto enabled() -> bool;
 
     auto setLevel(Level level) -> void;
-    auto setFilter(Sys sys) -> void;
+    auto setFilter(std::vector<Sys> sys) -> void;
 
     template <typename... Args>
     auto print(const char* fmt, Args... obj) -> void;
@@ -83,16 +83,16 @@ class Logger {
     // template <class T>
     // auto format(T obj) -> std::string;
 
-    Level              m_level = Level::HIGH;
-    std::FILE*         m_file{};
-    std::optional<Sys> m_sys{};
-    bool               m_enabled{};
+    Level            m_level = Level::HIGH;
+    std::FILE*       m_file{};
+    std::vector<Sys> m_sys{};
+    bool             m_enabled{};
 };
 
 // implementation
 
-Logger::Logger(std::string_view file) {
-    m_file    = std::fopen(file.data(), "w");
+Logger::Logger(std::filesystem::path file) {
+    m_file    = std::fopen(file.string().c_str(), "w");
     m_enabled = true;
 }
 
@@ -117,7 +117,7 @@ auto Logger::setLevel(Level level) -> void {
     m_level = level;
 }
 
-auto Logger::setFilter(Sys sys) -> void {
+auto Logger::setFilter(std::vector<Sys> sys) -> void {
     m_sys = sys;
 }
 
@@ -151,7 +151,7 @@ auto Logger::print(const char* fmt, Args... args) -> void {
 
 template <Logger::Level Level, Logger::Sys Sys, Tuple_c... Args>
 auto Logger::log(Args... args) -> void {
-    if (!m_enabled || Level < m_level || (m_sys && Sys != *m_sys)) {
+    if (!m_enabled || Level < m_level || (!m_sys.empty() && !std::ranges::contains(m_sys, Sys))) {
         return;
     }
     auto str = std::string{"{"};
@@ -185,7 +185,7 @@ auto Logger::log(Args... args) -> void {
 
 template <Logger::Level Level, Logger::Severity Sev, Logger::Sys Sys, typename... Args>
 auto Logger::log(const char* fmt, Args... args) -> void {
-    if (!m_enabled || Level < m_level || (m_sys && Sys != *m_sys)) {
+    if (!m_enabled || Level < m_level || (!m_sys.empty() && !std::ranges::contains(m_sys, Sys))) {
         return;
     }
     auto str = std::format(std::runtime_format(fmt), args...);

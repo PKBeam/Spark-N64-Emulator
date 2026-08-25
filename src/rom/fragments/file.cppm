@@ -1,6 +1,7 @@
 export module Rom:File;
 
 import std;
+import ISA;
 import Util;
 
 import :Types;
@@ -22,6 +23,8 @@ export class RomFile {
 
     constexpr auto data() const
         -> std::byte*;
+
+    constexpr auto dump(std::filesystem::path file) const -> void;
 
   private:
     std::filesystem::path m_romFilePath;
@@ -66,4 +69,14 @@ constexpr auto RomFile::size() const -> std::size_t {
 constexpr auto RomFile::data() const
     -> std::byte* {
     return m_mappedFile;
+}
+
+constexpr auto RomFile::dump(std::filesystem::path file) const -> void {
+    auto romDumper = Util::Logger(file);
+    romDumper.setLevel(Level::MAX);
+    for (auto i = 0uz; i < m_size; i += 4) {
+        const auto word = read<uint32_t>(i);
+        romDumper.print("0x{:08x}: {}", i, ISA::Instruction(word));
+    }
+    romDumper.flush();
 }

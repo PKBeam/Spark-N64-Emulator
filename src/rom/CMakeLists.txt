@@ -9,5 +9,5 @@ target_sources(rom PUBLIC
 )
 target_compile_options(rom PUBLIC ${CXX_COMPILE_OPTIONS})
 target_include_directories(rom PUBLIC ${CMAKE_SOURCE_DIR}/src)
-target_link_libraries(rom PUBLIC util)
+target_link_libraries(rom PUBLIC isa util)
 

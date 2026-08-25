@@ -44,12 +44,15 @@ constexpr auto getRange(uint32_t rangeValue) -> std::pair<E, Util::Range> {
 }
 
 namespace Function {
+constexpr auto NULL    = [](auto a, auto b) { return 0; };
 constexpr auto ADD     = [](auto a, auto b) { return a + b; };
 constexpr auto SUB     = [](auto a, auto b) { return a - b; };
 constexpr auto AND     = [](auto a, auto b) { return a & b; };
+constexpr auto NAND    = [](auto a, auto b) { return ~(a & b); };
 constexpr auto OR      = [](auto a, auto b) { return a | b; };
 constexpr auto NOR     = [](auto a, auto b) { return ~(a | b); };
 constexpr auto XOR     = [](auto a, auto b) { return a ^ b; };
+constexpr auto NXOR    = [](auto a, auto b) { return ~(a ^ b); };
 constexpr auto CMP_EQ  = [](auto a, auto b) { return a == b; };
 constexpr auto CMP_NE  = [](auto a, auto b) { return a != b; };
 constexpr auto CMP_LE  = [](auto a, auto b) { return a <= b; };

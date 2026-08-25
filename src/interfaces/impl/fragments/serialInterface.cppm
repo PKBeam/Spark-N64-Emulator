@@ -166,6 +166,10 @@ auto SerialInterface::dmaMemcpy(uint32_t dst, uint32_t src) -> void {
     m_status.dmaError    = 0;
     m_status.dmaState    = 0;
     m_status.interrupt   = 1; // todo mirror in MIPS interrupt
+
+    IF_LOG_ENABLED(m_logger) {
+        m_logger->log<Level::HIGH, Sev::INFO, Sys::SI>("DMA {} bytes from {:#010x} to {:#010x}", len, src, dst);
+    }
 }
 
 } // namespace Interfaces

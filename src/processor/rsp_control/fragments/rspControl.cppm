@@ -6,11 +6,15 @@ import std;
 import InterfaceTypes;
 import Util;
 
+using namespace std::string_view_literals;
 using namespace Interfaces;
+
 enum class RspDmaDirection : bool {
     TO_RDRAM   = 0,
     FROM_RDRAM = 1,
 };
+
+constexpr auto RSP_MEM_BASE = 0x04000000u;
 
 export namespace RSP {
 
@@ -59,6 +63,8 @@ class Control {
     template <RspDmaDirection Dir>
     auto dmaMemcpy(uint32_t dst, uint32_t src, std::size_t len, uint8_t count, uint16_t skip) -> void;
 
+    auto patchRspBootAntiPiracyCheck() -> void;
+
     std::shared_ptr<Util::Logger> m_logger;
     std::optional<uint32_t>       m_pc = 0;
     std::byte*                    m_memory{};
@@ -67,12 +73,18 @@ class Control {
     bool                          m_halt             = true;
     bool                          m_singleStep       = false;
     bool                          m_interruptOnBreak = false;
+    bool                          m_semaphore        = 0;
     uint32_t                      m_rspAddr{};
     uint32_t                      m_ramAddr{};
+
+    bool m_cic6105rspBootPatched = false; // TODO reset when new rom loaded
 };
 
 template <RspDmaDirection Dir>
 auto Control::dmaMemcpy(uint32_t dst, uint32_t src, std::size_t len, uint8_t count, uint16_t skip) -> void {
+    if (len < 8) {
+        len = 7; // minimum 8 byte DMA
+    }
     auto dstPtr = m_memory + dst;
     auto srcPtr = m_memory + src;
     for (auto row = 0; row < count + 1; ++row) {
@@ -88,6 +100,17 @@ auto Control::dmaMemcpy(uint32_t dst, uint32_t src, std::size_t len, uint8_t cou
         } else {
             src += skip;
         }
+    }
+    IF_LOG_ENABLED(m_logger) {
+        constexpr auto dirStr = [] consteval {
+            if constexpr (Dir == RspDmaDirection::TO_RDRAM) {
+                return "to RDRAM"sv;
+            } else {
+                return "from RDRAM"sv;
+            }
+        };
+        m_logger->log<Level::HIGH, Sev::INFO, Sys::RSP_REG>(
+            "DMA {} {} bytes from {:#010x} to {:#010x} ({} rows, skip {})", dirStr(), len + 1, src, dst, count + 1, skip);
     }
 }
 
@@ -132,30 +155,29 @@ auto Control::readRegister(std::size_t index) -> uint32_t {
             return 0;
         case 6: // RSP_DMA_BUSY
             return 0;
-        case 7: // RSP_SEMAPHORE
-            // TODO
-            IF_LOG_ENABLED(m_logger) {
-                m_logger->log<Level::HIGH, Sev::WARNING, Sys::RSP_REG>("Ignoring read of RSP_SEMAPHORE");
-            }
-            return 0;
+        case 7: { // RSP_SEMAPHORE
+            const auto old = m_semaphore;
+            m_semaphore    = 1;
+            return old;
+        }
         default:
             throw Util::Error("Invalid RSP control register index {}", index);
     }
 }
 
 auto Control::writeRegister(std::size_t index, uint32_t data) -> void {
-
     switch (index) {
         case 0: m_rspAddr = data; return;
         case 1: m_ramAddr = data; return;
         case 2: {
             auto rdlen = std::bit_cast<RSP_DMA_RDLEN>(data);
-            dmaMemcpy<RspDmaDirection::FROM_RDRAM>(m_rspAddr, m_ramAddr, rdlen.rdlen, rdlen.count, rdlen.skip_11_3 << 3);
+            dmaMemcpy<RspDmaDirection::FROM_RDRAM>(m_rspAddr + RSP_MEM_BASE, m_ramAddr, rdlen.rdlen, rdlen.count, rdlen.skip_11_3 << 3);
+            patchRspBootAntiPiracyCheck();
             break;
         }
         case 3: {
             auto wrlen = std::bit_cast<RSP_DMA_WRLEN>(data);
-            dmaMemcpy<RspDmaDirection::TO_RDRAM>(m_rspAddr, m_ramAddr, wrlen.wrlen, wrlen.count, wrlen.skip_11_3 << 3);
+            dmaMemcpy<RspDmaDirection::TO_RDRAM>(m_rspAddr + RSP_MEM_BASE, m_ramAddr, wrlen.wrlen, wrlen.count, wrlen.skip_11_3 << 3);
             break;
         }
         case 4: {
@@ -187,13 +209,14 @@ auto Control::writeRegister(std::size_t index, uint32_t data) -> void {
             return;
         }
         case 5: [[fallthrough]];
-        case 6: [[fallthrough]];
-        case 7:
-            // TODO
+        case 6:
             IF_LOG_ENABLED(m_logger) {
-                m_logger->log<Level::HIGH, Sev::WARNING, Sys::RSP_REG>("Ignoring write to RSP_SEMAPHORE");
+                m_logger->log<Level::HIGH, Sev::WARNING, Sys::RSP_REG>("Ignoring write to read-only register {}", index);
             }
             break;
+        case 7:
+            m_semaphore = data;
+            return;
         default:
             throw Util::Error("No RSP register found for index {}", index);
     }
@@ -251,6 +274,23 @@ auto Control::setIntBreak(bool value) -> void {
 
 auto Control::getIntBreak() -> bool {
     return m_interruptOnBreak;
+}
+
+auto Control::patchRspBootAntiPiracyCheck() -> void {
+    // Patch CIC-6105 RSP boot anti piracy check
+    if (!m_cic6105rspBootPatched && m_rspAddr == 0x4001000) {
+        auto firstInst = *reinterpret_cast<uint32_t*>(m_memory + m_ramAddr);
+        Util::byteswapIfLittleEndian(firstInst);
+        if (firstInst == 0x08000411 /* J  0x411 */) {
+            auto patchInst = 0x08000025; // J  0x25
+            Util::byteswapIfLittleEndian(patchInst);
+            *reinterpret_cast<uint32_t*>(m_memory + m_rspAddr) = patchInst;
+            IF_LOG_ENABLED(m_logger) {
+                m_logger->log<Level::MAX, Sev::WARNING, Sys::RSP_REG>("Patched out the CIC-6105 anti-piracy check in RSP boot code");
+            }
+            m_cic6105rspBootPatched = true;
+        }
+    }
 }
 
 } // namespace RSP

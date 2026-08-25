@@ -217,6 +217,10 @@ auto PeripheralInterface::dmaMemcpy(uint32_t dst, uint32_t src, std::size_t len)
     m_status.ioBusy    = 0;
     m_status.dmaError  = 0;
     m_status.interrupt = 1;
+
+    IF_LOG_ENABLED(m_logger) {
+        m_logger->log<Level::HIGH, Sev::INFO, Sys::PI>("DMA {} bytes from {:#010x} to {:#010x}", len, src, dst);
+    }
 }
 
 } // namespace Interfaces
