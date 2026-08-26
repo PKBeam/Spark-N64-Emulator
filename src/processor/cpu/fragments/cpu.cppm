@@ -274,18 +274,6 @@ auto CPU::runInstruction() -> void {
             throw Util::Error("Unimplemented instruction @ PC {:#08x}: {} ({:#08x})", m_regs.readPc(), inst, data);
     }
 
-    // hang detection
-    if (op == UnifiedOpcode::OP_BGEZAL) {
-        const auto ops = std::bit_cast<TypeI>(data);
-        if (static_cast<int16_t>(ops.imm) == -1 &&                 // branches to previous instruction
-            !m_hasBooted &&                                        // in early boot
-            ops.rs == static_cast<uint32_t>(ISA::CPU_REG::zero) && // is unconditional branch
-            m_memory->read<uint32_t>(m_regs.readPc() - 4) == 0)    // branches to NOP
-        {
-            throw Util::Error("Detected infinite looping BGEZAL @ PC {:#08x}, likely boot checksum fail.", m_regs.readPc());
-        }
-    }
-
     if (op != UnifiedOpcode::OP_ERET) {
         m_regs.advancePc();
     }

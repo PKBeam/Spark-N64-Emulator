@@ -9,9 +9,28 @@ import Util;
 using namespace std::string_view_literals;
 using namespace Interfaces;
 
-enum class RspDmaDirection : bool {
+enum class RSP_DMA_DIRECTION : bool {
     TO_RDRAM   = 0,
     FROM_RDRAM = 1,
+};
+
+enum class RSP_CP0_REGS : uint8_t {
+    RSP_DMA_SPADDR    = 0,
+    RSP_DMA_RAMADDR   = 1,
+    RSP_DMA_RDLEN     = 2,
+    RSP_DMA_WRLEN     = 3,
+    RSP_STATUS        = 4,
+    RSP_DMA_FULL      = 5,
+    RSP_DMA_BUSY      = 6,
+    RSP_SEMAPHORE     = 7,
+    RDP_CMD_START     = 8,
+    RDP_CMD_END       = 9,
+    RDP_CMD_CURRENT   = 10,
+    RDP_CMD_STATUS    = 11,
+    RDP_CMD_CLOCK     = 12,
+    RDP_CMD_BUF_BUSY  = 13,
+    RDP_CMD_PIPE_BUSY = 14,
+    RDP_CMD_TMEM_BUSY = 15,
 };
 
 constexpr auto RSP_MEM_BASE = 0x04000000u;
@@ -60,7 +79,7 @@ class Control {
     auto writeRegister(std::size_t index, uint32_t data) -> void;
 
   private:
-    template <RspDmaDirection Dir>
+    template <RSP_DMA_DIRECTION Dir>
     auto dmaMemcpy(uint32_t dst, uint32_t src, std::size_t len, uint8_t count, uint16_t skip) -> void;
 
     auto patchRspBootAntiPiracyCheck() -> void;
@@ -80,7 +99,7 @@ class Control {
     bool m_cic6105rspBootPatched = false; // TODO reset when new rom loaded
 };
 
-template <RspDmaDirection Dir>
+template <RSP_DMA_DIRECTION Dir>
 auto Control::dmaMemcpy(uint32_t dst, uint32_t src, std::size_t len, uint8_t count, uint16_t skip) -> void {
     if (len < 8) {
         len = 7; // minimum 8 byte DMA
@@ -95,7 +114,7 @@ auto Control::dmaMemcpy(uint32_t dst, uint32_t src, std::size_t len, uint8_t cou
         srcPtr += len + 1;
         dstPtr += len + 1;
 
-        if constexpr (Dir == RspDmaDirection::TO_RDRAM) {
+        if constexpr (Dir == RSP_DMA_DIRECTION::TO_RDRAM) {
             dst += skip;
         } else {
             src += skip;
@@ -103,7 +122,7 @@ auto Control::dmaMemcpy(uint32_t dst, uint32_t src, std::size_t len, uint8_t cou
     }
     IF_LOG_ENABLED(m_logger) {
         constexpr auto dirStr = [] consteval {
-            if constexpr (Dir == RspDmaDirection::TO_RDRAM) {
+            if constexpr (Dir == RSP_DMA_DIRECTION::TO_RDRAM) {
                 return "to RDRAM"sv;
             } else {
                 return "from RDRAM"sv;
@@ -115,72 +134,93 @@ auto Control::dmaMemcpy(uint32_t dst, uint32_t src, std::size_t len, uint8_t cou
 }
 
 auto Control::readRegister(std::size_t index) -> uint32_t {
-    switch (index) {
-        case 0: // RSP_DMA_SPADDR
-            return m_rspAddr;
-        case 1: // RSP_DMA_RAMADDR
-            return m_ramAddr;
-        case 2: // RSP_DMA_RDLEN
-            return std::bit_cast<uint32_t>(RSP_DMA_RDLEN{
-                .rdlen     = 0xFF8,
-                .count     = 0,
-                .skip_11_3 = 0, // TODO
-            });
-        case 3: // RSP_DMA_WRLEN
-            return std::bit_cast<uint32_t>(RSP_DMA_WRLEN{
-                .wrlen     = 0xFF8,
-                .count     = 0,
-                .skip_11_3 = 0, // TODO
-            });
-        case 4: // RSP_STATUS
-            return std::bit_cast<uint32_t>(RSP_STATUS{
-                .halted   = getHalt(),
-                .broke    = getBroke(),
-                .dmaBusy  = false,
-                .dmaFull  = false,
-                .ioBusy   = false,
-                .sstep    = getSingleStep(),
-                .intbreak = getIntBreak(),
-                .sig0     = getSignal(0),
-                .sig1     = getSignal(1),
-                .sig2     = getSignal(2),
-                .sig3     = getSignal(3),
-                .sig4     = getSignal(4),
-                .sig5     = getSignal(5),
-                .sig6     = getSignal(6),
-                .sig7     = getSignal(7),
-            });
+    auto readReg = [this](uint32_t index) -> uint32_t {
+        switch (static_cast<RSP_CP0_REGS>(index)) {
+            case RSP_CP0_REGS::RSP_DMA_SPADDR:
+                return m_rspAddr;
+            case RSP_CP0_REGS::RSP_DMA_RAMADDR:
+                return m_ramAddr;
+            case RSP_CP0_REGS::RSP_DMA_RDLEN:
+                return std::bit_cast<uint32_t>(RSP_DMA_RDLEN{
+                    .rdlen     = 0xFF8,
+                    .count     = 0,
+                    .skip_11_3 = 0, // TODO
+                });
+            case RSP_CP0_REGS::RSP_DMA_WRLEN:
+                return std::bit_cast<uint32_t>(RSP_DMA_WRLEN{
+                    .wrlen     = 0xFF8,
+                    .count     = 0,
+                    .skip_11_3 = 0, // TODO
+                });
+            case RSP_CP0_REGS::RSP_STATUS:
+                return std::bit_cast<uint32_t>(RSP_STATUS{
+                    .halted   = getHalt(),
+                    .broke    = getBroke(),
+                    .dmaBusy  = false,
+                    .dmaFull  = false,
+                    .ioBusy   = false,
+                    .sstep    = getSingleStep(),
+                    .intbreak = getIntBreak(),
+                    .sig0     = getSignal(0),
+                    .sig1     = getSignal(1),
+                    .sig2     = getSignal(2),
+                    .sig3     = getSignal(3),
+                    .sig4     = getSignal(4),
+                    .sig5     = getSignal(5),
+                    .sig6     = getSignal(6),
+                    .sig7     = getSignal(7),
+                });
 
-        case 5: // RSP_DMA_FULL
-            return 0;
-        case 6: // RSP_DMA_BUSY
-            return 0;
-        case 7: { // RSP_SEMAPHORE
-            const auto old = m_semaphore;
-            m_semaphore    = 1;
-            return old;
+            case RSP_CP0_REGS::RSP_DMA_FULL:
+                return 0;
+            case RSP_CP0_REGS::RSP_DMA_BUSY:
+                return 0;
+            case RSP_CP0_REGS::RSP_SEMAPHORE: {
+                const auto old = m_semaphore;
+                m_semaphore    = 1;
+                return old;
+            }
+            default:
+                throw Util::Error("Invalid RSP control register index {}", index);
         }
-        default:
-            throw Util::Error("Invalid RSP control register index {}", index);
+    };
+
+    const auto data = readReg(index);
+
+    IF_LOG_ENABLED(m_logger) {
+        const auto name = Util::enumName(static_cast<RSP_CP0_REGS>(index)).value_or(std::format("CP0 REG {}", index));
+        m_logger->log<Level::HIGH, Sys::RSP_REG>(
+            std::tuple{"op", "read"},
+            std::tuple{"reg", "{}", name},
+            std::tuple{"data", "0x{:08x}", data});
     }
+    return data;
 }
 
 auto Control::writeRegister(std::size_t index, uint32_t data) -> void {
-    switch (index) {
-        case 0: m_rspAddr = data; return;
-        case 1: m_ramAddr = data; return;
-        case 2: {
+    IF_LOG_ENABLED(m_logger) {
+        const auto name = Util::enumName(static_cast<RSP_CP0_REGS>(index)).value_or(std::format("CP0 REG {}", index));
+        m_logger->log<Level::HIGH, Sys::RSP_REG>(
+            std::tuple{"op", "write"},
+            std::tuple{"reg", "{}", name},
+            std::tuple{"data", "0x{:08x}", data});
+    }
+
+    switch (static_cast<RSP_CP0_REGS>(index)) {
+        case RSP_CP0_REGS::RSP_DMA_SPADDR: m_rspAddr = std::bit_cast<RSP_DMA_SPADDR>(data).memAddr_11_3 << 3; return;
+        case RSP_CP0_REGS::RSP_DMA_RAMADDR: m_ramAddr = std::bit_cast<RSP_DMA_RAMADDR>(data).dramAddr_23_3 << 3; return;
+        case RSP_CP0_REGS::RSP_DMA_RDLEN: {
             auto rdlen = std::bit_cast<RSP_DMA_RDLEN>(data);
-            dmaMemcpy<RspDmaDirection::FROM_RDRAM>(m_rspAddr + RSP_MEM_BASE, m_ramAddr, rdlen.rdlen, rdlen.count, rdlen.skip_11_3 << 3);
+            dmaMemcpy<RSP_DMA_DIRECTION::FROM_RDRAM>(m_rspAddr + RSP_MEM_BASE, m_ramAddr, rdlen.rdlen, rdlen.count, rdlen.skip_11_3 << 3);
             patchRspBootAntiPiracyCheck();
             break;
         }
-        case 3: {
+        case RSP_CP0_REGS::RSP_DMA_WRLEN: {
             auto wrlen = std::bit_cast<RSP_DMA_WRLEN>(data);
-            dmaMemcpy<RspDmaDirection::TO_RDRAM>(m_rspAddr + RSP_MEM_BASE, m_ramAddr, wrlen.wrlen, wrlen.count, wrlen.skip_11_3 << 3);
+            dmaMemcpy<RSP_DMA_DIRECTION::TO_RDRAM>(m_rspAddr + RSP_MEM_BASE, m_ramAddr, wrlen.wrlen, wrlen.count, wrlen.skip_11_3 << 3);
             break;
         }
-        case 4: {
+        case RSP_CP0_REGS::RSP_STATUS: {
             auto status = std::bit_cast<RSP_STATUS::Write>(data);
             if (status.clrHalt) setHalt(false);
             if (status.setHalt) setHalt(true);
@@ -208,14 +248,14 @@ auto Control::writeRegister(std::size_t index, uint32_t data) -> void {
             if (status.setSig7) setSignal(7, true);
             return;
         }
-        case 5: [[fallthrough]];
-        case 6:
+        case RSP_CP0_REGS::RSP_DMA_FULL: [[fallthrough]];
+        case RSP_CP0_REGS::RSP_DMA_BUSY:
             IF_LOG_ENABLED(m_logger) {
                 m_logger->log<Level::HIGH, Sev::WARNING, Sys::RSP_REG>("Ignoring write to read-only register {}", index);
             }
             break;
-        case 7:
-            m_semaphore = data;
+        case RSP_CP0_REGS::RSP_SEMAPHORE:
+            m_semaphore = std::bit_cast<RSP_SEMAPHORE>(data).semaphore;
             return;
         default:
             throw Util::Error("No RSP register found for index {}", index);

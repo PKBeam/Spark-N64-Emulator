@@ -211,7 +211,10 @@ auto RSP::runInstruction() -> void {
             }
             break;
         default:
-            throw Util::Error("Unimplemented instruction @ PC {:#08x}: {} ({:#08x})", m_gprs.readPc(), inst, data);
+            IF_LOG_ENABLED(m_logger) {
+                m_logger->log<Level::HIGH, Sev::WARNING, Sys::RSP>("ignored unimplemented instruction @ PC {:#08x}: {} ({:#08x})", m_gprs.readPc(), inst, data);
+            }
+            // throw Util::Error("Unimplemented instruction @ PC {:#08x}: {} ({:#08x})", m_gprs.readPc(), inst, data);
     }
 
     m_gprs.advancePc();

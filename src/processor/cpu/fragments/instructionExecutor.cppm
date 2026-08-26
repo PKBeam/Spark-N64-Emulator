@@ -244,6 +244,7 @@ auto InstructionExecutor<System>::executeMemoryOperation(uint32_t inst) -> void 
     auto ops   = std::bit_cast<ISA::CPU::TypeI>(inst);
     auto vaddr = Util::signExt32<int16_t>(ops.imm) + m_regs->readGpr(ops.rs);
     if constexpr (System == Sys::RSP) {
+        vaddr &= 0xFFF;
         vaddr += Memory::rangeOf(Memory::PhysSeg::RSP_DMEM).lower;
     }
     if constexpr (Type == Param::MemoryType::LOAD) {

@@ -99,8 +99,8 @@ constexpr auto formatOperands(Instruction inst) -> std::vector<std::string> {
 
                     // TODO CP0 registers have different names
                     constexpr auto opName = std::meta::identifier_of([:op:]);
-                    if constexpr (fmtType == (^^ISA::CPU_REG)) {
-                        if ((inst.opcode == UnifiedOpcode::OP_MTCz && opName == "rd") || (inst.opcode == UnifiedOpcode::OP_MFCz && opName == "rt")) {
+                    if constexpr (fmtType == (^^ISA::CPU_REG) && opName == "rd") {
+                        if (inst.opcode == UnifiedOpcode::OP_MTCz || inst.opcode == UnifiedOpcode::OP_MFCz) {
                             const uint32_t opValue = instData.[:[:op:]:];
                             const auto     opStr   = std::format("$r{}", opValue);
                             result.push_back(opStr);
