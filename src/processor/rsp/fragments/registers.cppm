@@ -29,6 +29,7 @@ struct Registers {
 
     Registers(std::shared_ptr<Util::Logger> logger) : m_logger(logger) {}
 
+    auto getVprData(std::size_t index) -> std::byte*;
     auto readVpr(std::size_t index, ISA::VEC_ELEM elem = ISA::VEC_ELEM::NONE_0) -> VPR<uint16_t>;
     auto writeVpr(std::size_t index, VPR<uint16_t> value, ISA::VEC_ELEM elem = ISA::VEC_ELEM::NONE_0) -> void;
 
@@ -68,6 +69,10 @@ struct Registers {
         return result;
     }
 };
+
+auto Registers::getVprData(std::size_t index) -> std::byte* {
+    return reinterpret_cast<std::byte*>(m_vprs[index].data());
+}
 
 auto Registers::readVpr(std::size_t index, ISA::VEC_ELEM elem) -> VPR<uint16_t> {
     VPR<uint16_t> result{};

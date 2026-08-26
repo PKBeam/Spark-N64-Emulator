@@ -18,6 +18,7 @@ import :Registers;
 using Control = RSP::Control;
 
 constexpr auto RSP_IMEM_BASE = Memory::rangeOf(Memory::PhysSeg::RSP_IMEM).lower;
+constexpr auto RSP_DMEM_BASE = Memory::rangeOf(Memory::PhysSeg::RSP_DMEM).lower;
 
 export namespace RSP {
 
@@ -72,6 +73,7 @@ auto RSP::runInstruction() -> void {
     namespace Func = Util::Function;
     using TypeI    = ISA::CPU::TypeI;
     using TypeR    = ISA::CPU::TypeR;
+    using TypeVI   = ISA::RSP::TypeVI;
 
     switch (op) {
         // unsupported opcodes
@@ -169,6 +171,18 @@ auto RSP::runInstruction() -> void {
         // Vector instructions
         case UnifiedOpcode::OP_VADDC: m_exec.executeBivariate<P::ACCUM_ZERO_EXT>(data, Func::ADD, [](uint32_t sum) { return sum >> 16; }); break;
         case UnifiedOpcode::OP_VSUBC: m_exec.executeBivariate<P::ACCUM_ZERO_EXT>(data, Func::SUB, [](uint32_t sum) { return sum != 0; }); break;
+        case UnifiedOpcode::OP_VSUB: m_exec.executeBivariate<P::ACCUM_ZERO_EXT, std::nullptr_t, std::nullptr_t, P::CARRY_IN>(data, Func::SUB); break;
+        case UnifiedOpcode::OP_LQV: {
+            const auto ops     = std::bit_cast<TypeVI>(data);
+            const auto vaddr   = RSP_DMEM_BASE + Util::signExt32<int16_t>(ops.imm) + m_gprs.readGpr(ops.rs);
+            auto       result  = m_vprs.readVpr(ops.vt);
+            const auto vprData = reinterpret_cast<std::byte*>(result.data()) + ops.vtElem;
+            for (auto byte = 16u; byte > (vaddr % 16) + ops.vtElem; --byte) {
+                vprData[16 - byte] = static_cast<std::byte>(m_memory->readPhysical<uint8_t>(vaddr + (16 - byte)));
+            }
+            m_vprs.writeVpr(ops.vt, result);
+            break;
+        }
 
         case UnifiedOpcode::OP_VAND: m_exec.executeBivariate<P::ACCUM_ZERO_EXT>(data, Func::AND); break;
         case UnifiedOpcode::OP_VNAND: m_exec.executeBivariate<P::ACCUM_ZERO_EXT>(data, Func::NAND); break;
@@ -211,10 +225,8 @@ auto RSP::runInstruction() -> void {
             }
             break;
         default:
-            IF_LOG_ENABLED(m_logger) {
-                m_logger->log<Level::HIGH, Sev::WARNING, Sys::RSP>("ignored unimplemented instruction @ PC {:#08x}: {} ({:#08x})", m_gprs.readPc(), inst, data);
-            }
-            // throw Util::Error("Unimplemented instruction @ PC {:#08x}: {} ({:#08x})", m_gprs.readPc(), inst, data);
+            dumpIMem("rsp_imem.txt");
+            throw Util::Error("Unimplemented instruction @ PC {:#08x}: {} ({:#08x})", m_gprs.readPc(), inst, data);
     }
 
     m_gprs.advancePc();

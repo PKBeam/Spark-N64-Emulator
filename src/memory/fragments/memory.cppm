@@ -98,6 +98,7 @@ auto Memory::readPhysical(PhysicalAddr paddr) const -> T { // TODO improve perfo
             std::memcpy(&data, hostAddr, sizeof(T));
             Util::byteswapIfLittleEndian(data);
             break;
+        case PhysSeg::RDRAM_UNUSED: data = 0; break;
         case PhysSeg::RDRAM_REG: {
             IF_LOG_ENABLED(m_logger) {
                 m_logger->log<Level::HIGH, Sev::WARNING, Sys::RDRAM>("Ignoring RDRAM register read");
@@ -153,6 +154,7 @@ auto Memory::writePhysical(PhysicalAddr paddr, T data) const -> void {
             Util::byteswapIfLittleEndian(data);
             std::memcpy(hostAddr, &data, sizeof(T));
             break;
+        case PhysSeg::RDRAM_UNUSED: break;
         case PhysSeg::MIPS_INTERFACE: m_mipsInterface->sizedWrite(paddr, sizeof(T), data); break;
         case PhysSeg::AUDIO_INTERFACE: m_audioInterface->sizedWrite(paddr, sizeof(T), data); break;
         case PhysSeg::VIDEO_INTERFACE: m_videoInterface->sizedWrite(paddr, sizeof(T), data); break;

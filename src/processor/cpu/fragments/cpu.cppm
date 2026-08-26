@@ -81,6 +81,7 @@ auto CPU::checkInterrupts() -> void {
         auto nextPc = m_regs.pcIsDelaySlot() ? m_regs.readPc() - 4 : m_regs.readPc();
         m_cp0->writeReg<ISA::CP0_REG::EPC>(nextPc);
         m_regs.writePc(status.bev ? 0xBFC00000 : 0x80000000);
+        m_regs.clearDelaySlot();
         IF_LOG_ENABLED(m_logger) {
             m_logger->log<Level::HIGH, Sys::CPU>(
                 std::tuple{"exceptionStatus", "{:#08x}", std::bit_cast<uint32_t>(status)},

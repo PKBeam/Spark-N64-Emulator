@@ -19,6 +19,7 @@ struct Registers {
     auto writePc(uint64_t value) -> void;
     auto writePcDelayed(uint64_t newPc) -> void;
     auto pcIsDelaySlot() const -> bool;
+    auto clearDelaySlot() -> void;
     auto advancePc() -> void;
     auto incrementPc(std::size_t instructions = 1) -> void;
 
@@ -91,6 +92,11 @@ auto Registers<System>::writePcDelayed(uint64_t newPc) -> void {
 template <Sys System>
 auto Registers<System>::pcIsDelaySlot() const -> bool {
     return m_delaySlotPc.has_value();
+}
+
+template <Sys System>
+auto Registers<System>::clearDelaySlot() -> void {
+    m_delaySlotPc.reset();
 }
 
 template <Sys System>

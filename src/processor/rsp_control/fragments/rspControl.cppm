@@ -101,18 +101,19 @@ class Control {
 
 template <RSP_DMA_DIRECTION Dir>
 auto Control::dmaMemcpy(uint32_t dst, uint32_t src, std::size_t len, uint8_t count, uint16_t skip) -> void {
-    if (len < 8) {
-        len = 7; // minimum 8 byte DMA
+    len += 1;
+    if (len % 8 > 0) {
+        len += 8 - (len % 8); // round up to next multiple of 8
     }
     auto dstPtr = m_memory + dst;
     auto srcPtr = m_memory + src;
     for (auto row = 0; row < count + 1; ++row) {
-        for (auto i = 0uz; i < len + 1; i += 8) {
+        for (auto i = 0uz; i < len; i += 8) {
             std::memcpy(dstPtr + i, srcPtr + i, 8);
         }
 
-        srcPtr += len + 1;
-        dstPtr += len + 1;
+        srcPtr += len;
+        dstPtr += len;
 
         if constexpr (Dir == RSP_DMA_DIRECTION::TO_RDRAM) {
             dst += skip;
@@ -129,7 +130,7 @@ auto Control::dmaMemcpy(uint32_t dst, uint32_t src, std::size_t len, uint8_t cou
             }
         };
         m_logger->log<Level::HIGH, Sev::INFO, Sys::RSP_REG>(
-            "DMA {} {} bytes from {:#010x} to {:#010x} ({} rows, skip {})", dirStr(), len + 1, src, dst, count + 1, skip);
+            "DMA {} {} bytes from {:#010x} to {:#010x} ({} rows, skip {})", dirStr(), len, src, dst, count + 1, skip);
     }
 }
 
@@ -207,7 +208,11 @@ auto Control::writeRegister(std::size_t index, uint32_t data) -> void {
     }
 
     switch (static_cast<RSP_CP0_REGS>(index)) {
-        case RSP_CP0_REGS::RSP_DMA_SPADDR: m_rspAddr = std::bit_cast<RSP_DMA_SPADDR>(data).memAddr_11_3 << 3; return;
+        case RSP_CP0_REGS::RSP_DMA_SPADDR: {
+            auto spAddr = std::bit_cast<RSP_DMA_SPADDR>(data);
+            m_rspAddr   = (spAddr.memBank << 12) | (spAddr.memAddr_11_3 << 3);
+            return;
+        }
         case RSP_CP0_REGS::RSP_DMA_RAMADDR: m_ramAddr = std::bit_cast<RSP_DMA_RAMADDR>(data).dramAddr_23_3 << 3; return;
         case RSP_CP0_REGS::RSP_DMA_RDLEN: {
             auto rdlen = std::bit_cast<RSP_DMA_RDLEN>(data);

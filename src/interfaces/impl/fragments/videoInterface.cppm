@@ -6,22 +6,48 @@ import std;
 import Util;
 
 import :Interface;
+import :MipsInterface;
 import InterfaceTypes;
 
 namespace Interfaces {
 
 export class VideoInterface : public Interface {
   public:
-    VideoInterface(std::shared_ptr<Util::Logger> logger) : m_logger(logger) {};
+    VideoInterface(std::shared_ptr<Util::Logger> logger, MipsInterface* mipsInterface);
 
     auto read(uint32_t addr) -> uint32_t override;
     auto write(uint32_t addr, uint32_t data) -> void override;
 
-  private:
-    std::shared_ptr<Util::Logger> m_logger;
+    auto hasTimerFired() const -> bool {
+        return m_timerTick;
+    }
 
-    VI_CTRL m_ctrl{};
+    auto clearTimerFired() -> void {
+        m_timerTick = false;
+    }
+
+  private:
+    std::thread                   m_interruptGenerator;
+    std::shared_ptr<Util::Logger> m_logger;
+    bool                          m_timerTick{};
+    MipsInterface*                m_mipsInterface;
+    VI_CTRL                       m_ctrl{};
 };
+
+VideoInterface::VideoInterface(std::shared_ptr<Util::Logger> logger, MipsInterface* mipsInterface)
+    : m_logger(logger), m_mipsInterface(mipsInterface) {
+    m_interruptGenerator = std::thread([this]() {
+        auto prev = std::chrono::high_resolution_clock::now();
+        while (true) {
+            const auto now     = std::chrono::high_resolution_clock::now();
+            const auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(now - prev).count();
+            if (elapsed >= 16667) { // 60Hz
+                prev        = now;
+                m_timerTick = true;
+            }
+        }
+    });
+}
 
 auto VideoInterface::read(uint32_t addr) -> uint32_t {
     contract_assert(addr % 4 == 0 &&
@@ -57,6 +83,10 @@ auto VideoInterface::read(uint32_t addr) -> uint32_t {
 
     auto data = readReg(addr);
 
+    if (addr == VI_REG_ADDR::VI_V_CURRENT) { // TODO clean up
+        data = 2;
+    }
+
     logOperation<Sys::VI, VI_REG_ADDR>(m_logger, "read", addr, data);
 
     return data;
@@ -68,6 +98,10 @@ auto VideoInterface::write(uint32_t addr, uint32_t data) -> void {
 
     addr = VI_REG_ADDR::BASE + (addr & 0x3F);
     logOperation<Sys::VI, VI_REG_ADDR>(m_logger, "write", addr, data);
+
+    if (addr == VI_REG_ADDR::VI_V_CURRENT) { // TODO clean up
+        m_mipsInterface->setInterrupt<^^MI_INTERRUPT::vi>(false);
+    }
 
     switch (addr) {
         case VI_REG_ADDR::VI_CTRL: [[fallthrough]];

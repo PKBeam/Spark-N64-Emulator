@@ -14,7 +14,8 @@ import :Registers;
 
 export namespace Param {
 // clang-format off
-enum Accumulator        : uint8_t    { ACCUM_NONE, ACCUM_ZERO_EXT, ACCUM_SIGN_EXT };
+enum Accumulator : uint8_t { ACCUM_NONE, ACCUM_ZERO_EXT, ACCUM_SIGN_EXT };
+enum CarryIn     : uint8_t { CARRY_IN_NONE, CARRY_IN };
 // clang-format on
 } // namespace Param
 
@@ -29,7 +30,7 @@ class InstructionExecutor {
         return &m_cpuExec;
     }
 
-    template <Param::Accumulator Accum, typename VcoLoFunc = std::nullptr_t, typename VcoHiFunc = std::nullptr_t, typename Function>
+    template <Param::Accumulator Accum, typename VcoLoFunc = std::nullptr_t, typename VcoHiFunc = std::nullptr_t, Param::CarryIn Carry = Param::CARRY_IN_NONE, typename Function>
         requires(std::integral<std::invoke_result_t<Function, uint16_t, uint16_t>> &&
                  (std::same_as<std::nullptr_t, VcoLoFunc> || std::integral<std::invoke_result_t<VcoLoFunc, uint32_t>>) &&
                  (std::same_as<std::nullptr_t, VcoHiFunc> || std::integral<std::invoke_result_t<VcoHiFunc, uint32_t>>))
@@ -44,7 +45,7 @@ class InstructionExecutor {
     CPU::InstructionExecutor<Sys::RSP> m_cpuExec;
 };
 
-template <Param::Accumulator Accum, typename VcoLoFunc, typename VcoHiFunc, typename Function>
+template <Param::Accumulator Accum, typename VcoLoFunc, typename VcoHiFunc, Param::CarryIn Carry, typename Function>
     requires(std::integral<std::invoke_result_t<Function, uint16_t, uint16_t>> &&
              (std::same_as<std::nullptr_t, VcoLoFunc> || std::integral<std::invoke_result_t<VcoLoFunc, uint32_t>>) &&
              (std::same_as<std::nullptr_t, VcoHiFunc> || std::integral<std::invoke_result_t<VcoHiFunc, uint32_t>>))
@@ -59,11 +60,19 @@ auto InstructionExecutor::executeBivariate(uint32_t inst, Function&& func, VcoLo
     constexpr auto hasVcoLoFunc = !std::same_as<std::nullptr_t, VcoLoFunc>;
     constexpr auto hasVcoHiFunc = !std::same_as<std::nullptr_t, VcoHiFunc>;
 
+    static_assert(Carry != Param::CarryIn::CARRY_IN || (!hasVcoLoFunc && !hasVcoHiFunc), "Cannot use carry-in with vco functions");
+
     auto vco = Registers::Control{};
+    if constexpr (Carry == Param::CarryIn::CARRY_IN) {
+        vco = m_vprs->readVco();
+    }
 
     for (auto i = 0uz; i < 8; ++i) {
         auto value = func(vsVpr[i], vtVpr[i]);
-        result[i]  = value;
+        if constexpr (Carry == Param::CarryIn::CARRY_IN) {
+            value = func(value, std::bit_cast<uint16_t>(vco));
+        }
+        result[i] = value;
         if constexpr (hasVcoLoFunc) {
             vco.low |= (vcoLoFunc(value) << i);
         }
@@ -74,6 +83,8 @@ auto InstructionExecutor::executeBivariate(uint32_t inst, Function&& func, VcoLo
 
     if constexpr (hasVcoLoFunc || hasVcoHiFunc) {
         m_vprs->writeVco(vco);
+    } else if constexpr (Carry == Param::CarryIn::CARRY_IN) {
+        m_vprs->writeVco(Registers::Control{});
     }
     if constexpr (Accum != Param::Accumulator::ACCUM_NONE) {
         m_vprs->writeAccumulators(result);

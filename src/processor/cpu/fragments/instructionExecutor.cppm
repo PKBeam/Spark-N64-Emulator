@@ -11,6 +11,8 @@ import Util;
 
 import :Registers;
 
+constexpr auto RSP_DMEM_BASE = Memory::rangeOf(Memory::PhysSeg::RSP_DMEM).lower;
+
 export namespace Param {
 // clang-format off
 enum ShiftType        : bool    { LOGICAL, ARITHMETIC };
@@ -114,19 +116,19 @@ auto InstructionExecutor<System>::executeBranch(uint32_t inst, Function&& func) 
     if (func(m_regs->readGpr(ops.rs), m_regs->readGpr(ops.rt))) {
         auto instOffset = Util::signExt32<int16_t>(ops.imm);
 
-        auto prevInst = [this] {
-            const auto prevPc = m_regs->readPc() - 4;
-            if constexpr (System == Sys::RSP) {
-                return m_memory->readPhysical<uint32_t>(prevPc);
-            } else {
-                return m_memory->read<uint32_t>(prevPc);
-            }
-        }();
-        if (instOffset == -1 && // branches to previous instruction
-            prevInst == 0)      // branches to NOP
-        {
-            throw Util::Error("Detected infinite loop @ PC {:#08x}: {:#08x}", m_regs->readPc(), inst);
-        }
+        // auto prevInst = [this] {
+        //     const auto prevPc = m_regs->readPc() - 4;
+        //     if constexpr (System == Sys::RSP) {
+        //         return m_memory->readPhysical<uint32_t>(RSP_DMEM_BASE + prevPc);
+        //     } else {
+        //         return m_memory->read<uint32_t>(prevPc);
+        //     }
+        // }();
+        // if (instOffset == -1 && // branches to previous instruction
+        //     prevInst == 0)      // branches to NOP
+        //{
+        //     throw Util::Error("Detected infinite loop @ PC {:#08x}: {:#08x}", m_regs->readPc(), inst);
+        // }
         m_regs->writePcDelayed((m_regs->readPc() + 4) + (instOffset << 2));
     } else {
         if constexpr (Likely == Param::BranchLikelihood::LIKELY) {
@@ -250,7 +252,7 @@ auto InstructionExecutor<System>::executeMemoryOperation(uint32_t inst) -> void 
     if constexpr (Type == Param::MemoryType::LOAD) {
         T result{};
         if constexpr (System == Sys::RSP) {
-            result = m_memory->readPhysical<T>(vaddr);
+            result = m_memory->readPhysical<T>(RSP_DMEM_BASE + vaddr);
         } else {
             result = m_memory->read<T>(vaddr);
         }

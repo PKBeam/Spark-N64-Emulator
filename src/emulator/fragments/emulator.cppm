@@ -10,6 +10,7 @@ import Rom;
 import RSP;
 import RspControl;
 import Interfaces;
+import InterfaceTypes;
 import ISA;
 import Memory;
 import Util;
@@ -88,7 +89,7 @@ constexpr Emulator::Emulator(Config config) : m_config(config) {
 
     m_mipsInterface       = new Interfaces::MipsInterface(m_logger, m_cp0);
     m_rdramInterface      = new Interfaces::RdramInterface(m_logger);
-    m_videoInterface      = new Interfaces::VideoInterface(m_logger);
+    m_videoInterface      = new Interfaces::VideoInterface(m_logger, m_mipsInterface);
     m_audioInterface      = new Interfaces::AudioInterface(m_logger, m_mipsInterface);
     m_rspRegisters        = new Interfaces::RspRegisters(m_logger, m_mipsInterface, m_rspControl);
     m_peripheralInterface = new Interfaces::PeripheralInterface(m_logger, reinterpret_cast<std::byte*>(m_memory), m_mipsInterface);
@@ -142,6 +143,10 @@ constexpr auto Emulator::loadRom(std::filesystem::path path) -> void {
     });
     try {
         while (true) {
+            // if (m_videoInterface->hasTimerFired()) {
+            //     m_mipsInterface->setInterrupt<^^Interfaces::MI_INTERRUPT::vi>(true);
+            //     m_videoInterface->clearTimerFired();
+            // }
             m_cpu->checkInterrupts();
             m_cpu->runInstruction();
             m_rsp->runInstruction();

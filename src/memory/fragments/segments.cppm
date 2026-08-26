@@ -20,6 +20,7 @@ enum class PhysSeg {
     // RDRAM                [[=Util::Range{0x00000000, 0x003FFFFF}]],
     // RDRAM_EXPANSION_PAK  [[=Util::Range{0x00400000, 0x007FFFFF}]],
     RDRAM                [[=Util::Range{0x00000000, 0x007FFFFF}]],
+    RDRAM_UNUSED         [[=Util::Range{0x00800000, 0x03EFFFFF}]],
     RDRAM_REG            [[=Util::Range{0x03F00000, 0x03FFFFFF}]],
     RSP_DMEM             [[=Util::Range{0x04000000, 0x04000FFF}]],
     RSP_IMEM             [[=Util::Range{0x04001000, 0x04001FFF}]],
