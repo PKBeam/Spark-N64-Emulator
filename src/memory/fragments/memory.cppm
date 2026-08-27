@@ -105,7 +105,7 @@ auto Memory::readPhysical(PhysicalAddr paddr) const -> T { // TODO improve perfo
             }
             break;
         }
-        case PhysSeg::RDP_CMD_REG: {
+        case PhysSeg::DPC_REG: {
             IF_LOG_ENABLED(m_logger) {
                 m_logger->log<Level::HIGH, Sev::WARNING, Sys::RDRAM>("Ignoring RDP command register read");
             }

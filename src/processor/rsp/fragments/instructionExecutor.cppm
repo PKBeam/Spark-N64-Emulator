@@ -36,6 +36,12 @@ class InstructionExecutor {
                  (std::same_as<std::nullptr_t, VcoHiFunc> || std::integral<std::invoke_result_t<VcoHiFunc, uint32_t>>))
     auto executeBivariate(uint32_t inst, Function&& func, VcoLoFunc vcoLoFunc = nullptr, VcoHiFunc vcoHiFunc = nullptr) -> void;
 
+    template <Param::Accumulator Accum, typename Function>
+        requires(std::integral<std::invoke_result_t<Function, uint16_t, uint16_t>>)
+    auto executeBivariateWithCarryIn(uint32_t inst, Function&& func) -> void {
+        executeBivariate<Accum, std::nullptr_t, std::nullptr_t, Param::CARRY_IN, Function>(inst, std::forward<Function>(func));
+    }
+
   private:
     std::shared_ptr<Util::Logger> m_logger;
     CPU::Registers<Sys::RSP>*     m_gprs{};

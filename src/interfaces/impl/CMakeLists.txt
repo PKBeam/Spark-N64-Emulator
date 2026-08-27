@@ -12,6 +12,7 @@ target_sources(interfaces PUBLIC
         fragments/rdramInterface.cppm
         fragments/rdramRegisters.cppm
         fragments/rspRegisters.cppm
+        fragments/rdpRegisters.cppm
         fragments/peripheralInterface.cppm
         fragments/serialInterface.cppm
         fragments/videoInterface.cppm

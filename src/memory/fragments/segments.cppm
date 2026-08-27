@@ -25,7 +25,7 @@ enum class PhysSeg {
     RSP_DMEM             [[=Util::Range{0x04000000, 0x04000FFF}]],
     RSP_IMEM             [[=Util::Range{0x04001000, 0x04001FFF}]],
     RSP_REG              [[=Util::Range{0x04040000, 0x040FFFFF}]],
-    RDP_CMD_REG          [[=Util::Range{0x04100000, 0x041FFFFF}]],
+    DPC_REG          [[=Util::Range{0x04100000, 0x041FFFFF}]],
     RSP_SPAN_REG         [[=Util::Range{0x04200000, 0x042FFFFF}]],
     MIPS_INTERFACE       [[=Util::Range{0x04300000, 0x043FFFFF}]],
     VIDEO_INTERFACE      [[=Util::Range{0x04400000, 0x044FFFFF}]],

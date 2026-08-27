@@ -9,6 +9,7 @@ target_sources(interface_types PUBLIC
         fragments/rdramInterfaceTypes.cppm
         fragments/rdramRegistersTypes.cppm
         fragments/rspRegistersTypes.cppm
+        fragments/rdpRegistersTypes.cppm
         fragments/peripheralInterfaceTypes.cppm
         fragments/serialInterfaceTypes.cppm
         fragments/videoInterfaceTypes.cppm

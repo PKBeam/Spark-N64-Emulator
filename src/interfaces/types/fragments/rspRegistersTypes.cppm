@@ -9,19 +9,19 @@ struct RSP_REG_ADDR {
     constexpr static uint32_t BASE = 0x04040000;
     constexpr static uint32_t END  = 0x040FFFFF;
     enum Address : uint32_t {
-        RSP_DMA_SPADDR  = 0x04040000,
-        RSP_DMA_RAMADDR = 0x04040004,
-        RSP_DMA_RDLEN   = 0x04040008,
-        RSP_DMA_WRLEN   = 0x0404000C,
-        RSP_STATUS      = 0x04040010,
-        RSP_DMA_FULL    = 0x04040014,
-        RSP_DMA_BUSY    = 0x04040018,
-        RSP_SEMAPHORE   = 0x0404001C,
-        RSP_PC          = 0x04080000,
+        SP_DMA_SPADDR  = 0x04040000,
+        SP_DMA_RAMADDR = 0x04040004,
+        SP_DMA_RDLEN   = 0x04040008,
+        SP_DMA_WRLEN   = 0x0404000C,
+        SP_STATUS      = 0x04040010,
+        SP_DMA_FULL    = 0x04040014,
+        SP_DMA_BUSY    = 0x04040018,
+        SP_SEMAPHORE   = 0x0404001C,
+        SP_PC          = 0x04080000,
     };
 };
 
-struct RSP_DMA_SPADDR {
+struct SP_DMA_SPADDR {
     enum class MEM_BANK : bool {
         DMEM = 0,
         IMEM = 1,
@@ -32,27 +32,27 @@ struct RSP_DMA_SPADDR {
     uint32_t              : 19;
 };
 
-struct RSP_DMA_RAMADDR {
+struct SP_DMA_RAMADDR {
     uint32_t               : 3;
     uint32_t dramAddr_23_3 : 21;
     uint32_t               : 8;
 };
 
-struct RSP_DMA_RDLEN {
+struct SP_DMA_RDLEN {
     uint32_t rdlen     : 12;
     uint32_t count     : 8;
     uint32_t           : 3;
     uint32_t skip_11_3 : 9;
 };
 
-struct RSP_DMA_WRLEN {
+struct SP_DMA_WRLEN {
     uint32_t wrlen     : 12;
     uint32_t count     : 8;
     uint32_t           : 3;
     uint32_t skip_11_3 : 9;
 };
 
-struct RSP_STATUS {
+struct SP_STATUS {
     uint32_t halted   : 1;
     uint32_t broke    : 1;
     uint32_t dmaBusy  : 1;
@@ -100,22 +100,22 @@ struct RSP_STATUS {
     };
 };
 
-struct RSP_DMA_FULL {
+struct SP_DMA_FULL {
     uint32_t dmaFull : 1;
     uint32_t         : 31;
 };
 
-struct RSP_DMA_BUSY {
+struct SP_DMA_BUSY {
     uint32_t dmaBusy : 1;
     uint32_t         : 31;
 };
 
-struct RSP_SEMAPHORE {
+struct SP_SEMAPHORE {
     uint32_t semaphore : 1;
     uint32_t           : 31;
 };
 
-struct RSP_PC {
+struct SP_PC {
     uint32_t         : 2;
     uint32_t pc_11_2 : 10;
     uint32_t         : 20;

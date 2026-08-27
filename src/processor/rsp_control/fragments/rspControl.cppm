@@ -15,22 +15,22 @@ enum class RSP_DMA_DIRECTION : bool {
 };
 
 enum class RSP_CP0_REGS : uint8_t {
-    RSP_DMA_SPADDR    = 0,
-    RSP_DMA_RAMADDR   = 1,
-    RSP_DMA_RDLEN     = 2,
-    RSP_DMA_WRLEN     = 3,
-    RSP_STATUS        = 4,
-    RSP_DMA_FULL      = 5,
-    RSP_DMA_BUSY      = 6,
-    RSP_SEMAPHORE     = 7,
-    RDP_CMD_START     = 8,
-    RDP_CMD_END       = 9,
-    RDP_CMD_CURRENT   = 10,
-    RDP_CMD_STATUS    = 11,
-    RDP_CMD_CLOCK     = 12,
-    RDP_CMD_BUF_BUSY  = 13,
-    RDP_CMD_PIPE_BUSY = 14,
-    RDP_CMD_TMEM_BUSY = 15,
+    SP_DMA_SPADDR  = 0,
+    SP_DMA_RAMADDR = 1,
+    SP_DMA_RDLEN   = 2,
+    SP_DMA_WRLEN   = 3,
+    SP_STATUS      = 4,
+    SP_DMA_FULL    = 5,
+    SP_DMA_BUSY    = 6,
+    SP_SEMAPHORE   = 7,
+    DPC_START      = 8,
+    DPC_END        = 9,
+    DPC_CURRENT    = 10,
+    DPC_STATUS     = 11,
+    DPC_CLOCK      = 12,
+    DPC_BUF_BUSY   = 13,
+    DPC_PIPE_BUSY  = 14,
+    DPC_TMEM_BUSY  = 15,
 };
 
 constexpr auto RSP_MEM_BASE = 0x04000000u;
@@ -137,24 +137,24 @@ auto Control::dmaMemcpy(uint32_t dst, uint32_t src, std::size_t len, uint8_t cou
 auto Control::readRegister(std::size_t index) -> uint32_t {
     auto readReg = [this](uint32_t index) -> uint32_t {
         switch (static_cast<RSP_CP0_REGS>(index)) {
-            case RSP_CP0_REGS::RSP_DMA_SPADDR:
+            case RSP_CP0_REGS::SP_DMA_SPADDR:
                 return m_rspAddr;
-            case RSP_CP0_REGS::RSP_DMA_RAMADDR:
+            case RSP_CP0_REGS::SP_DMA_RAMADDR:
                 return m_ramAddr;
-            case RSP_CP0_REGS::RSP_DMA_RDLEN:
-                return std::bit_cast<uint32_t>(RSP_DMA_RDLEN{
+            case RSP_CP0_REGS::SP_DMA_RDLEN:
+                return std::bit_cast<uint32_t>(SP_DMA_RDLEN{
                     .rdlen     = 0xFF8,
                     .count     = 0,
                     .skip_11_3 = 0, // TODO
                 });
-            case RSP_CP0_REGS::RSP_DMA_WRLEN:
-                return std::bit_cast<uint32_t>(RSP_DMA_WRLEN{
+            case RSP_CP0_REGS::SP_DMA_WRLEN:
+                return std::bit_cast<uint32_t>(SP_DMA_WRLEN{
                     .wrlen     = 0xFF8,
                     .count     = 0,
                     .skip_11_3 = 0, // TODO
                 });
-            case RSP_CP0_REGS::RSP_STATUS:
-                return std::bit_cast<uint32_t>(RSP_STATUS{
+            case RSP_CP0_REGS::SP_STATUS:
+                return std::bit_cast<uint32_t>(SP_STATUS{
                     .halted   = getHalt(),
                     .broke    = getBroke(),
                     .dmaBusy  = false,
@@ -172,15 +172,27 @@ auto Control::readRegister(std::size_t index) -> uint32_t {
                     .sig7     = getSignal(7),
                 });
 
-            case RSP_CP0_REGS::RSP_DMA_FULL:
+            case RSP_CP0_REGS::SP_DMA_FULL:
                 return 0;
-            case RSP_CP0_REGS::RSP_DMA_BUSY:
+            case RSP_CP0_REGS::SP_DMA_BUSY:
                 return 0;
-            case RSP_CP0_REGS::RSP_SEMAPHORE: {
+            case RSP_CP0_REGS::SP_SEMAPHORE: {
                 const auto old = m_semaphore;
                 m_semaphore    = 1;
                 return old;
             }
+            case RSP_CP0_REGS::DPC_START: [[fallthrough]];
+            case RSP_CP0_REGS::DPC_END: [[fallthrough]];
+            case RSP_CP0_REGS::DPC_CURRENT: [[fallthrough]];
+            case RSP_CP0_REGS::DPC_STATUS: [[fallthrough]];
+            case RSP_CP0_REGS::DPC_CLOCK: [[fallthrough]];
+            case RSP_CP0_REGS::DPC_BUF_BUSY: [[fallthrough]];
+            case RSP_CP0_REGS::DPC_PIPE_BUSY: [[fallthrough]];
+            case RSP_CP0_REGS::DPC_TMEM_BUSY:
+                IF_LOG_ENABLED(m_logger) {
+                    m_logger->log<Level::HIGH, Sev::WARNING, Sys::RSP_REG>("Ignoring read from RDP register {}", index);
+                }
+                return 0;
             default:
                 throw Util::Error("Invalid RSP control register index {}", index);
         }
@@ -208,25 +220,25 @@ auto Control::writeRegister(std::size_t index, uint32_t data) -> void {
     }
 
     switch (static_cast<RSP_CP0_REGS>(index)) {
-        case RSP_CP0_REGS::RSP_DMA_SPADDR: {
-            auto spAddr = std::bit_cast<RSP_DMA_SPADDR>(data);
+        case RSP_CP0_REGS::SP_DMA_SPADDR: {
+            auto spAddr = std::bit_cast<SP_DMA_SPADDR>(data);
             m_rspAddr   = (spAddr.memBank << 12) | (spAddr.memAddr_11_3 << 3);
             return;
         }
-        case RSP_CP0_REGS::RSP_DMA_RAMADDR: m_ramAddr = std::bit_cast<RSP_DMA_RAMADDR>(data).dramAddr_23_3 << 3; return;
-        case RSP_CP0_REGS::RSP_DMA_RDLEN: {
-            auto rdlen = std::bit_cast<RSP_DMA_RDLEN>(data);
+        case RSP_CP0_REGS::SP_DMA_RAMADDR: m_ramAddr = std::bit_cast<SP_DMA_RAMADDR>(data).dramAddr_23_3 << 3; return;
+        case RSP_CP0_REGS::SP_DMA_RDLEN: {
+            auto rdlen = std::bit_cast<SP_DMA_RDLEN>(data);
             dmaMemcpy<RSP_DMA_DIRECTION::FROM_RDRAM>(m_rspAddr + RSP_MEM_BASE, m_ramAddr, rdlen.rdlen, rdlen.count, rdlen.skip_11_3 << 3);
             patchRspBootAntiPiracyCheck();
             break;
         }
-        case RSP_CP0_REGS::RSP_DMA_WRLEN: {
-            auto wrlen = std::bit_cast<RSP_DMA_WRLEN>(data);
+        case RSP_CP0_REGS::SP_DMA_WRLEN: {
+            auto wrlen = std::bit_cast<SP_DMA_WRLEN>(data);
             dmaMemcpy<RSP_DMA_DIRECTION::TO_RDRAM>(m_rspAddr + RSP_MEM_BASE, m_ramAddr, wrlen.wrlen, wrlen.count, wrlen.skip_11_3 << 3);
             break;
         }
-        case RSP_CP0_REGS::RSP_STATUS: {
-            auto status = std::bit_cast<RSP_STATUS::Write>(data);
+        case RSP_CP0_REGS::SP_STATUS: {
+            auto status = std::bit_cast<SP_STATUS::Write>(data);
             if (status.clrHalt) setHalt(false);
             if (status.setHalt) setHalt(true);
             if (status.clrBroke) clearBroke();
@@ -253,14 +265,26 @@ auto Control::writeRegister(std::size_t index, uint32_t data) -> void {
             if (status.setSig7) setSignal(7, true);
             return;
         }
-        case RSP_CP0_REGS::RSP_DMA_FULL: [[fallthrough]];
-        case RSP_CP0_REGS::RSP_DMA_BUSY:
+        case RSP_CP0_REGS::SP_DMA_FULL: [[fallthrough]];
+        case RSP_CP0_REGS::SP_DMA_BUSY:
             IF_LOG_ENABLED(m_logger) {
                 m_logger->log<Level::HIGH, Sev::WARNING, Sys::RSP_REG>("Ignoring write to read-only register {}", index);
             }
             break;
-        case RSP_CP0_REGS::RSP_SEMAPHORE:
-            m_semaphore = std::bit_cast<RSP_SEMAPHORE>(data).semaphore;
+        case RSP_CP0_REGS::SP_SEMAPHORE:
+            m_semaphore = std::bit_cast<SP_SEMAPHORE>(data).semaphore;
+            return;
+        case RSP_CP0_REGS::DPC_START: [[fallthrough]];
+        case RSP_CP0_REGS::DPC_END: [[fallthrough]];
+        case RSP_CP0_REGS::DPC_CURRENT: [[fallthrough]];
+        case RSP_CP0_REGS::DPC_STATUS: [[fallthrough]];
+        case RSP_CP0_REGS::DPC_CLOCK: [[fallthrough]];
+        case RSP_CP0_REGS::DPC_BUF_BUSY: [[fallthrough]];
+        case RSP_CP0_REGS::DPC_PIPE_BUSY: [[fallthrough]];
+        case RSP_CP0_REGS::DPC_TMEM_BUSY:
+            IF_LOG_ENABLED(m_logger) {
+                m_logger->log<Level::HIGH, Sev::WARNING, Sys::RSP_REG>("Ignoring write to RDP register {}", index);
+            }
             return;
         default:
             throw Util::Error("No RSP register found for index {}", index);

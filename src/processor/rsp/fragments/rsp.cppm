@@ -171,7 +171,7 @@ auto RSP::runInstruction() -> void {
         // Vector instructions
         case UnifiedOpcode::OP_VADDC: m_exec.executeBivariate<P::ACCUM_ZERO_EXT>(data, Func::ADD, [](uint32_t sum) { return sum >> 16; }); break;
         case UnifiedOpcode::OP_VSUBC: m_exec.executeBivariate<P::ACCUM_ZERO_EXT>(data, Func::SUB, [](uint32_t sum) { return sum != 0; }); break;
-        case UnifiedOpcode::OP_VSUB: m_exec.executeBivariate<P::ACCUM_ZERO_EXT, std::nullptr_t, std::nullptr_t, P::CARRY_IN>(data, Func::SUB); break;
+        case UnifiedOpcode::OP_VSUB: m_exec.executeBivariateWithCarryIn<P::ACCUM_ZERO_EXT>(data, Func::SUB); break;
         case UnifiedOpcode::OP_LQV: {
             const auto ops     = std::bit_cast<TypeVI>(data);
             const auto vaddr   = RSP_DMEM_BASE + Util::signExt32<int16_t>(ops.imm) + m_gprs.readGpr(ops.rs);
@@ -194,12 +194,6 @@ auto RSP::runInstruction() -> void {
         // Coprocessor instructions
         case UnifiedOpcode::OP_MFCz: {
             auto cp = (data >> 26) & 0b11;
-            if (cp == 2) {
-                IF_LOG_ENABLED(m_logger) {
-                    m_logger->log<Level::HIGH, Sev::WARNING, Sys::RSP>("ignored MFC2 instruction {}", inst);
-                }
-                break;
-            }
             if (cp != 0) throw Util::Error("Unsupported instruction on coprocessor {}", cp);
             auto ops = std::bit_cast<TypeR>(data);
             m_gprs.writeGpr(ops.rt, m_control->readRegister(ops.rd));

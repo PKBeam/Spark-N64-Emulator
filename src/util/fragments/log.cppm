@@ -35,6 +35,7 @@ class Logger {
         RDRAM_REG,
         RI,
         RSP_REG,
+        RDP_REG,
         SI,
         VI,
     };
