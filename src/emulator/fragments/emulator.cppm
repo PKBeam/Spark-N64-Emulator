@@ -82,12 +82,14 @@ constexpr Emulator::Emulator(Config config) : m_config(config) {
     m_memory        = std::malloc(m_config.memorySize);
     m_memoryManager = new Memory::Memory(m_logger, reinterpret_cast<std::byte*>(m_memory));
 
-    m_cp0        = new CP0::CP0(m_logger);
-    m_rspControl = new RSP::Control(m_logger, reinterpret_cast<std::byte*>(m_memory));
-    m_cpu        = new CPU::CPU(m_logger, m_memoryManager, m_cp0);
-    m_rsp        = new RSP::RSP(m_logger, m_memoryManager, m_rspControl);
+    m_cp0           = new CP0::CP0(m_logger);
+    m_mipsInterface = new Interfaces::MipsInterface(m_logger, m_cp0);
 
-    m_mipsInterface       = new Interfaces::MipsInterface(m_logger, m_cp0);
+    m_cpu = new CPU::CPU(m_logger, m_memoryManager, m_cp0);
+
+    m_rspControl = new RSP::Control(m_logger, reinterpret_cast<std::byte*>(m_memory));
+    m_rsp        = new RSP::RSP(m_logger, m_memoryManager, m_rspControl, m_mipsInterface);
+
     m_rdramInterface      = new Interfaces::RdramInterface(m_logger);
     m_videoInterface      = new Interfaces::VideoInterface(m_logger, m_mipsInterface);
     m_audioInterface      = new Interfaces::AudioInterface(m_logger, m_mipsInterface);
@@ -149,9 +151,14 @@ constexpr auto Emulator::loadRom(std::filesystem::path path) -> void {
             // }
             m_cpu->checkInterrupts();
             m_cpu->runInstruction();
-            m_rsp->runInstruction();
+            try {
+                m_rsp->runInstruction();
+            } catch (const Util::Error& e) {
+                m_rsp->dumpIMem("rsp_imem.txt");
+                throw;
+            }
         }
-    } catch (const std::runtime_error& e) {
+    } catch (const Util::Error& e) {
         if (m_logger) {
             m_logger->flush();
         }

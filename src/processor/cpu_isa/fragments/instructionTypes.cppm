@@ -40,6 +40,33 @@ struct TypeR {
 };
 } // namespace CPU
 
+
+namespace FPU {
+struct TypeI {
+    uint32_t imm [[=^^OpFormat<FmtStr("{:#x}")>]]  : 16;
+    uint32_t ft  [[=^^OpFormat<FmtStr("$f{}")>]]   : 5;
+    uint32_t rs  [[=^^OpFormat<FmtNone, CPU_REG>]] : 5;
+    uint32_t op                                    : 6;
+};
+
+struct TypeR {
+    uint32_t func                                      : 6;
+    uint32_t fd   [[=^^OpFormat<FmtStr("$f{}")>]]      : 5;
+    uint32_t fs   [[=^^OpFormat<FmtStr("$f{}")>]]      : 5;
+    uint32_t ft   [[=^^OpFormat<FmtStr("$f{}")>]]      : 5;
+    uint32_t fmt  [[=^^OpFormat<FmtNone, CP1_FORMAT>]] : 5;
+    uint32_t op                                        : 6;
+};
+
+struct TypeO {
+    uint32_t                                        : 11;
+    uint32_t fs   [[=^^OpFormat<FmtStr("$f{}")>]]   : 5;
+    uint32_t rt   [[=^^OpFormat<FmtNone, CPU_REG>]] : 5;
+    uint32_t subOp                                  : 5;
+    uint32_t op                                     : 6;
+};
+} // namespace FPU
+
 namespace RSP {
 struct TypeVI {
     uint32_t imm    [[=^^OpFormat<FmtStr("{:#x}")>]]   : 7;
@@ -79,33 +106,5 @@ struct TypeVM {
     uint32_t op                                        : 6;
 };
 } // namespace RSP
-
-namespace FPU {
-struct TypeI {
-    uint32_t off  : 16;
-    uint32_t ft   : 5;
-    uint32_t base : 5;
-    uint32_t op   : 6;
-};
-
-struct TypeOther {
-    uint32_t zero_ : 11;
-    uint32_t fs    : 5;
-    uint32_t rt    : 5;
-    uint32_t sub   : 5;
-    uint32_t op    : 6;
-};
-
-struct TypeR {
-    uint32_t func : 6;
-    uint32_t fd   : 5;
-    uint32_t fs   : 5;
-    uint32_t ft   : 5;
-    uint32_t fmt  : 5;
-    uint32_t op   : 6;
-};
-// clang-format on
-
-} // namespace FPU
 
 } // namespace ISA

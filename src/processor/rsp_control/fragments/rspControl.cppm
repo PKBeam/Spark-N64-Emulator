@@ -347,13 +347,13 @@ auto Control::getIntBreak() -> bool {
 
 auto Control::patchRspBootAntiPiracyCheck() -> void {
     // Patch CIC-6105 RSP boot anti piracy check
-    if (!m_cic6105rspBootPatched && m_rspAddr == 0x4001000) {
+    if (!m_cic6105rspBootPatched && m_rspAddr == 0x1000) {
         auto firstInst = *reinterpret_cast<uint32_t*>(m_memory + m_ramAddr);
         Util::byteswapIfLittleEndian(firstInst);
         if (firstInst == 0x08000411 /* J  0x411 */) {
             auto patchInst = 0x08000025; // J  0x25
             Util::byteswapIfLittleEndian(patchInst);
-            *reinterpret_cast<uint32_t*>(m_memory + m_rspAddr) = patchInst;
+            *reinterpret_cast<uint32_t*>(m_memory + RSP_MEM_BASE + m_rspAddr) = patchInst;
             IF_LOG_ENABLED(m_logger) {
                 m_logger->log<Level::MAX, Sev::WARNING, Sys::RSP_REG>("Patched out the CIC-6105 anti-piracy check in RSP boot code");
             }

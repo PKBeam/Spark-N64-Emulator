@@ -243,18 +243,18 @@ auto InstructionExecutor<System>::executeDivide(uint32_t inst) -> void {
 template <Sys System>
 template <Param::MemoryType Type, std::integral T>
 auto InstructionExecutor<System>::executeMemoryOperation(uint32_t inst) -> void {
-    auto ops   = std::bit_cast<ISA::CPU::TypeI>(inst);
-    auto vaddr = Util::signExt32<int16_t>(ops.imm) + m_regs->readGpr(ops.rs);
+    auto ops  = std::bit_cast<ISA::CPU::TypeI>(inst);
+    auto addr = Util::signExt32<int16_t>(ops.imm) + m_regs->readGpr(ops.rs);
     if constexpr (System == Sys::RSP) {
-        vaddr &= 0xFFF;
-        vaddr += Memory::rangeOf(Memory::PhysSeg::RSP_DMEM).lower;
+        addr &= 0xFFF;
+        addr += RSP_DMEM_BASE;
     }
     if constexpr (Type == Param::MemoryType::LOAD) {
         T result{};
         if constexpr (System == Sys::RSP) {
-            result = m_memory->readPhysical<T>(RSP_DMEM_BASE + vaddr);
+            result = m_memory->readPhysical<T>(addr);
         } else {
-            result = m_memory->read<T>(vaddr);
+            result = m_memory->read<T>(addr);
         }
         if constexpr (sizeof(T) == 8) {
             m_regs->writeGpr(ops.rt, result);
@@ -266,9 +266,9 @@ auto InstructionExecutor<System>::executeMemoryOperation(uint32_t inst) -> void 
         }
     } else {
         if constexpr (System == Sys::RSP) {
-            m_memory->writePhysical<T>(vaddr, m_regs->template readGpr<T>(ops.rt));
+            m_memory->writePhysical<T>(addr, m_regs->template readGpr<T>(ops.rt));
         } else {
-            m_memory->write<T>(vaddr, m_regs->template readGpr<T>(ops.rt));
+            m_memory->write<T>(addr, m_regs->template readGpr<T>(ops.rt));
         }
     }
 }

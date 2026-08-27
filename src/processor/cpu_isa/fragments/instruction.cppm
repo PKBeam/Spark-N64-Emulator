@@ -40,36 +40,28 @@ constexpr auto opcodeFor(uint32_t bits) -> Opcodes::UnifiedOpcode {
             unifiedOpcode = UnifiedOpcodeBase::REGIMM_rt_BASE + instR.rt;
             break;
 
-        case OPCODE::OP_COP0:
-            if ((bits >> 25) & 1) {
-                unifiedOpcode = UnifiedOpcodeBase::CP0_BASE + (bits & 0x01FFFFFF);
-                break;
-            }
-            [[fallthrough]];
-
-        case OPCODE::OP_COP1: {
-            if ((bits >> 25) & 1) { // COPz
-                unifiedOpcode = static_cast<uint32_t>(UnifiedOpcode::OP_COPz);
-                break;
-            }
-            const auto rsOpcode = Util::scopedEnumCast<COPz_rs>(instR.rs);
-            if (rsOpcode == COPz_rs::OP_BC) {
-                unifiedOpcode = UnifiedOpcodeBase::COPz_rt_BASE + instR.rt;
-                break;
+        case OPCODE::OP_COP0: [[fallthrough]];
+        case OPCODE::OP_COP1: [[fallthrough]];
+        case OPCODE::OP_COP2: {
+            if (instR.rs < 16) {
+                if (Util::scopedEnumCast<COPz_rs>(instR.rs) == COPz_rs::OP_BC) {
+                    unifiedOpcode = UnifiedOpcodeBase::COPz_rt_BASE + instR.rt;
+                } else {
+                    unifiedOpcode = UnifiedOpcodeBase::COPz_rs_BASE + instR.rs;
+                }
             } else {
-                unifiedOpcode = UnifiedOpcodeBase::COPz_rs_BASE + instR.rs;
-                break;
+                if (opcode == OPCODE::OP_COP0) {
+                    unifiedOpcode = UnifiedOpcodeBase::CP0_BASE + instR.func;
+                } else if (opcode == OPCODE::OP_COP1) {
+                    unifiedOpcode = UnifiedOpcodeBase::CP1_BASE + instR.func;
+                } else {
+                    unifiedOpcode = UnifiedOpcodeBase::CP2_BASE + instR.func;
+                }
             }
+            break;
         }
         case OPCODE::OP_LWC2: unifiedOpcode = UnifiedOpcodeBase::COP2_LOAD_BASE + instR.rd; break;
         case OPCODE::OP_SWC2: unifiedOpcode = UnifiedOpcodeBase::COP2_STORE_BASE + instR.rd; break;
-        case OPCODE::OP_COP2:
-            if ((bits >> 25) & 1) { // COPz
-                unifiedOpcode = UnifiedOpcodeBase::COP2_VECTOR_BASE + static_cast<uint32_t>(instR.func);
-            } else {
-                unifiedOpcode = UnifiedOpcodeBase::COPz_rs_BASE + instR.rs;
-            }
-            break;
         default:
             unifiedOpcode = UnifiedOpcodeBase::OPCODE_BASE + static_cast<uint32_t>(opcode);
             break;
@@ -84,7 +76,8 @@ constexpr auto formatOperands(Instruction inst) -> std::vector<std::string> {
     template for (constexpr auto e : Util::staticEnumeratorsOf(^^Opcodes::UnifiedOpcode)) {
         if (inst.opcode == std::meta::extract<Opcodes::UnifiedOpcode>(e)) {
             if constexpr (constexpr auto anns = Util::staticAnnotationsOf(e); !anns.empty()) {
-                constexpr auto operandType = Util::dealiasedTypeOf(anns.front());
+                constexpr auto aliasedOperandType = std::meta::extract<std::meta::info>(anns.front());
+                constexpr auto operandType        = std::meta::dealias(aliasedOperandType);
 
                 constexpr static auto operands = std::define_static_array(
                     std::meta::template_arguments_of(operandType) | std::views::drop(1));
@@ -97,12 +90,12 @@ constexpr auto formatOperands(Instruction inst) -> std::vector<std::string> {
 
                     const auto instData = std::bit_cast<typename[:operandType:] ::InstType>(inst.data);
 
-                    // TODO CP0 registers have different names
+                    // CPz registers have different names
                     constexpr auto opName = std::meta::identifier_of([:op:]);
-                    if constexpr (fmtType == (^^ISA::CPU_REG) && opName == "rd") {
-                        if (inst.opcode == UnifiedOpcode::OP_MTCz || inst.opcode == UnifiedOpcode::OP_MFCz) {
-                            const uint32_t opValue = instData.[:[:op:]:];
-                            const auto     opStr   = std::format("$r{}", opValue);
+                    if constexpr (std::meta::display_string_of(aliasedOperandType).contains("CPU_CPMove")) {
+                        const uint32_t opValue = instData.[:[:op:]:];
+                        if (opName == "rd") {
+                            const auto opStr = std::format("${}", opValue);
                             result.push_back(opStr);
                             continue;
                         }
@@ -129,7 +122,7 @@ constexpr auto formatInstruction(const Instruction& inst) -> std::string {
 
     auto instStr = std::string{};
 
-    // print the opcode
+    // format the opcode
     auto opcode = Util::enumName(inst.opcode);
     if (opcode.has_value()) {
         // insert coprocessor number
@@ -137,12 +130,18 @@ constexpr auto formatInstruction(const Instruction& inst) -> std::string {
             auto cpIndex = (inst.data >> 26) & 0b11;
             opcode->replace(it, 1, std::format("{}", cpIndex));
         }
+        // format CP1 instructions
+        if (auto it = opcode->find("FMT"); it != opcode->npos) {
+            auto fmtIndex = (inst.data >> 21) & 0b11111;
+            opcode->replace(it, 3, std::format("{}", static_cast<CP1_FORMAT>(fmtIndex)));
+            std::replace(opcode->begin(), opcode->end(), '_', '.');
+        }
         instStr += std::format("{:8}", std::string_view(*opcode).substr(3));
     } else {
         instStr += std::format("UNKNOWN INSTRUCTION (0x{:08X})", inst.data);
     }
 
-    // print the operands
+    // format the operands
     auto ops = Impl::formatOperands(inst);
     for (auto i = 0uz; i < ops.size(); ++i) {
         const auto opIsVectorElem           = (ops[i].front() == '[' && ops[i].back() == ']');

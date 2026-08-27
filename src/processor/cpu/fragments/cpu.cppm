@@ -31,6 +31,8 @@ class CPU {
 
     auto emulateInitialBoot() -> void;
 
+    auto dumpIMem(std::filesystem::path file) -> void;
+
   private:
     Registers<Sys::CPU>                  m_regs;
     std::shared_ptr<Util::Logger>        m_logger;
@@ -216,37 +218,57 @@ auto CPU::runInstruction() -> void {
             // clang-format on
 
         // Coprocessor instructions
+        case UnifiedOpcode::OP_LWC1: [[fallthrough]];
+        case UnifiedOpcode::OP_SWC1:
+            IF_LOG_ENABLED(m_logger) {
+                m_logger->log<Level::HIGH, Sev::WARNING, Sys::CPU>("Ignored CP1 instruction {}", inst);
+            }
+            break;
         case UnifiedOpcode::OP_MFCz: {
-            auto cp = (data >> 26) & 0b11;
-            if (cp != 0) throw Util::Error("Unsupported instruction on coprocessor {}", cp);
-            auto ops = std::bit_cast<TypeR>(data);
-            m_regs.writeGpr(ops.rt, m_cp0->readReg(ops.rd));
+            const auto cp  = (data >> 26) & 0b11;
+            const auto ops = std::bit_cast<TypeR>(data);
+            switch (cp) {
+                case 0: m_regs.writeGpr(ops.rt, m_cp0->readReg(ops.rd)); break;
+                case 1:
+                    IF_LOG_ENABLED(m_logger) {
+                        m_logger->log<Level::HIGH, Sev::WARNING, Sys::CPU>("Ignored CP1 instruction {}", inst);
+                    }
+                    break;
+                default: throw Util::Error("Unsupported instruction on coprocessor {}: {}", cp, inst);
+            }
             break;
         }
         case UnifiedOpcode::OP_MTCz: {
-            auto cp = (data >> 26) & 0b11;
-            if (cp != 0) throw Util::Error("Unsupported instruction on coprocessor {}", cp);
-            auto ops = std::bit_cast<TypeR>(data);
-            m_cp0->writeReg(ops.rd, m_regs.readGpr(ops.rt));
+            const auto cp  = (data >> 26) & 0b11;
+            const auto ops = std::bit_cast<TypeR>(data);
+            switch (cp) {
+                case 0: m_cp0->writeReg(ops.rd, m_regs.readGpr(ops.rt)); break;
+                case 1:
+                    IF_LOG_ENABLED(m_logger) {
+                        m_logger->log<Level::HIGH, Sev::WARNING, Sys::CPU>("Ignored CP1 instruction {}", inst);
+                    }
+                    break;
+                default: throw Util::Error("Unsupported instruction on coprocessor {}: {}", cp, inst);
+            }
             break;
         }
         case UnifiedOpcode::OP_CFCz: {
-            auto cp  = (data >> 26) & 0b11;
-            auto ops = std::bit_cast<TypeR>(data);
+            const auto cp  = (data >> 26) & 0b11;
+            const auto ops = std::bit_cast<TypeR>(data);
             if (cp == 1 && ops.rd == 31) {
                 m_regs.writeGpr(ops.rt, 0);
                 break;
             }
-            throw Util::Error("Unsupported instruction on coprocessor {}", cp);
+            throw Util::Error("Unsupported instruction on coprocessor {}: {}", cp, inst);
         }
         case UnifiedOpcode::OP_CTCz: {
-            auto cp  = (data >> 26) & 0b11;
-            auto ops = std::bit_cast<TypeR>(data);
+            const auto cp  = (data >> 26) & 0b11;
+            const auto ops = std::bit_cast<TypeR>(data);
             if (cp == 1 && ops.rd == 31) {
                 m_regs.writeGpr(ops.rt, 0);
                 break;
             }
-            throw Util::Error("Unsupported instruction on coprocessor {}", cp);
+            throw Util::Error("Unsupported instruction on coprocessor {}: {}", cp, inst);
         }
 
         // Misc. instructions
@@ -272,12 +294,23 @@ auto CPU::runInstruction() -> void {
             break;
         }
         default:
+            dumpIMem("cpu_imem.txt");
             throw Util::Error("Unimplemented instruction @ PC {:#08x}: {} ({:#08x})", m_regs.readPc(), inst, data);
     }
 
     if (op != UnifiedOpcode::OP_ERET) {
         m_regs.advancePc();
     }
+}
+
+auto CPU::dumpIMem(std::filesystem::path file) -> void {
+    auto romDumper = Util::Logger(file);
+    romDumper.setLevel(Level::MAX);
+    for (auto addr = 0u; addr < Memory::rangeOf(Memory::PhysSeg::RDRAM).upper; addr += 4) {
+        const auto word = m_memory->readPhysical<uint32_t>(addr);
+        romDumper.print("{:#010x}: {}", Memory::rangeOf(Memory::VirtSeg::KSEG0).lower + addr, ISA::Instruction(word));
+    }
+    romDumper.flush();
 }
 
 } // namespace CPU

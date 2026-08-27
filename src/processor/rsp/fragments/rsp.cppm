@@ -8,6 +8,8 @@ import std;
 import CP0;
 import CPU;
 import ISA;
+import Interfaces;
+import InterfaceTypes;
 import Memory;
 import RspControl;
 import Util;
@@ -24,8 +26,8 @@ export namespace RSP {
 
 class RSP {
   public:
-    RSP(std::shared_ptr<Util::Logger> logger, Memory::Memory* memory, Control* control)
-        : m_logger(logger), m_memory(memory), m_gprs(logger), m_vprs(logger), m_control(control), m_exec(m_logger, &m_gprs, &m_vprs, m_memory) {};
+    RSP(std::shared_ptr<Util::Logger> logger, Memory::Memory* memory, Control* control, Interfaces::MipsInterface* mipsInterface)
+        : m_logger(logger), m_memory(memory), m_gprs(logger), m_vprs(logger), m_control(control), m_exec(m_logger, &m_gprs, &m_vprs, m_memory), m_mipsInterface(mipsInterface) {};
 
     auto runInstruction() -> void;
 
@@ -41,6 +43,7 @@ class RSP {
     Control*                      m_control{};
     ::RSP::InstructionExecutor    m_exec;
     std::optional<VirtualAddr>    m_delaySlotPc;
+    Interfaces::MipsInterface*    m_mipsInterface{};
 };
 
 auto RSP::runInstruction() -> void {
@@ -183,6 +186,16 @@ auto RSP::runInstruction() -> void {
             m_vprs.writeVpr(ops.vt, result);
             break;
         }
+        case UnifiedOpcode::OP_SQV: {
+            const auto ops     = std::bit_cast<TypeVI>(data);
+            const auto vaddr   = RSP_DMEM_BASE + Util::signExt32<int16_t>(ops.imm) + m_gprs.readGpr(ops.rs);
+            auto       result  = m_vprs.readVpr(ops.vt);
+            const auto vprData = reinterpret_cast<std::byte*>(result.data()) + ops.vtElem;
+            for (auto byte = 16u; byte > (vaddr % 16) + ops.vtElem; --byte) {
+                m_memory->writePhysical<uint8_t>(vaddr + (16 - byte), static_cast<uint8_t>(vprData[16 - byte]));
+            }
+            break;
+        }
 
         case UnifiedOpcode::OP_VAND: m_exec.executeBivariate<P::ACCUM_ZERO_EXT>(data, Func::AND); break;
         case UnifiedOpcode::OP_VNAND: m_exec.executeBivariate<P::ACCUM_ZERO_EXT>(data, Func::NAND); break;
@@ -218,8 +231,14 @@ auto RSP::runInstruction() -> void {
                 m_logger->log<Level::HIGH, Sev::WARNING, Sys::RSP>("ignored instruction {}", inst);
             }
             break;
+
+        case UnifiedOpcode::OP_BREAK:
+            if (m_control->getIntBreak()) {
+                m_mipsInterface->setInterrupt<^^Interfaces::MI_INTERRUPT::sp>(true);
+            }
+            halt();
+            break;
         default:
-            dumpIMem("rsp_imem.txt");
             throw Util::Error("Unimplemented instruction @ PC {:#08x}: {} ({:#08x})", m_gprs.readPc(), inst, data);
     }
 
@@ -232,8 +251,8 @@ auto RSP::runInstruction() -> void {
 
 auto RSP::halt() -> void {
     // save PC when halting
-    m_control->setPc(m_gprs.readPc());
     m_control->setHalt(true);
+    m_control->setPc(m_gprs.readPc());
 }
 
 auto RSP::dumpIMem(std::filesystem::path file) -> void {

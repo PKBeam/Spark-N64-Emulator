@@ -148,6 +148,13 @@ enum class CP0_REG : uint8_t {
     ERROREPC                = 30,
 };
 
+enum class CP1_FORMAT : uint8_t {
+    S = 16,
+    D = 17,
+    W = 20,
+    L = 21,
+};
+
 } // namespace ISA
 
 template <>
@@ -185,6 +192,18 @@ struct std::formatter<ISA::CP0_REG> {
 
     auto format(const ISA::CP0_REG& reg, std::format_context& ctx) const {
         auto str = Util::enumName(reg).value_or(std::format("{}", static_cast<uint8_t>(reg)));
+        return std::format_to(ctx.out(), "{}", str);
+    }
+};
+
+template <>
+struct std::formatter<ISA::CP1_FORMAT> {
+    constexpr auto parse(std::format_parse_context& ctx) -> std::format_parse_context::iterator {
+        return ctx.begin();
+    }
+
+    auto format(const ISA::CP1_FORMAT& format, std::format_context& ctx) const {
+        auto str = Util::enumName(format).value_or(std::format("FMT{}", static_cast<uint8_t>(format)));
         return std::format_to(ctx.out(), "{}", str);
     }
 };
