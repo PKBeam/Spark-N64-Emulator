@@ -5,6 +5,7 @@ export module Emulator:Emulator;
 import std;
 
 import CP0;
+import CP1;
 import CPU;
 import Rom;
 import RSP;
@@ -42,6 +43,7 @@ export class Emulator {
     void*                  m_memory{};
     CPU::CPU*              m_cpu{};
     CP0::CP0*              m_cp0{};
+    CP1::CP1*              m_cp1{};
     RSP::RSP*              m_rsp{};
     RSP::Control*          m_rspControl{};
     std::optional<RomFile> m_rom;
@@ -83,9 +85,10 @@ constexpr Emulator::Emulator(Config config) : m_config(config) {
     m_memoryManager = new Memory::Memory(m_logger, reinterpret_cast<std::byte*>(m_memory));
 
     m_cp0           = new CP0::CP0(m_logger);
+    m_cp1           = new CP1::CP1(m_logger, m_memoryManager);
     m_mipsInterface = new Interfaces::MipsInterface(m_logger, m_cp0);
 
-    m_cpu = new CPU::CPU(m_logger, m_memoryManager, m_cp0);
+    m_cpu = new CPU::CPU(m_logger, m_memoryManager, m_cp0, m_cp1);
 
     m_rspControl = new RSP::Control(m_logger, reinterpret_cast<std::byte*>(m_memory));
     m_rsp        = new RSP::RSP(m_logger, m_memoryManager, m_rspControl, m_mipsInterface);
@@ -110,6 +113,7 @@ constexpr Emulator::Emulator(Config config) : m_config(config) {
 Emulator::~Emulator() {
     std::free(m_memory);
     delete m_cp0;
+    delete m_cp1;
     delete m_rspControl;
     delete m_cpu;
     delete m_rsp;

@@ -47,6 +47,8 @@ namespace Function {
 constexpr auto NULL    = [](auto a, auto b) { return 0; };
 constexpr auto ADD     = [](auto a, auto b) { return a + b; };
 constexpr auto SUB     = [](auto a, auto b) { return a - b; };
+constexpr auto MUL     = [](auto a, auto b) { return a * b; };
+constexpr auto DIV     = [](auto a, auto b) { return a / b; };
 constexpr auto AND     = [](auto a, auto b) { return a & b; };
 constexpr auto NAND    = [](auto a, auto b) { return ~(a & b); };
 constexpr auto OR      = [](auto a, auto b) { return a | b; };

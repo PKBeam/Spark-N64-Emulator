@@ -23,6 +23,7 @@ class Logger {
         // processors
         CPU,
         CP0,
+        CP1,
         RSP,
 
         // memory

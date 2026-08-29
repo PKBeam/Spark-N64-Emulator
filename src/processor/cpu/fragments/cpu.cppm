@@ -6,6 +6,7 @@ export module CPU:CPU;
 
 import std;
 import CP0;
+import CP1;
 import ISA;
 import Memory;
 import Util;
@@ -19,8 +20,9 @@ class CPU {
   public:
     CPU(std::shared_ptr<Util::Logger> logger,
         Memory::Memory*               memory,
-        CP0::CP0*                     cp0)
-        : m_regs(logger), m_logger(logger), m_memory(memory), m_cp0(cp0), m_exec(logger, &m_regs, m_memory) {
+        CP0::CP0*                     cp0,
+        CP1::CP1*                     cp1)
+        : m_regs(logger), m_logger(logger), m_memory(memory), m_cp0(cp0), m_cp1(cp1), m_exec(logger, &m_regs, m_memory) {
         m_regs.writePc(0xBFC00000);
     }
 
@@ -38,6 +40,7 @@ class CPU {
     std::shared_ptr<Util::Logger>        m_logger;
     Memory::Memory*                      m_memory;
     CP0::CP0*                            m_cp0;
+    CP1::CP1*                            m_cp1;
     ::CPU::InstructionExecutor<Sys::CPU> m_exec;
 
     bool                  m_hasBooted{};
@@ -217,58 +220,88 @@ auto CPU::runInstruction() -> void {
         case UnifiedOpcode::OP_DSRA32: m_exec.executeShift<P::DOUBLE, P::RIGHT, P::ARITHMETIC, P::FIXED,   P::ADD32>(data); break;
             // clang-format on
 
+        // FPU instructions
+        case UnifiedOpcode::OP_CVT_S_FMT: m_cp1->getExec()->executeConvert<float>(data); break;
+        case UnifiedOpcode::OP_CVT_D_FMT: m_cp1->getExec()->executeConvert<double>(data); break;
+        case UnifiedOpcode::OP_CVT_W_FMT: m_cp1->getExec()->executeConvert<uint32_t>(data); break;
+        case UnifiedOpcode::OP_CVT_L_FMT: m_cp1->getExec()->executeConvert<uint64_t>(data); break;
+        case UnifiedOpcode::OP_ADD_FMT: m_cp1->getExec()->executeBivariate(data, Func::ADD); break;
+        case UnifiedOpcode::OP_MUL_FMT: m_cp1->getExec()->executeBivariate(data, Func::MUL); break;
+        case UnifiedOpcode::OP_DIV_FMT: m_cp1->getExec()->executeBivariate(data, Func::DIV); break;
+
         // Coprocessor instructions
-        case UnifiedOpcode::OP_LWC1: [[fallthrough]];
-        case UnifiedOpcode::OP_SWC1:
-            IF_LOG_ENABLED(m_logger) {
-                m_logger->log<Level::HIGH, Sev::WARNING, Sys::CPU>("Ignored CP1 instruction {}", inst);
-            }
+        case UnifiedOpcode::OP_LWC1: {
+            const auto ops = std::bit_cast<ISA::CPU::TypeI>(data);
+            const auto rs  = m_regs.readGpr(ops.rs);
+            m_cp1->getExec()->executeMemoryOperation<Param::LOAD_F, uint32_t>(data, rs);
             break;
+        }
+        case UnifiedOpcode::OP_SWC1: {
+            const auto ops = std::bit_cast<ISA::CPU::TypeI>(data);
+            const auto rs  = m_regs.readGpr(ops.rs);
+            m_cp1->getExec()->executeMemoryOperation<Param::STORE_F, uint32_t>(data, rs);
+            break;
+        }
+        case UnifiedOpcode::OP_LDC1: {
+            const auto ops = std::bit_cast<ISA::CPU::TypeI>(data);
+            const auto rs  = m_regs.readGpr(ops.rs);
+            m_cp1->getExec()->executeMemoryOperation<Param::LOAD_F, uint64_t>(data, rs);
+            break;
+        }
+        case UnifiedOpcode::OP_SDC1: {
+            const auto ops = std::bit_cast<ISA::CPU::TypeI>(data);
+            const auto rs  = m_regs.readGpr(ops.rs);
+            m_cp1->getExec()->executeMemoryOperation<Param::STORE_F, uint64_t>(data, rs);
+            break;
+        }
         case UnifiedOpcode::OP_MFCz: {
-            const auto cp  = (data >> 26) & 0b11;
+            const auto cp  = inst.getCoprocessor();
             const auto ops = std::bit_cast<TypeR>(data);
             switch (cp) {
                 case 0: m_regs.writeGpr(ops.rt, m_cp0->readReg(ops.rd)); break;
-                case 1:
-                    IF_LOG_ENABLED(m_logger) {
-                        m_logger->log<Level::HIGH, Sev::WARNING, Sys::CPU>("Ignored CP1 instruction {}", inst);
-                    }
-                    break;
+                case 1: m_regs.writeGpr(ops.rt, m_cp1->getRegs()->readFgr<uint32_t>(ops.rd)); break;
                 default: throw Util::Error("Unsupported instruction on coprocessor {}: {}", cp, inst);
             }
             break;
         }
         case UnifiedOpcode::OP_MTCz: {
-            const auto cp  = (data >> 26) & 0b11;
+            const auto cp  = inst.getCoprocessor();
             const auto ops = std::bit_cast<TypeR>(data);
             switch (cp) {
                 case 0: m_cp0->writeReg(ops.rd, m_regs.readGpr(ops.rt)); break;
+                case 1: m_cp1->getRegs()->writeFgr<uint32_t>(ops.rd, m_regs.readGpr<uint32_t>(ops.rt)); break;
+                default: throw Util::Error("Unsupported instruction on coprocessor {}: {}", cp, inst);
+            }
+            break;
+        }
+        case UnifiedOpcode::OP_CFCz: {
+            const auto cp  = inst.getCoprocessor();
+            const auto ops = std::bit_cast<TypeR>(data);
+            switch (cp) {
                 case 1:
-                    IF_LOG_ENABLED(m_logger) {
-                        m_logger->log<Level::HIGH, Sev::WARNING, Sys::CPU>("Ignored CP1 instruction {}", inst);
+                    switch (ops.rd) {
+                        case 0: m_regs.writeGpr(ops.rt, std::bit_cast<uint32_t>(m_cp1->getRegs()->readRevision())); break;
+                        case 31: m_regs.writeGpr(ops.rt, std::bit_cast<uint32_t>(m_cp1->getRegs()->readStatus())); break;
+                        default: throw Util::Error("Unsupported CP1 control register {}", ops.rd);
                     }
                     break;
                 default: throw Util::Error("Unsupported instruction on coprocessor {}: {}", cp, inst);
             }
             break;
         }
-        case UnifiedOpcode::OP_CFCz: {
-            const auto cp  = (data >> 26) & 0b11;
-            const auto ops = std::bit_cast<TypeR>(data);
-            if (cp == 1 && ops.rd == 31) {
-                m_regs.writeGpr(ops.rt, 0);
-                break;
-            }
-            throw Util::Error("Unsupported instruction on coprocessor {}: {}", cp, inst);
-        }
         case UnifiedOpcode::OP_CTCz: {
-            const auto cp  = (data >> 26) & 0b11;
+            const auto cp  = inst.getCoprocessor();
             const auto ops = std::bit_cast<TypeR>(data);
-            if (cp == 1 && ops.rd == 31) {
-                m_regs.writeGpr(ops.rt, 0);
-                break;
+            switch (cp) {
+                case 1:
+                    switch (ops.rd) {
+                        case 31: m_cp1->getRegs()->writeStatus(m_regs.readGpr(ops.rt)); break;
+                        default: throw Util::Error("Unsupported CP1 control register {}", ops.rd);
+                    }
+                    break;
+                default: throw Util::Error("Unsupported instruction on coprocessor {}: {}", cp, inst);
             }
-            throw Util::Error("Unsupported instruction on coprocessor {}: {}", cp, inst);
+            break;
         }
 
         // Misc. instructions

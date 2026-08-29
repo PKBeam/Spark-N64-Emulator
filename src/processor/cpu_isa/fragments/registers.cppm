@@ -148,11 +148,58 @@ enum class CP0_REG : uint8_t {
     ERROREPC                = 30,
 };
 
+enum class CP1_ROUND_MODE {
+    RN = 0, // nearest representable
+    RZ = 1, // towards 0
+    RP = 2, // towards +inf
+    RM = 3, // towards -inf
+};
+
+struct CP1Revision {
+    uint32_t rev : 8;
+    uint32_t imp : 8;
+    uint32_t     : 16;
+};
+
+enum class CP1_EXCEPTION : uint8_t {
+    NONE,
+    INEXACT_OP,
+    UNDERFLOW,
+    OVERFLOW,
+    DIVIDE_BY_ZERO,
+    INVALID_OP,
+    UNIMPLEMENTED_OP,
+};
+
+struct CP1Status {
+    uint32_t rm      : 2;
+    uint32_t flagI   : 1;
+    uint32_t flagU   : 1;
+    uint32_t flagO   : 1;
+    uint32_t flagZ   : 1;
+    uint32_t flagV   : 1;
+    uint32_t enableI : 1;
+    uint32_t enableU : 1;
+    uint32_t enableO : 1;
+    uint32_t enableZ : 1;
+    uint32_t enableV : 1;
+    uint32_t causeI  : 1;
+    uint32_t causeU  : 1;
+    uint32_t causeO  : 1;
+    uint32_t causeZ  : 1;
+    uint32_t causeV  : 1;
+    uint32_t causeE  : 1;
+    uint32_t         : 5;
+    uint32_t c       : 1;
+    uint32_t fs      : 1;
+    uint32_t         : 7;
+};
+
 enum class CP1_FORMAT : uint8_t {
-    S = 16,
-    D = 17,
-    W = 20,
-    L = 21,
+    S = 16, // single float
+    D = 17, // double float
+    W = 20, // word fixed
+    L = 21, // long fixed
 };
 
 } // namespace ISA

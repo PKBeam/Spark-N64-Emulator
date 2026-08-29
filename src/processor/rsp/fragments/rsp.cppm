@@ -206,7 +206,7 @@ auto RSP::runInstruction() -> void {
 
         // Coprocessor instructions
         case UnifiedOpcode::OP_MFCz: {
-            auto cp = (data >> 26) & 0b11;
+            auto cp = inst.getCoprocessor();
             if (cp != 0) throw Util::Error("Unsupported instruction on coprocessor {}", cp);
             auto ops = std::bit_cast<TypeR>(data);
             m_gprs.writeGpr(ops.rt, m_control->readRegister(ops.rd));
@@ -214,7 +214,7 @@ auto RSP::runInstruction() -> void {
             break;
         }
         case UnifiedOpcode::OP_MTCz: {
-            auto cp = (data >> 26) & 0b11;
+            auto cp = inst.getCoprocessor();
             if (cp != 0) throw Util::Error("Unsupported instruction on coprocessor {}", cp);
             auto ops = std::bit_cast<TypeR>(data);
             m_control->writeRegister(ops.rd, m_gprs.readGpr(ops.rt));
@@ -239,6 +239,7 @@ auto RSP::runInstruction() -> void {
             halt();
             break;
         default:
+            dumpIMem("rsp_imem.txt");
             throw Util::Error("Unimplemented instruction @ PC {:#08x}: {} ({:#08x})", m_gprs.readPc(), inst, data);
     }
 

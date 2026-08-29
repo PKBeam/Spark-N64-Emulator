@@ -249,26 +249,27 @@ auto InstructionExecutor<System>::executeMemoryOperation(uint32_t inst) -> void 
         addr &= 0xFFF;
         addr += RSP_DMEM_BASE;
     }
+    T data{};
     if constexpr (Type == Param::MemoryType::LOAD) {
-        T result{};
         if constexpr (System == Sys::RSP) {
-            result = m_memory->readPhysical<T>(addr);
+            data = m_memory->readPhysical<T>(addr);
         } else {
-            result = m_memory->read<T>(addr);
+            data = m_memory->read<T>(addr);
         }
         if constexpr (sizeof(T) == 8) {
-            m_regs->writeGpr(ops.rt, result);
+            m_regs->writeGpr(ops.rt, data);
         } else if constexpr (std::is_signed_v<T>) {
             // TODO 64-bit mode
-            m_regs->writeGpr(ops.rt, Util::signExt32(result));
+            m_regs->writeGpr(ops.rt, Util::signExt32(data));
         } else {
-            m_regs->writeGpr(ops.rt, static_cast<uint32_t>(result));
+            m_regs->writeGpr(ops.rt, static_cast<uint32_t>(data));
         }
     } else {
+        data = m_regs->template readGpr<T>(ops.rt);
         if constexpr (System == Sys::RSP) {
-            m_memory->writePhysical<T>(addr, m_regs->template readGpr<T>(ops.rt));
+            m_memory->writePhysical<T>(addr, data);
         } else {
-            m_memory->write<T>(addr, m_regs->template readGpr<T>(ops.rt));
+            m_memory->write<T>(addr, data);
         }
     }
 }

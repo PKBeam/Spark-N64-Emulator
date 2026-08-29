@@ -14,6 +14,10 @@ export {
         uint32_t               data;
 
         constexpr Instruction(uint32_t bits);
+
+        constexpr auto getCoprocessor() const -> uint32_t {
+            return (data >> 26) & 0b11;
+        }
     };
 }
 
@@ -95,8 +99,26 @@ constexpr auto formatOperands(Instruction inst) -> std::vector<std::string> {
                     if constexpr (std::meta::display_string_of(aliasedOperandType).contains("CPU_CPMove")) {
                         const uint32_t opValue = instData.[:[:op:]:];
                         if (opName == "rd") {
-                            const auto opStr = std::format("${}", opValue);
-                            result.push_back(opStr);
+                            if (inst.getCoprocessor() == 1) {
+                                const auto opStr = std::format("$f{}", opValue);
+                                result.push_back(opStr);
+                            } else {
+                                const auto opStr = std::format("${}", opValue);
+                                result.push_back(opStr);
+                            }
+                            continue;
+                        }
+                    }
+                    if constexpr (std::meta::display_string_of(aliasedOperandType).contains("CPU_LoadStore")) {
+                        const uint32_t opValue = instData.[:[:op:]:];
+                        if (opName == "rt") {
+                            if (inst.getCoprocessor() == 1) {
+                                const auto opStr = std::format("$f{}", opValue);
+                                result.push_back(opStr);
+                            } else {
+                                const auto opStr = std::format("${}", opValue);
+                                result.push_back(opStr);
+                            }
                             continue;
                         }
                     }
@@ -127,12 +149,12 @@ constexpr auto formatInstruction(const Instruction& inst) -> std::string {
     if (opcode.has_value()) {
         // insert coprocessor number
         if (auto it = opcode->find("z"); it != opcode->npos) {
-            auto cpIndex = (inst.data >> 26) & 0b11;
+            const auto cpIndex = inst.getCoprocessor();
             opcode->replace(it, 1, std::format("{}", cpIndex));
         }
         // format CP1 instructions
         if (auto it = opcode->find("FMT"); it != opcode->npos) {
-            auto fmtIndex = (inst.data >> 21) & 0b11111;
+            const auto fmtIndex = (inst.data >> 21) & 0b11111;
             opcode->replace(it, 3, std::format("{}", static_cast<CP1_FORMAT>(fmtIndex)));
             std::replace(opcode->begin(), opcode->end(), '_', '.');
         }
