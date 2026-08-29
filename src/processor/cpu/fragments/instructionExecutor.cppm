@@ -39,6 +39,9 @@ class InstructionExecutor {
     template <Param::BranchLink Link, Param::BranchSource Source>
     auto executeJump(uint32_t inst) -> void;
 
+    template <Param::BranchLikelihood Likely = Param::BranchLikelihood::NOT_LIKELY>
+    auto executeBranch(uint32_t inst, bool cond) -> void;
+
     template <Param::BranchLikelihood Likely = Param::BranchLikelihood::NOT_LIKELY, Param::BranchLink Link = Param::BranchLink::NO_LINK, typename Function>
         requires std::same_as<bool, std::invoke_result_t<Function, int32_t, int32_t>>
     auto executeBranch(uint32_t inst, Function&& func) -> void;
@@ -92,6 +95,33 @@ auto InstructionExecutor<System>::executeJump(uint32_t inst) -> void {
 }
 
 template <Sys System>
+template <Param::BranchLikelihood Likely>
+auto InstructionExecutor<System>::executeBranch(uint32_t inst, bool cond) -> void {
+    auto ops = std::bit_cast<ISA::CPU::TypeI>(inst);
+    if (cond) {
+        auto instOffset = Util::signExt32<int16_t>(ops.imm);
+        m_regs->writePcDelayed((m_regs->readPc() + 4) + (instOffset << 2));
+    } else {
+        if constexpr (Likely == Param::BranchLikelihood::LIKELY) {
+            auto nextPc = m_regs->readPc() + 4;
+            m_regs->writePc(nextPc);
+        }
+    }
+}
+
+template <Sys System>
+template <Param::BranchLikelihood Likely, Param::BranchLink Link, typename Function>
+    requires std::same_as<bool, std::invoke_result_t<Function, int32_t, int32_t>>
+auto InstructionExecutor<System>::executeBranch(uint32_t inst, Function&& func) -> void {
+    if constexpr (Link == Param::BranchLink::LINK) {
+        m_regs->template writeGpr<ISA::CPU_REG::ra>(m_regs->readPc() + 8);
+    }
+    auto ops       = std::bit_cast<ISA::CPU::TypeI>(inst);
+    bool condition = func(m_regs->readGpr(ops.rs), m_regs->readGpr(ops.rt));
+    executeBranch<Likely>(inst, condition);
+}
+
+template <Sys System>
 template <Param::BranchLikelihood Likely, typename Function>
     requires std::same_as<bool, std::invoke_result_t<Function, int32_t, int32_t>>
 auto InstructionExecutor<System>::executeBranchAndLink(uint32_t inst, Function&& func) -> void {
@@ -103,39 +133,6 @@ template <Param::ImmediateExtend I, std::integral RegisterType, typename Functio
     requires std::integral<std::invoke_result_t<Function, RegisterType, RegisterType>>
 auto InstructionExecutor<System>::executeBivariateImmediate(uint32_t inst, Function&& func) -> void {
     executeBivariate<RegisterType, I>(inst, std::forward<Function>(func));
-}
-
-template <Sys System>
-template <Param::BranchLikelihood Likely, Param::BranchLink Link, typename Function>
-    requires std::same_as<bool, std::invoke_result_t<Function, int32_t, int32_t>>
-auto InstructionExecutor<System>::executeBranch(uint32_t inst, Function&& func) -> void {
-    if constexpr (Link == Param::BranchLink::LINK) {
-        m_regs->template writeGpr<ISA::CPU_REG::ra>(m_regs->readPc() + 8);
-    }
-    auto ops = std::bit_cast<ISA::CPU::TypeI>(inst);
-    if (func(m_regs->readGpr(ops.rs), m_regs->readGpr(ops.rt))) {
-        auto instOffset = Util::signExt32<int16_t>(ops.imm);
-
-        // auto prevInst = [this] {
-        //     const auto prevPc = m_regs->readPc() - 4;
-        //     if constexpr (System == Sys::RSP) {
-        //         return m_memory->readPhysical<uint32_t>(RSP_DMEM_BASE + prevPc);
-        //     } else {
-        //         return m_memory->read<uint32_t>(prevPc);
-        //     }
-        // }();
-        // if (instOffset == -1 && // branches to previous instruction
-        //     prevInst == 0)      // branches to NOP
-        //{
-        //     throw Util::Error("Detected infinite loop @ PC {:#08x}: {:#08x}", m_regs->readPc(), inst);
-        // }
-        m_regs->writePcDelayed((m_regs->readPc() + 4) + (instOffset << 2));
-    } else {
-        if constexpr (Likely == Param::BranchLikelihood::LIKELY) {
-            auto nextPc = m_regs->readPc() + 4;
-            m_regs->writePc(nextPc);
-        }
-    }
 }
 
 template <Sys System>

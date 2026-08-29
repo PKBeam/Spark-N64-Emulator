@@ -21,6 +21,7 @@ using CPU_AluImmLoad    = Operands<CPU::TypeI, ^^CPU::TypeI::rt, ^^CPU::TypeI::i
 using CPU_Branch1       = Operands<CPU::TypeI, ^^CPU::TypeI::rs, ^^CPU::TypeI::imm>;
 using CPU_TrapImm       = Operands<CPU::TypeI, ^^CPU::TypeI::rs, ^^CPU::TypeI::imm>;
 using CPU_LoadStore     = Operands<CPU::TypeI, ^^CPU::TypeI::rt, ^^CPU::TypeI::imm, ^^CPU::TypeI::rs>;
+using CP1_LoadStore     = Operands<CPU::TypeI, ^^CPU::TypeI::rt, ^^CPU::TypeI::imm, ^^CPU::TypeI::rs>;
 using CPU_Branch2       = Operands<CPU::TypeI, ^^CPU::TypeI::rs, ^^CPU::TypeI::rt, ^^CPU::TypeI::imm>;
 using CPU_TypeI_Imm     = Operands<CPU::TypeI, ^^CPU::TypeI::imm>;
 using CPU_TypeI_RsImm   = Operands<CPU::TypeI, ^^CPU::TypeI::rs, ^^CPU::TypeI::imm>;

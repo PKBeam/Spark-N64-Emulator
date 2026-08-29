@@ -63,10 +63,22 @@ constexpr auto Registers::setMode(::CP1::Registers::Mode mode) -> void {
 }
 
 constexpr auto Registers::readStatus() const -> ISA::CP1Status {
+    IF_LOG_ENABLED(m_logger) {
+        m_logger->log<Level::HIGH, Sys::CP1>(
+            std::tuple{"op", "read"},
+            std::tuple{"reg", "FCR31"},
+            std::tuple{"data", "{:#010X}", std::bit_cast<uint32_t>(m_fcr31)});
+    }
     return m_fcr31;
 }
 
 constexpr auto Registers::writeStatus(uint32_t value) -> void {
+    IF_LOG_ENABLED(m_logger) {
+        m_logger->log<Level::HIGH, Sys::CP1>(
+            std::tuple{"op", "write"},
+            std::tuple{"reg", "FCR31"},
+            std::tuple{"data", "{:#010X}", std::bit_cast<uint32_t>(value)});
+    }
     m_fcr31 = std::bit_cast<ISA::CP1Status>(value);
 }
 
@@ -75,6 +87,12 @@ constexpr auto Registers::writeStatus(ISA::CP1Status value) -> void {
 }
 
 constexpr auto Registers::readRevision() const -> ISA::CP1Revision {
+    IF_LOG_ENABLED(m_logger) {
+        m_logger->log<Level::HIGH, Sys::CP1>(
+            std::tuple{"op", "read"},
+            std::tuple{"reg", "FCR0"},
+            std::tuple{"data", "{:#010X}", std::bit_cast<uint32_t>(m_fcr0)});
+    }
     return m_fcr0;
 }
 

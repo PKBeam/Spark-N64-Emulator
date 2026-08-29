@@ -44,7 +44,7 @@ constexpr auto getRange(uint32_t rangeValue) -> std::pair<E, Util::Range> {
 }
 
 namespace Function {
-constexpr auto NULL    = [](auto a, auto b) { return 0; };
+constexpr auto NULL    = [](auto a, auto b) { return false; };
 constexpr auto ADD     = [](auto a, auto b) { return a + b; };
 constexpr auto SUB     = [](auto a, auto b) { return a - b; };
 constexpr auto MUL     = [](auto a, auto b) { return a * b; };
@@ -64,6 +64,7 @@ constexpr auto CMP_NEZ = [](auto a, auto _) { return a != 0; };
 constexpr auto CMP_LEZ = [](auto a, auto _) { return a <= 0; };
 constexpr auto CMP_LTZ = [](auto a, auto _) { return a < 0; };
 constexpr auto CMP_GEZ = [](auto a, auto _) { return a >= 0; };
+constexpr auto CMP_GTZ = [](auto a, auto _) { return a > 0; };
 } // namespace Function
 
 } // namespace Util

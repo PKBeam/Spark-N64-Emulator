@@ -11,7 +11,9 @@ import :Registers;
 
 export namespace Param {
 // clang-format off
-enum MemoryTypeFloat : bool { LOAD_F, STORE_F };
+enum MemoryTypeFloat  : bool { LOAD_F, STORE_F };
+enum ComparisonOrder  : bool { ORDERED, UNORDERED };
+enum ComparisonSignal : bool { NO_SIGNAL, SIGNAL };
 // clang-format on
 } // namespace Param
 
@@ -34,6 +36,10 @@ class InstructionExecutor {
     template <typename To>
         requires(FloatType_c<To>)
     auto executeConvert(uint32_t inst) -> void;
+
+    template <Param::ComparisonOrder Order = Param::ORDERED, Param::ComparisonSignal Signal = Param::NO_SIGNAL, typename Function>
+        requires std::same_as<bool, std::invoke_result_t<Function, float, float>>
+    auto executeCompare(uint32_t inst, Function&& func) -> void;
 
     template <typename Function, typename ExceptionFunc = std::nullptr_t>
         requires(std::floating_point<std::invoke_result_t<Function, float, float>> &&
@@ -64,26 +70,57 @@ auto InstructionExecutor::executeConvert(uint32_t inst) -> void { // TODO roundi
     fesetround(originalRounding);
 }
 
+template <Param::ComparisonOrder Order, Param::ComparisonSignal Signal, typename Function>
+    requires std::same_as<bool, std::invoke_result_t<Function, float, float>>
+auto InstructionExecutor::executeCompare(uint32_t inst, Function&& func) -> void {
+    const auto ops = std::bit_cast<ISA::FPU::TypeR>(inst);
+    const auto fmt = static_cast<ISA::CP1_FORMAT>(ops.fmt);
+
+    ISA::getFormatType(fmt).visit([this, &func, &ops](auto T) {
+        const auto fs = m_fprs->readFpr<decltype(T)>(ops.fs);
+        const auto ft = m_fprs->readFpr<decltype(T)>(ops.ft);
+
+        bool result{};
+        if (std::isnan(fs) || std::isnan(ft)) {
+            if constexpr (Signal == Param::SIGNAL) {
+                // TODO signal exception
+                IF_LOG_ENABLED(m_logger) {
+                    m_logger->log<Level::HIGH, Sev::WARNING, Sys::CP1>("Ignored signalled exception during comparison");
+                }
+                return;
+            } else {
+                result = (Order == Param::ComparisonOrder::UNORDERED);
+            }
+        } else {
+            result = func(fs, ft);
+        }
+
+        auto status = WITH_LOG_DISABLED(m_logger, m_fprs->readStatus());
+        status.c    = result;
+        m_fprs->writeStatus(status);
+    });
+}
+
 template <typename Function, typename ExceptionFunc>
     requires(std::floating_point<std::invoke_result_t<Function, float, float>> &&
              (std::same_as<std::nullptr_t, ExceptionFunc> || std::same_as<ISA::CP1_EXCEPTION, std::invoke_result_t<Function, float, float>>))
 auto InstructionExecutor::executeBivariate(uint32_t inst, Function&& func, ExceptionFunc exceptFunc) -> void {
     const auto ops = std::bit_cast<ISA::FPU::TypeR>(inst);
     const auto fmt = static_cast<ISA::CP1_FORMAT>(ops.fmt);
-    const auto fs  = m_fprs->readFpr(ops.fs, fmt);
-    const auto ft  = m_fprs->readFpr(ops.ft, fmt);
-    if constexpr (!std::is_same_v<ExceptionFunc, std::nullptr_t>) {
-        const auto exception = std::visit(exceptFunc, fs, ft);
-        if (exception != ISA::CP1_EXCEPTION::NONE) {
-            throw Util::Error("FPU exception {} occurred during instruction execution", static_cast<int>(exception));
+
+    ISA::getFormatType(fmt).visit([this, &func, &exceptFunc, &ops](auto T) {
+        const auto fs = m_fprs->readFpr<decltype(T)>(ops.fs);
+        const auto ft = m_fprs->readFpr<decltype(T)>(ops.ft);
+
+        if constexpr (!std::is_same_v<ExceptionFunc, std::nullptr_t>) {
+            const auto exception = exceptFunc(fs, ft);
+            if (exception != ISA::CP1_EXCEPTION::NONE) {
+                throw Util::Error("FPU exception {} occurred during instruction execution", static_cast<int>(exception));
+            }
         }
-    }
-    std::visit([this, &func, &ops](auto fs, auto ft) {
         const auto result = func(fs, ft);
         m_fprs->writeFpr(ops.fd, result);
-    },
-               fs,
-               ft);
+    });
 }
 
 template <Param::MemoryTypeFloat Type, std::integral T, std::integral U>

@@ -132,17 +132,22 @@ auto CPU::runInstruction() -> void {
         case UnifiedOpcode::OP_JALR: m_exec.executeJump<P::LINK, P::REG>(data); break;
 
         // Branch instructions
-        case UnifiedOpcode::OP_BNE: m_exec.executeBranch(data, Func::CMP_NE); break;
-        case UnifiedOpcode::OP_BNEL: m_exec.executeBranch<P::LIKELY>(data, Func::CMP_NE); break;
-        case UnifiedOpcode::OP_BLTZ: m_exec.executeBranch(data, Func::CMP_LTZ); break;
-        case UnifiedOpcode::OP_BLTZAL: m_exec.executeBranchAndLink(data, Func::CMP_LTZ); break;
-        case UnifiedOpcode::OP_BLEZ: m_exec.executeBranch(data, Func::CMP_LEZ); break;
-        case UnifiedOpcode::OP_BLEZL: m_exec.executeBranch<P::LIKELY>(data, Func::CMP_LEZ); break;
-        case UnifiedOpcode::OP_BGEZ: m_exec.executeBranch(data, Func::CMP_GEZ); break;
-        case UnifiedOpcode::OP_BGEZL: m_exec.executeBranch<P::LIKELY>(data, Func::CMP_GEZ); break;
-        case UnifiedOpcode::OP_BGEZAL: m_exec.executeBranchAndLink(data, Func::CMP_GEZ); break;
         case UnifiedOpcode::OP_BEQ: m_exec.executeBranch(data, Func::CMP_EQ); break;
+        case UnifiedOpcode::OP_BNE: m_exec.executeBranch(data, Func::CMP_NE); break;
+        case UnifiedOpcode::OP_BLEZ: m_exec.executeBranch(data, Func::CMP_LEZ); break;
+        case UnifiedOpcode::OP_BGTZ: m_exec.executeBranch(data, Func::CMP_GTZ); break;
+        case UnifiedOpcode::OP_BLTZ: m_exec.executeBranch(data, Func::CMP_LTZ); break;
+        case UnifiedOpcode::OP_BGEZ: m_exec.executeBranch(data, Func::CMP_GEZ); break;
+        case UnifiedOpcode::OP_BLTZAL: m_exec.executeBranchAndLink(data, Func::CMP_LTZ); break;
+        case UnifiedOpcode::OP_BGEZAL: m_exec.executeBranchAndLink(data, Func::CMP_GEZ); break;
         case UnifiedOpcode::OP_BEQL: m_exec.executeBranch<P::LIKELY>(data, Func::CMP_EQ); break;
+        case UnifiedOpcode::OP_BNEL: m_exec.executeBranch<P::LIKELY>(data, Func::CMP_NE); break;
+        case UnifiedOpcode::OP_BLEZL: m_exec.executeBranch<P::LIKELY>(data, Func::CMP_LEZ); break;
+        case UnifiedOpcode::OP_BGTZL: m_exec.executeBranch<P::LIKELY>(data, Func::CMP_GTZ); break;
+        case UnifiedOpcode::OP_BLTZL: m_exec.executeBranch<P::LIKELY>(data, Func::CMP_LTZ); break;
+        case UnifiedOpcode::OP_BGEZL: m_exec.executeBranch<P::LIKELY>(data, Func::CMP_GEZ); break;
+        case UnifiedOpcode::OP_BLTZALL: m_exec.executeBranchAndLink<P::LIKELY>(data, Func::CMP_LTZ); break;
+        case UnifiedOpcode::OP_BGEZALL: m_exec.executeBranchAndLink<P::LIKELY>(data, Func::CMP_GEZ); break;
 
         // Load/Store instructions
         case UnifiedOpcode::OP_LUI: {
@@ -229,7 +234,53 @@ auto CPU::runInstruction() -> void {
         case UnifiedOpcode::OP_MUL_FMT: m_cp1->getExec()->executeBivariate(data, Func::MUL); break;
         case UnifiedOpcode::OP_DIV_FMT: m_cp1->getExec()->executeBivariate(data, Func::DIV); break;
 
+        case UnifiedOpcode::OP_C_F_FMT: m_cp1->getExec()->executeCompare<Param::ORDERED>(data, Func::NULL); break;
+        case UnifiedOpcode::OP_C_UN_FMT: m_cp1->getExec()->executeCompare<Param::UNORDERED>(data, Func::NULL); break;
+        case UnifiedOpcode::OP_C_EQ_FMT: m_cp1->getExec()->executeCompare<Param::ORDERED>(data, Func::CMP_EQ); break;
+        case UnifiedOpcode::OP_C_UEQ_FMT: m_cp1->getExec()->executeCompare<Param::UNORDERED>(data, Func::CMP_EQ); break;
+        case UnifiedOpcode::OP_C_OLT_FMT: m_cp1->getExec()->executeCompare<Param::ORDERED>(data, Func::CMP_LT); break;
+        case UnifiedOpcode::OP_C_ULT_FMT: m_cp1->getExec()->executeCompare<Param::UNORDERED>(data, Func::CMP_LT); break;
+        case UnifiedOpcode::OP_C_OLE_FMT: m_cp1->getExec()->executeCompare<Param::ORDERED>(data, Func::CMP_LE); break;
+        case UnifiedOpcode::OP_C_ULE_FMT: m_cp1->getExec()->executeCompare<Param::UNORDERED>(data, Func::CMP_LE); break;
+        case UnifiedOpcode::OP_C_SF_FMT: m_cp1->getExec()->executeCompare<Param::ORDERED, Param::SIGNAL>(data, Func::NULL); break;
+        case UnifiedOpcode::OP_C_NGLE_FMT: m_cp1->getExec()->executeCompare<Param::UNORDERED, Param::SIGNAL>(data, Func::NULL); break;
+        case UnifiedOpcode::OP_C_SEQ_FMT: m_cp1->getExec()->executeCompare<Param::ORDERED, Param::SIGNAL>(data, Func::CMP_EQ); break;
+        case UnifiedOpcode::OP_C_NGL_FMT: m_cp1->getExec()->executeCompare<Param::UNORDERED, Param::SIGNAL>(data, Func::CMP_EQ); break;
+        case UnifiedOpcode::OP_C_LT_FMT: m_cp1->getExec()->executeCompare<Param::ORDERED, Param::SIGNAL>(data, Func::CMP_LT); break;
+        case UnifiedOpcode::OP_C_NGE_FMT: m_cp1->getExec()->executeCompare<Param::UNORDERED, Param::SIGNAL>(data, Func::CMP_LT); break;
+        case UnifiedOpcode::OP_C_LE_FMT: m_cp1->getExec()->executeCompare<Param::ORDERED, Param::SIGNAL>(data, Func::CMP_LE); break;
+        case UnifiedOpcode::OP_C_NGT_FMT: m_cp1->getExec()->executeCompare<Param::UNORDERED, Param::SIGNAL>(data, Func::CMP_LE); break;
+
         // Coprocessor instructions
+        case UnifiedOpcode::OP_BCzT:
+            if (inst.getCoprocessor() == 1) {
+                m_exec.executeBranch(data, m_cp1->getRegs()->readStatus().c);
+            } else {
+                throw Util::Error("Unsupported instruction on coprocessor {}: {}", inst.getCoprocessor(), inst);
+            }
+            break;
+        case UnifiedOpcode::OP_BCzF:
+            if (inst.getCoprocessor() == 1) {
+                m_exec.executeBranch(data, !m_cp1->getRegs()->readStatus().c);
+            } else {
+                throw Util::Error("Unsupported instruction on coprocessor {}: {}", inst.getCoprocessor(), inst);
+            }
+            break;
+        case UnifiedOpcode::OP_BCzTL:
+            if (inst.getCoprocessor() == 1) {
+                m_exec.executeBranch<Param::LIKELY>(data, m_cp1->getRegs()->readStatus().c);
+            } else {
+                throw Util::Error("Unsupported instruction on coprocessor {}: {}", inst.getCoprocessor(), inst);
+            }
+            break;
+        case UnifiedOpcode::OP_BCzFL:
+            if (inst.getCoprocessor() == 1) {
+                m_exec.executeBranch<Param::LIKELY>(data, !m_cp1->getRegs()->readStatus().c);
+            } else {
+                throw Util::Error("Unsupported instruction on coprocessor {}: {}", inst.getCoprocessor(), inst);
+            }
+            break;
+
         case UnifiedOpcode::OP_LWC1: {
             const auto ops = std::bit_cast<ISA::CPU::TypeI>(data);
             const auto rs  = m_regs.readGpr(ops.rs);
@@ -310,9 +361,9 @@ auto CPU::runInstruction() -> void {
         case UnifiedOpcode::OP_TLBWR: [[fallthrough]];
         case UnifiedOpcode::OP_TLBP: [[fallthrough]];
         case UnifiedOpcode::OP_CACHE:
-            IF_LOG_ENABLED(m_logger) {
-                m_logger->log<Level::HIGH, Sev::WARNING, Sys::CPU>("Ignored instruction {}", inst);
-            }
+            // IF_LOG_ENABLED(m_logger) {
+            //     m_logger->log<Level::HIGH, Sev::WARNING, Sys::CPU>("Ignored instruction {}", inst);
+            // }
             break;
         case UnifiedOpcode::OP_ERET: {
             auto status = m_cp0->readReg<ISA::CP0_REG::STATUS>();

@@ -41,7 +41,7 @@ VideoInterface::VideoInterface(std::shared_ptr<Util::Logger> logger, MipsInterfa
         while (true) {
             const auto now     = std::chrono::high_resolution_clock::now();
             const auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(now - prev).count();
-            if (elapsed >= 16667) { // 60Hz
+            if (elapsed >= 166670) { // 6Hz
                 prev        = now;
                 m_timerTick = true;
             }

@@ -202,6 +202,16 @@ enum class CP1_FORMAT : uint8_t {
     L = 21, // long fixed
 };
 
+constexpr auto getFormatType(CP1_FORMAT fmt) -> std::variant<float, double, uint32_t, uint64_t> {
+    switch (fmt) {
+        case CP1_FORMAT::S: return float{};
+        case CP1_FORMAT::D: return double{};
+        case CP1_FORMAT::W: return uint32_t{};
+        case CP1_FORMAT::L: return uint64_t{};
+    }
+    throw Util::Error("Invalid CP1 format {}", static_cast<uint8_t>(fmt));
+}
+
 } // namespace ISA
 
 template <>

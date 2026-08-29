@@ -109,7 +109,7 @@ constexpr auto formatOperands(Instruction inst) -> std::vector<std::string> {
                             continue;
                         }
                     }
-                    if constexpr (std::meta::display_string_of(aliasedOperandType).contains("CPU_LoadStore")) {
+                    if constexpr (std::meta::display_string_of(aliasedOperandType).contains("CP1_LoadStore")) {
                         const uint32_t opValue = instData.[:[:op:]:];
                         if (opName == "rt") {
                             if (inst.getCoprocessor() == 1) {
