@@ -98,10 +98,11 @@ auto CPU::checkInterrupts() -> void {
 
 auto CPU::runInstruction() -> void {
     using namespace Opcodes;
-    namespace P    = Param;
-    namespace Func = Util::Function;
-    using TypeI    = ISA::CPU::TypeI;
-    using TypeR    = ISA::CPU::TypeR;
+    namespace P        = Param;
+    namespace Func     = Util::Function;
+    namespace FpExcept = CP1::ExceptionFunc;
+    using TypeI        = ISA::CPU::TypeI;
+    using TypeR        = ISA::CPU::TypeR;
 
     // boot callback
     if (!m_hasBooted && static_cast<uint32_t>(m_regs.readPc()) == m_bootAddress) {
@@ -166,26 +167,10 @@ auto CPU::runInstruction() -> void {
         case UnifiedOpcode::OP_SH: m_exec.executeMemoryOperation<P::STORE, int16_t>(data); break;
         case UnifiedOpcode::OP_SW: m_exec.executeMemoryOperation<P::STORE, int32_t>(data); break;
         case UnifiedOpcode::OP_SD: m_exec.executeMemoryOperation<P::STORE, int64_t>(data); break;
-        case UnifiedOpcode::OP_SWL: {
-            const auto ops   = std::bit_cast<TypeI>(data);
-            const auto vaddr = Util::signExt32<int16_t>(ops.imm) + m_regs.readGpr(ops.rs);
-            const auto data  = m_regs.readGpr<uint32_t>(ops.rt);
-            for (auto byte = 4z; byte > vaddr % 4; --byte) {
-                auto thisByte = (data >> (8 * byte)) & 0xFF;
-                m_memory->write<uint8_t>(vaddr + (4 - byte), thisByte);
-            }
-            break;
-        }
-        case UnifiedOpcode::OP_SWR: {
-            const auto ops   = std::bit_cast<TypeI>(data);
-            const auto vaddr = Util::signExt32<int16_t>(ops.imm) + m_regs.readGpr(ops.rs);
-            const auto data  = m_regs.readGpr<uint32_t>(ops.rt);
-            for (auto byte = 0z; byte < 1 + (vaddr % 4); ++byte) {
-                auto thisByte = (data >> (8 * byte)) & 0xFF;
-                m_memory->write<uint8_t>(vaddr - byte, thisByte);
-            }
-            break;
-        }
+        case UnifiedOpcode::OP_SWL: m_exec.executeMemoryOperationUnaligned<P::STORE, P::LEFT, int32_t>(data); break;
+        case UnifiedOpcode::OP_SWR: m_exec.executeMemoryOperationUnaligned<P::STORE, P::RIGHT, int32_t>(data); break;
+        case UnifiedOpcode::OP_LWL: m_exec.executeMemoryOperationUnaligned<P::LOAD, P::LEFT, int32_t>(data); break;
+        case UnifiedOpcode::OP_LWR: m_exec.executeMemoryOperationUnaligned<P::LOAD, P::RIGHT, int32_t>(data); break;
 
         // Arithmetic instructions
         case UnifiedOpcode::OP_MULT: m_exec.executeMultiply<int32_t>(data); break;
@@ -208,6 +193,7 @@ auto CPU::runInstruction() -> void {
         case UnifiedOpcode::OP_SLTU: m_exec.executeBivariate<uint32_t>(data, Func::CMP_LT); break;
         case UnifiedOpcode::OP_SLTI: m_exec.executeBivariateImmediate<P::SIGN_EXTEND, int32_t>(data, Func::CMP_LT); break;
         case UnifiedOpcode::OP_SLTIU: m_exec.executeBivariateImmediate<P::ZERO_EXTEND, uint32_t>(data, Func::CMP_LT); break;
+        case UnifiedOpcode::OP_SUB: [[fallthrough]]; // TODO overflow exception
         case UnifiedOpcode::OP_SUBU: m_exec.executeBivariate(data, Func::SUB); break;
         case UnifiedOpcode::OP_AND: m_exec.executeBivariate(data, Func::AND); break;
         case UnifiedOpcode::OP_ANDI: m_exec.executeBivariateImmediate<P::ZERO_EXTEND>(data, Func::AND); break;
@@ -241,20 +227,35 @@ auto CPU::runInstruction() -> void {
         case UnifiedOpcode::OP_CVT_D_FMT: m_cp1->getExec()->executeConvert<double>(data); break;
         case UnifiedOpcode::OP_CVT_W_FMT: m_cp1->getExec()->executeConvert<uint32_t>(data); break;
         case UnifiedOpcode::OP_CVT_L_FMT: m_cp1->getExec()->executeConvert<uint64_t>(data); break;
-        case UnifiedOpcode::OP_ADD_FMT: m_cp1->getExec()->executeBivariate(data, Func::ADD); break;
-        case UnifiedOpcode::OP_MUL_FMT: m_cp1->getExec()->executeBivariate(data, Func::MUL); break;
-        case UnifiedOpcode::OP_DIV_FMT: m_cp1->getExec()->executeBivariate(data, Func::DIV); break;
 
-        case UnifiedOpcode::OP_C_F_FMT: m_cp1->getExec()->executeCompare<Param::ORDERED>(data, Func::NULL); break;
-        case UnifiedOpcode::OP_C_UN_FMT: m_cp1->getExec()->executeCompare<Param::UNORDERED>(data, Func::NULL); break;
+        case UnifiedOpcode::OP_ADD_FMT: m_cp1->getExec()->executeBivariate(data, Func::ADD, FpExcept::ADD); break;
+        case UnifiedOpcode::OP_SUB_FMT: m_cp1->getExec()->executeBivariate(data, Func::SUB, FpExcept::ADD); break;
+        case UnifiedOpcode::OP_MUL_FMT: m_cp1->getExec()->executeBivariate(data, Func::MUL, FpExcept::MUL); break;
+        case UnifiedOpcode::OP_DIV_FMT: m_cp1->getExec()->executeBivariate(data, Func::DIV, FpExcept::DIV); break;
+        case UnifiedOpcode::OP_SQRT_FMT: m_cp1->getExec()->executeBivariate(data, Func::SQRT, FpExcept::SQRT); break;
+        case UnifiedOpcode::OP_ABS_FMT: m_cp1->getExec()->executeBivariate(data, Func::ABS, FpExcept::ABS); break;
+        case UnifiedOpcode::OP_NEG_FMT: m_cp1->getExec()->executeBivariate(data, Func::NEG, FpExcept::NEG); break;
+        case UnifiedOpcode::OP_MOV_FMT: m_cp1->getExec()->executeBivariate(data, Func::NOP); break;
+
+        case UnifiedOpcode::OP_ROUND_W_FMT: m_cp1->getExec()->executeConvert<uint32_t>(data, Util::FP_ROUND_MODE::NEAREST); break;
+        case UnifiedOpcode::OP_ROUND_L_FMT: m_cp1->getExec()->executeConvert<uint64_t>(data, Util::FP_ROUND_MODE::NEAREST); break;
+        case UnifiedOpcode::OP_TRUNC_W_FMT: m_cp1->getExec()->executeConvert<uint32_t>(data, Util::FP_ROUND_MODE::TO_ZERO); break;
+        case UnifiedOpcode::OP_TRUNC_L_FMT: m_cp1->getExec()->executeConvert<uint64_t>(data, Util::FP_ROUND_MODE::TO_ZERO); break;
+        case UnifiedOpcode::OP_CEIL_W_FMT: m_cp1->getExec()->executeConvert<uint32_t>(data, Util::FP_ROUND_MODE::UP); break;
+        case UnifiedOpcode::OP_CEIL_L_FMT: m_cp1->getExec()->executeConvert<uint64_t>(data, Util::FP_ROUND_MODE::UP); break;
+        case UnifiedOpcode::OP_FLOOR_W_FMT: m_cp1->getExec()->executeConvert<uint32_t>(data, Util::FP_ROUND_MODE::DOWN); break;
+        case UnifiedOpcode::OP_FLOOR_L_FMT: m_cp1->getExec()->executeConvert<uint64_t>(data, Util::FP_ROUND_MODE::DOWN); break;
+
+        case UnifiedOpcode::OP_C_F_FMT: m_cp1->getExec()->executeCompare<Param::ORDERED>(data, Func::FALSE); break;
+        case UnifiedOpcode::OP_C_UN_FMT: m_cp1->getExec()->executeCompare<Param::UNORDERED>(data, Func::FALSE); break;
         case UnifiedOpcode::OP_C_EQ_FMT: m_cp1->getExec()->executeCompare<Param::ORDERED>(data, Func::CMP_EQ); break;
         case UnifiedOpcode::OP_C_UEQ_FMT: m_cp1->getExec()->executeCompare<Param::UNORDERED>(data, Func::CMP_EQ); break;
         case UnifiedOpcode::OP_C_OLT_FMT: m_cp1->getExec()->executeCompare<Param::ORDERED>(data, Func::CMP_LT); break;
         case UnifiedOpcode::OP_C_ULT_FMT: m_cp1->getExec()->executeCompare<Param::UNORDERED>(data, Func::CMP_LT); break;
         case UnifiedOpcode::OP_C_OLE_FMT: m_cp1->getExec()->executeCompare<Param::ORDERED>(data, Func::CMP_LE); break;
         case UnifiedOpcode::OP_C_ULE_FMT: m_cp1->getExec()->executeCompare<Param::UNORDERED>(data, Func::CMP_LE); break;
-        case UnifiedOpcode::OP_C_SF_FMT: m_cp1->getExec()->executeCompare<Param::ORDERED, Param::SIGNAL>(data, Func::NULL); break;
-        case UnifiedOpcode::OP_C_NGLE_FMT: m_cp1->getExec()->executeCompare<Param::UNORDERED, Param::SIGNAL>(data, Func::NULL); break;
+        case UnifiedOpcode::OP_C_SF_FMT: m_cp1->getExec()->executeCompare<Param::ORDERED, Param::SIGNAL>(data, Func::FALSE); break;
+        case UnifiedOpcode::OP_C_NGLE_FMT: m_cp1->getExec()->executeCompare<Param::UNORDERED, Param::SIGNAL>(data, Func::FALSE); break;
         case UnifiedOpcode::OP_C_SEQ_FMT: m_cp1->getExec()->executeCompare<Param::ORDERED, Param::SIGNAL>(data, Func::CMP_EQ); break;
         case UnifiedOpcode::OP_C_NGL_FMT: m_cp1->getExec()->executeCompare<Param::UNORDERED, Param::SIGNAL>(data, Func::CMP_EQ); break;
         case UnifiedOpcode::OP_C_LT_FMT: m_cp1->getExec()->executeCompare<Param::ORDERED, Param::SIGNAL>(data, Func::CMP_LT); break;
@@ -390,7 +391,7 @@ auto CPU::runInstruction() -> void {
         }
         default:
             dumpIMem("cpu_imem.txt");
-            throw Util::Error("Unimplemented instruction @ PC {:#08x}: {} ({:#08x})", m_regs.readPc(), inst, data);
+            throw Util::Error("CPU unimplemented instruction @ PC {:#08x}: {} ({:#08x})", m_regs.readPc(), inst, data);
     }
 
     if (op != UnifiedOpcode::OP_ERET) {

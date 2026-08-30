@@ -38,6 +38,7 @@ set(CXX_COMPILE_OPTIONS
     -Wno-unused-but-set-parameter
     -fcontracts
     -fmodules
+    -fconcepts-diagnostics-depth=3
     -g3
     -ggdb3
     -fvar-tracking-assignments

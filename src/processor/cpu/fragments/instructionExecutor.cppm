@@ -17,7 +17,7 @@ export namespace Param {
 // clang-format off
 enum ShiftType        : bool    { LOGICAL, ARITHMETIC };
 enum ShiftLen         : bool    { WORD, DOUBLE };
-enum ShiftDir         : bool    { LEFT, RIGHT };
+enum Direction        : bool    { LEFT, RIGHT };
 enum ShiftAdd         : bool    { ADD_NONE, ADD32 };
 enum ShiftVar         : bool    { FIXED, VARIABLE };
 enum ImmediateExtend  : uint8_t { NO_IMM, SIGN_EXTEND, ZERO_EXTEND };
@@ -50,7 +50,7 @@ class InstructionExecutor {
         requires std::same_as<bool, std::invoke_result_t<Function, int32_t, int32_t>>
     auto executeBranchAndLink(uint32_t inst, Function&& func) -> void;
 
-    template <Param::ShiftLen Len, Param::ShiftDir Dir, Param::ShiftType Type, Param::ShiftVar Var = Param::ShiftVar::FIXED, Param::ShiftAdd Add = Param::ShiftAdd::ADD_NONE>
+    template <Param::ShiftLen Len, Param::Direction Dir, Param::ShiftType Type, Param::ShiftVar Var = Param::ShiftVar::FIXED, Param::ShiftAdd Add = Param::ShiftAdd::ADD_NONE>
     auto executeShift(uint32_t inst) -> void;
 
     template <std::integral RegisterType = int32_t, Param::ImmediateExtend I = Param::ImmediateExtend::NO_IMM, typename Function>
@@ -63,6 +63,9 @@ class InstructionExecutor {
 
     template <Param::MemoryType Type, std::integral T>
     auto executeMemoryOperation(uint32_t inst) -> void;
+
+    template <Param::MemoryType Type, Param::Direction Dir, std::integral T>
+    auto executeMemoryOperationUnaligned(uint32_t inst) -> void;
 
     template <std::integral T>
     auto executeMultiply(uint32_t inst) -> void;
@@ -136,7 +139,7 @@ auto InstructionExecutor<System>::executeBivariateImmediate(uint32_t inst, Funct
 }
 
 template <Sys System>
-template <Param::ShiftLen Len, Param::ShiftDir Dir, Param::ShiftType Type, Param::ShiftVar Var, Param::ShiftAdd Add>
+template <Param::ShiftLen Len, Param::Direction Dir, Param::ShiftType Type, Param::ShiftVar Var, Param::ShiftAdd Add>
 auto InstructionExecutor<System>::executeShift(uint32_t inst) -> void {
     auto ops = std::bit_cast<ISA::CPU::TypeR>(inst);
 
@@ -157,7 +160,7 @@ auto InstructionExecutor<System>::executeShift(uint32_t inst) -> void {
     }();
 
     auto value = m_regs->template readGpr<typename[:T:]>(ops.rt);
-    if constexpr (Dir == Param::ShiftDir::LEFT) {
+    if constexpr (Dir == Param::Direction::LEFT) {
         value <<= shiftAmount;
     } else {
         value >>= shiftAmount;
@@ -267,6 +270,74 @@ auto InstructionExecutor<System>::executeMemoryOperation(uint32_t inst) -> void 
             m_memory->writePhysical<T>(addr, data);
         } else {
             m_memory->write<T>(addr, data);
+        }
+    }
+}
+
+/*
+
+        case UnifiedOpcode::OP_SWL: {
+            const auto ops   = std::bit_cast<TypeI>(data);
+            const auto vaddr = Util::signExt32<int16_t>(ops.imm) + m_regs.readGpr(ops.rs);
+            const auto data  = m_regs.readGpr<uint32_t>(ops.rt);
+            for (auto byte = 4z; byte > vaddr % 4; --byte) {
+                auto thisByte = (data >> (8 * byte)) & 0xFF;
+                m_memory->write<uint8_t>(vaddr + (4 - byte), thisByte);
+            }
+            break;
+        }
+        case UnifiedOpcode::OP_SWR: {
+            const auto ops   = std::bit_cast<TypeI>(data);
+            const auto vaddr = Util::signExt32<int16_t>(ops.imm) + m_regs.readGpr(ops.rs);
+            const auto data  = m_regs.readGpr<uint32_t>(ops.rt);
+            for (auto byte = 0z; byte < 1 + (vaddr % 4); ++byte) {
+                auto thisByte = (data >> (8 * byte)) & 0xFF;
+                m_memory->write<uint8_t>(vaddr - byte, thisByte);
+            }
+            break;
+        }
+
+*/
+template <Sys System>
+template <Param::MemoryType Type, Param::Direction Dir, std::integral T>
+auto InstructionExecutor<System>::executeMemoryOperationUnaligned(uint32_t inst) -> void {
+    auto ops   = std::bit_cast<ISA::CPU::TypeI>(inst);
+    auto vaddr = Util::signExt32<int16_t>(ops.imm) + m_regs->readGpr(ops.rs);
+
+    const auto addrRange = [vaddr]() {
+        const auto base = static_cast<std::size_t>(vaddr);
+        if constexpr (Dir == Param::Direction::LEFT) {
+            // vaddr, vaddr + 1 ... next aligned address
+            return std::views::iota(base, base + sizeof(T) - (base % sizeof(T)));
+        } else {
+            // vaddr, vaddr - 1 ... previous aligned address
+            return std::views::iota(base - (base % sizeof(T)), base + 1) | std::views::reverse;
+        }
+    }();
+
+    const auto byteRange = []() {
+        constexpr auto range = std::views::iota(0uz, sizeof(T));
+        if constexpr (Dir == Param::Direction::LEFT) {
+            // access high bits first
+            return range | std::views::reverse;
+        } else {
+            // access low bits first
+            return range;
+        }
+    }();
+
+    auto data = m_regs->template readGpr<T>(ops.rt);
+    if constexpr (Type == Param::MemoryType::LOAD) {
+        for (auto [byte, addr] : std::views::zip(byteRange, addrRange)) {
+            const auto thisByte = m_memory->read<uint8_t>(addr);
+            data &= ~(static_cast<T>(0xFF) << (8 * byte));
+            data |= (static_cast<T>(thisByte) << (8 * byte));
+        }
+        m_regs->template writeGpr<T>(ops.rt, data);
+    } else {
+        for (auto [byte, addr] : std::views::zip(byteRange, addrRange)) {
+            const auto thisByte = (data >> (8 * byte)) & 0xFF;
+            m_memory->write<uint8_t>(addr, thisByte);
         }
     }
 }

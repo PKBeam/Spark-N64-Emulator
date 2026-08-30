@@ -119,14 +119,14 @@ auto RSP::runInstruction() -> void {
         case UnifiedOpcode::OP_JALR: m_exec.cpuExec()->executeJump<P::LINK, P::REG>(data); break;
 
         // Branch instructions
-        case UnifiedOpcode::OP_BNE: m_exec.cpuExec()->executeBranch(data, Func::CMP_NE); break;
-        case UnifiedOpcode::OP_BLTZ: m_exec.cpuExec()->executeBranch(data, Func::CMP_LTZ); break;
-        case UnifiedOpcode::OP_BLTZAL: m_exec.cpuExec()->executeBranchAndLink(data, Func::CMP_LTZ); break;
-        case UnifiedOpcode::OP_BLEZ: m_exec.cpuExec()->executeBranch(data, Func::CMP_LEZ); break;
-        case UnifiedOpcode::OP_BGEZ: m_exec.cpuExec()->executeBranch(data, Func::CMP_GEZ); break;
-        case UnifiedOpcode::OP_BGEZAL: m_exec.cpuExec()->executeBranchAndLink(data, Func::CMP_GEZ); break;
         case UnifiedOpcode::OP_BEQ: m_exec.cpuExec()->executeBranch(data, Func::CMP_EQ); break;
-
+        case UnifiedOpcode::OP_BNE: m_exec.cpuExec()->executeBranch(data, Func::CMP_NE); break;
+        case UnifiedOpcode::OP_BLEZ: m_exec.cpuExec()->executeBranch(data, Func::CMP_LEZ); break;
+        case UnifiedOpcode::OP_BGTZ: m_exec.cpuExec()->executeBranch(data, Func::CMP_GTZ); break;
+        case UnifiedOpcode::OP_BLTZ: m_exec.cpuExec()->executeBranch(data, Func::CMP_LTZ); break;
+        case UnifiedOpcode::OP_BGEZ: m_exec.cpuExec()->executeBranch(data, Func::CMP_GEZ); break;
+        case UnifiedOpcode::OP_BLTZAL: m_exec.cpuExec()->executeBranchAndLink(data, Func::CMP_LTZ); break;
+        case UnifiedOpcode::OP_BGEZAL: m_exec.cpuExec()->executeBranchAndLink(data, Func::CMP_GEZ); break;
         // Load/Store instructions
         case UnifiedOpcode::OP_LUI: {
             auto ops = std::bit_cast<TypeI>(data);
@@ -154,6 +154,7 @@ auto RSP::runInstruction() -> void {
         case UnifiedOpcode::OP_SLTU: m_exec.cpuExec()->executeBivariate<uint32_t>(data, Func::CMP_LT); break;
         case UnifiedOpcode::OP_SLTI: m_exec.cpuExec()->executeBivariateImmediate<P::SIGN_EXTEND, int32_t>(data, Func::CMP_LT); break;
         case UnifiedOpcode::OP_SLTIU: m_exec.cpuExec()->executeBivariateImmediate<P::ZERO_EXTEND, uint32_t>(data, Func::CMP_LT); break;
+        case UnifiedOpcode::OP_SUB: [[fallthrough]]; // TODO overflow exception
         case UnifiedOpcode::OP_SUBU: m_exec.cpuExec()->executeBivariate(data, Func::SUB); break;
         case UnifiedOpcode::OP_AND: m_exec.cpuExec()->executeBivariate(data, Func::AND); break;
         case UnifiedOpcode::OP_ANDI: m_exec.cpuExec()->executeBivariateImmediate<P::ZERO_EXTEND>(data, Func::AND); break;
@@ -240,7 +241,7 @@ auto RSP::runInstruction() -> void {
             break;
         default:
             dumpIMem("rsp_imem.txt");
-            throw Util::Error("Unimplemented instruction @ PC {:#08x}: {} ({:#08x})", m_gprs.readPc(), inst, data);
+            throw Util::Error("RSP unimplemented instruction @ PC {:#05x}: {} ({:#08x})", m_gprs.readPc(), inst, data);
     }
 
     m_gprs.advancePc();

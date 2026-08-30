@@ -1,6 +1,5 @@
 
 module;
-#include <cfenv>
 #include <util/defines.hpp>
 export module CP1:Registers;
 
@@ -48,7 +47,7 @@ struct Registers {
 
     constexpr auto readRevision() const -> ISA::CP1Revision;
 
-    constexpr auto getRoundingMode() const -> decltype(FE_TOWARDZERO);
+    constexpr auto getRoundingMode() const -> Util::FP_ROUND_MODE;
 
   private:
     std::shared_ptr<Util::Logger> m_logger;
@@ -105,7 +104,7 @@ constexpr auto Registers::readFpr(std::size_t index) const -> T {
                 if constexpr (sizeof(T) == 4) {
                     return std::bit_cast<T>(static_cast<uint32_t>(m_fgrs[index]));
                 } else /* 64 bit */ {
-                    return std::bit_cast<T>((m_fgrs[index / 2 + 1] << 32) | m_fgrs[index / 2]);
+                    return std::bit_cast<T>((m_fgrs[index + 1] << 32) | m_fgrs[index]);
                 }
             case Mode::FPRS_32:
                 if constexpr (sizeof(T) == 4) {
@@ -149,8 +148,8 @@ constexpr auto Registers::writeFpr(std::size_t index, T value) -> void {
             if constexpr (sizeof(T) == 4) {
                 m_fgrs[index] = std::bit_cast<uint32_t>(value);
             } else /* 64 bit */ {
-                m_fgrs[index / 2]     = static_cast<uint32_t>(std::bit_cast<uint64_t>(value) & 0xFFFFFFFF);
-                m_fgrs[index / 2 + 1] = static_cast<uint32_t>(std::bit_cast<uint64_t>(value) >> 32);
+                m_fgrs[index]     = static_cast<uint32_t>(std::bit_cast<uint64_t>(value) & 0xFFFFFFFF);
+                m_fgrs[index + 1] = static_cast<uint32_t>(std::bit_cast<uint64_t>(value) >> 32);
             }
             break;
         case Mode::FPRS_32:
@@ -239,12 +238,12 @@ constexpr auto Registers::writeFgr(std::size_t index, T value) -> void {
     }
 }
 
-constexpr auto Registers::getRoundingMode() const -> decltype(FE_TOWARDZERO) {
+constexpr auto Registers::getRoundingMode() const -> Util::FP_ROUND_MODE {
     switch (static_cast<ISA::CP1_ROUND_MODE>(m_fcr31.rm)) {
-        case ISA::CP1_ROUND_MODE::RN: return FE_TONEAREST;
-        case ISA::CP1_ROUND_MODE::RZ: return FE_TOWARDZERO;
-        case ISA::CP1_ROUND_MODE::RP: return FE_UPWARD;
-        case ISA::CP1_ROUND_MODE::RM: return FE_DOWNWARD;
+        case ISA::CP1_ROUND_MODE::RN: return Util::FP_ROUND_MODE::NEAREST;
+        case ISA::CP1_ROUND_MODE::RZ: return Util::FP_ROUND_MODE::TO_ZERO;
+        case ISA::CP1_ROUND_MODE::RP: return Util::FP_ROUND_MODE::UP;
+        case ISA::CP1_ROUND_MODE::RM: return Util::FP_ROUND_MODE::DOWN;
     }
     throw Util::Error("Invalid CP1 rounding mode {}", static_cast<uint8_t>(m_fcr31.rm));
 }

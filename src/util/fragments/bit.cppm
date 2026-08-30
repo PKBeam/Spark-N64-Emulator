@@ -1,9 +1,8 @@
 module;
-
-import std;
-
+#include <cfenv>
 export module Util:Bit;
 
+import std;
 import :Types;
 
 export namespace Util {
@@ -67,6 +66,49 @@ constexpr auto signExt32(From bits) -> int32_t {
 template <std::integral From>
 constexpr auto signExt64(From bits) -> int64_t {
     return signExt<int64_t>(bits);
+}
+
+enum class FP_ROUND_MODE : decltype(FE_DOWNWARD) {
+    DOWN    = FE_DOWNWARD,
+    NEAREST = FE_TONEAREST,
+    TO_ZERO = FE_TOWARDZERO,
+    UP      = FE_UPWARD,
+};
+
+template <typename Function>
+constexpr auto withFpRoundMode(FP_ROUND_MODE roundMode, Function&& func) -> void {
+    const auto prev = fegetround();
+    fesetround(static_cast<decltype(FE_DOWNWARD)>(roundMode));
+    func();
+    fesetround(prev);
+}
+
+template <std::floating_point T>
+constexpr auto isSNaN(T value) -> bool {
+    if (!std::isnan(value)) {
+        return false;
+    }
+    if constexpr (sizeof(T) == 4) {
+        return (std::bit_cast<uint32_t>(value) & 0x00400000) == 0;
+    } else if constexpr (sizeof(T) == 8) {
+        return (std::bit_cast<uint64_t>(value) & 0x0008000000000000) == 0;
+    } else {
+        static_assert(false, "Unsupported floating point type");
+    }
+}
+
+template <std::floating_point T>
+constexpr auto isQNaN(T value) -> bool {
+    if (!std::isnan(value)) {
+        return false;
+    }
+    if constexpr (sizeof(T) == 4) {
+        return (std::bit_cast<uint32_t>(value) & 0x00400000) == 1;
+    } else if constexpr (sizeof(T) == 8) {
+        return (std::bit_cast<uint64_t>(value) & 0x0008000000000000) == 1;
+    } else {
+        static_assert(false, "Unsupported floating point type");
+    }
 }
 
 } // namespace Util
