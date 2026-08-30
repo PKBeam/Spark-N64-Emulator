@@ -89,8 +89,8 @@ auto CPU::checkInterrupts() -> void {
         m_regs.clearDelaySlot();
         IF_LOG_ENABLED(m_logger) {
             m_logger->log<Level::HIGH, Sys::CPU>(
-                std::tuple{"exceptionStatus", "{:#08x}", std::bit_cast<uint32_t>(status)},
-                std::tuple{"exceptionCause", "{:#08x}", std::bit_cast<uint32_t>(m_cp0->readReg<ISA::CP0_REG::CAUSE>())},
+                std::tuple{"interruptStatus", "{:#08x}", std::bit_cast<uint32_t>(status)},
+                std::tuple{"interruptCause", "{:#08x}", std::bit_cast<uint32_t>(m_cp0->readReg<ISA::CP0_REG::CAUSE>())},
                 std::tuple{"returnPc", "{:#08x}", nextPc});
         }
     }
@@ -167,11 +167,22 @@ auto CPU::runInstruction() -> void {
         case UnifiedOpcode::OP_SW: m_exec.executeMemoryOperation<P::STORE, int32_t>(data); break;
         case UnifiedOpcode::OP_SD: m_exec.executeMemoryOperation<P::STORE, int64_t>(data); break;
         case UnifiedOpcode::OP_SWL: {
-            auto ops   = std::bit_cast<TypeI>(data);
-            auto vaddr = Util::signExt32<int16_t>(ops.imm) + m_regs.readGpr(ops.rs);
+            const auto ops   = std::bit_cast<TypeI>(data);
+            const auto vaddr = Util::signExt32<int16_t>(ops.imm) + m_regs.readGpr(ops.rs);
+            const auto data  = m_regs.readGpr<uint32_t>(ops.rt);
             for (auto byte = 4z; byte > vaddr % 4; --byte) {
-                auto thisByte = (m_regs.readGpr<uint32_t>(ops.rt) >> (8 * byte)) & 0xFF;
+                auto thisByte = (data >> (8 * byte)) & 0xFF;
                 m_memory->write<uint8_t>(vaddr + (4 - byte), thisByte);
+            }
+            break;
+        }
+        case UnifiedOpcode::OP_SWR: {
+            const auto ops   = std::bit_cast<TypeI>(data);
+            const auto vaddr = Util::signExt32<int16_t>(ops.imm) + m_regs.readGpr(ops.rs);
+            const auto data  = m_regs.readGpr<uint32_t>(ops.rt);
+            for (auto byte = 0z; byte < 1 + (vaddr % 4); ++byte) {
+                auto thisByte = (data >> (8 * byte)) & 0xFF;
+                m_memory->write<uint8_t>(vaddr - byte, thisByte);
             }
             break;
         }

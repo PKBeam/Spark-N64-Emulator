@@ -85,16 +85,21 @@ auto SerialInterface::write(uint32_t addr, uint32_t data) -> void {
 
     switch (addr) {
         case SI_REG_ADDR::SI_DRAM_ADDR:
-            m_dramAddr = data;
+            m_dramAddr = std::bit_cast<SI_DRAM_ADDR>(data).dramAddr_23_0;
             break;
         case SI_REG_ADDR::SI_PIF_AD_RD64B: {
-            m_pifAddr = data;
+            m_pifAddr = std::bit_cast<SI_PIF_AD_RD64B>(data).pifAddr_10_2 << 2;
             dmaMemcpy(m_dramAddr, m_pifAddr);
             m_mipsInterface->setInterrupt<^^MI_INTERRUPT::si>(true);
             break;
         };
+        case SI_REG_ADDR::SI_PIF_AD_WR64B: {
+            m_pifAddr = std::bit_cast<SI_PIF_AD_WR64B>(data).pifAddr_10_2 << 2;
+            dmaMemcpy(m_pifAddr, m_dramAddr);
+            m_mipsInterface->setInterrupt<^^MI_INTERRUPT::si>(true);
+            break;
+        };
         case SI_REG_ADDR::SI_PIF_AD_WR4B: [[fallthrough]];
-        case SI_REG_ADDR::SI_PIF_AD_WR64B: [[fallthrough]];
         case SI_REG_ADDR::SI_PIF_AD_RD4B:
             logWarnOnIgnoredRegister<Sys::SI, SI_REG_ADDR>(m_logger, addr);
             break;
@@ -109,6 +114,11 @@ auto SerialInterface::readBus(uint32_t addr) -> T {
     static bool f;
     const auto [e, range] = Util::getRange<SiDmaRanges>(addr);
     switch (e) {
+        case SiDmaRanges::RDRAM: {
+            T data{};
+            std::memcpy(&data, m_memory + addr, sizeof(T));
+            return data;
+        }
         case SiDmaRanges::PIF_ROM:
             IF_LOG_ENABLED(m_logger) {
                 if (!m_pifRom) {
@@ -137,6 +147,9 @@ template <std::integral T>
 auto SerialInterface::writeBus(uint32_t addr, T data) -> void {
     const auto [e, range] = Util::getRange<SiDmaRanges>(addr);
     switch (e) {
+        case SiDmaRanges::RDRAM:
+            std::memcpy(m_memory + addr, &data, sizeof(T));
+            return;
         case SiDmaRanges::PIF_ROM:
             throw Util::Error("SI: Attempt to write to read-only memory (PIF_ROM)");
         case SiDmaRanges::PIF_RAM:

@@ -155,6 +155,7 @@ constexpr auto Emulator::loadRom(std::filesystem::path path) -> void {
             // }
             m_cpu->checkInterrupts();
             m_cpu->runInstruction();
+            m_cp0->incrementCount();
             try {
                 m_rsp->runInstruction();
             } catch (const Util::Error& e) {

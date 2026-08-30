@@ -7,8 +7,9 @@ export namespace Interfaces {
 
 enum class SiDmaRanges {
     // clang-format off
-        PIF_ROM [[=Util::Range{0x1FC00000, 0x1FC007BF}]],
-        PIF_RAM [[=Util::Range{0x1FC007C0, 0x1FC007FF}]],
+    RDRAM   [[=Util::Range{0x00000000, 0x03EFFFFF}]],
+    PIF_ROM [[=Util::Range{0x1FC00000, 0x1FC007BF}]],
+    PIF_RAM [[=Util::Range{0x1FC007C0, 0x1FC007FF}]],
     // clang-format on
 };
 
@@ -41,7 +42,9 @@ struct SI_PIF_AD_WR4B {
 };
 
 struct SI_PIF_AD_WR64B {
-    uint32_t : 32;
+    uint32_t              : 2;
+    uint32_t pifAddr_10_2 : 9;
+    uint32_t              : 21;
 };
 
 struct SI_PIF_AD_RD4B {

@@ -35,6 +35,8 @@ class CP0 {
     template <ISA::CP0_REG R, std::integral T>
     auto writeReg(T value) -> void;
 
+    auto incrementCount() -> void;
+
     auto updateInterrupt() -> void;
     auto clearInterrupt() -> void;
 
@@ -94,6 +96,18 @@ auto CP0::writeReg(std::size_t index, T value) -> void {
             m_logger->log<Level::HIGH, Sys::CPU>(std::tuple{"warning", "Enabled 64-bit mode in ISA::CP0_REG::STATUS, which is not fully supported yet"});
         }
     }
+    if (regName == ISA::CP0_REG::COMPARE) {
+        auto cause = WITH_LOG_DISABLED(m_logger, readReg<ISA::CP0_REG::CAUSE>());
+        if (cause.ip & 0x80) {
+            cause.ip &= 0x7F; // clear IP7
+            writeReg(cause);
+
+            IF_LOG_ENABLED(m_logger) {
+                m_logger->log<Level::HIGH, Sev::WARNING, Sys::CP0>("Compare interrupt cleared");
+            }
+            updateInterrupt();
+        }
+    }
     m_regs[index] = Util::signExt32(value);
     IF_LOG_ENABLED(m_logger) {
         const auto enumName = Util::enumName(regName);
@@ -122,6 +136,25 @@ auto CP0::writeReg(T value) -> void {
 template <ISA::CP0_REG R, std::integral T>
 auto CP0::writeReg(T value) -> void {
     writeReg(static_cast<uint8_t>(R), value);
+}
+
+auto CP0::incrementCount() -> void {
+    auto count = WITH_LOG_DISABLED(m_logger, readReg<ISA::CP0_REG::COUNT>());
+    count += 1;
+    WITH_LOG_DISABLED(m_logger, writeReg<ISA::CP0_REG::COUNT>(count));
+
+    const auto compare = WITH_LOG_DISABLED(m_logger, readReg<ISA::CP0_REG::COMPARE>());
+    if (count == compare) {
+        auto cause = readReg<ISA::CP0_REG::CAUSE>();
+        cause.ip |= 0x80; // set IP7
+        writeReg(cause);
+
+        IF_LOG_ENABLED(m_logger) {
+            m_logger->log<Level::HIGH, Sev::WARNING, Sys::CP0>("Compare interrupt fired");
+        }
+
+        updateInterrupt();
+    }
 }
 
 auto CP0::updateInterrupt() -> void {
