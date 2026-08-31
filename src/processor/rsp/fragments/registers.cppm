@@ -54,26 +54,6 @@ struct Accumulator {
         return std::clamp(value, min, max);
     }
 };
-
-struct ControlReg {
-    uint8_t low  = 0;
-    uint8_t high = 0;
-
-    constexpr ControlReg() {
-        low  = 0;
-        high = 0;
-    }
-
-    constexpr ControlReg(uint16_t value) {
-        low  = value & 0xFF;
-        high = (value >> 8) & 0xFF;
-    }
-
-    constexpr explicit operator uint16_t() const {
-        return (static_cast<uint8_t>(high) << 8) | static_cast<uint8_t>(low);
-    }
-};
-
 }; // namespace RSP
 
 template <>
@@ -113,14 +93,17 @@ struct Registers {
         requires(sizeof(T) == 2)
     auto writeVpr(std::size_t index, T value, ISA::VEC_ELEM elem) -> void;
 
-    auto readVcc() -> ControlReg;
-    auto writeVcc(ControlReg value) -> void;
+    auto readVcc() -> std::bitset<16>;
+    auto writeVcc(std::bitset<16> value) -> void;
+    auto clearVcc() -> void;
 
-    auto readVco() -> ControlReg;
-    auto writeVco(ControlReg value) -> void;
+    auto readVco() -> std::bitset<16>;
+    auto writeVco(std::bitset<16> value) -> void;
+    auto clearVco() -> void;
 
-    auto readVce() -> ControlReg;
-    auto writeVce(ControlReg value) -> void;
+    auto readVce() -> std::bitset<8>;
+    auto writeVce(std::bitset<8> value) -> void;
+    auto clearVce() -> void;
 
     auto readDivIn() -> std::optional<uint32_t>;
     auto writeDivIn(std::optional<uint32_t> value) -> void;
@@ -147,9 +130,9 @@ struct Registers {
 
     std::array<VPR<uint16_t>, 32> m_vprs{};
     std::array<Accumulator, 8>    m_accums{};
-    RSP::ControlReg               m_vcc{};
-    RSP::ControlReg               m_vco{};
-    RSP::ControlReg               m_vce{};
+    std::bitset<16>               m_vcc{};
+    std::bitset<16>               m_vco{};
+    std::bitset<8>                m_vce{};
     std::optional<uint32_t>       m_divIn{};
     uint32_t                      m_divOut{};
 
@@ -218,64 +201,76 @@ auto Registers::writeVpr(std::size_t index, T value, ISA::VEC_ELEM elem) -> void
     writeVpr(index, values, elem);
 }
 
-auto Registers::readVcc() -> RSP::ControlReg {
+auto Registers::readVcc() -> std::bitset<16> {
     IF_LOG_ENABLED(m_logger) {
         m_logger->log<Level::MED, Sys::RSP>(
             std::tuple{"op", "read"},
             std::tuple{"reg", "VCC"},
-            std::tuple{"data", "{:#06x}", static_cast<uint16_t>(m_vcc)});
+            std::tuple{"data", "{:#06x}", static_cast<uint16_t>(m_vcc.to_ulong())});
     }
     return m_vcc;
 }
 
-auto Registers::writeVcc(RSP::ControlReg value) -> void {
+auto Registers::writeVcc(std::bitset<16> value) -> void {
     IF_LOG_ENABLED(m_logger) {
         m_logger->log<Level::MED, Sys::RSP>(
             std::tuple{"op", "write"},
             std::tuple{"reg", "VCC"},
-            std::tuple{"data", "{:#06x}", static_cast<uint16_t>(value)});
+            std::tuple{"data", "{:#06x}", static_cast<uint16_t>(value.to_ulong())});
     }
     m_vcc = value;
 }
 
-auto Registers::readVco() -> RSP::ControlReg {
+auto Registers::clearVcc() -> void {
+    writeVcc(std::bitset<16>{});
+}
+
+auto Registers::readVco() -> std::bitset<16> {
     IF_LOG_ENABLED(m_logger) {
         m_logger->log<Level::MED, Sys::RSP>(
             std::tuple{"op", "read"},
             std::tuple{"reg", "VCO"},
-            std::tuple{"data", "{:#06x}", static_cast<uint16_t>(m_vco)});
+            std::tuple{"data", "{:#06x}", static_cast<uint16_t>(m_vco.to_ulong())});
     }
     return m_vco;
 }
 
-auto Registers::writeVco(RSP::ControlReg value) -> void {
+auto Registers::writeVco(std::bitset<16> value) -> void {
     IF_LOG_ENABLED(m_logger) {
         m_logger->log<Level::MED, Sys::RSP>(
             std::tuple{"op", "write"},
             std::tuple{"reg", "VCO"},
-            std::tuple{"data", "{:#06x}", static_cast<uint16_t>(value)});
+            std::tuple{"data", "{:#06x}", static_cast<uint16_t>(value.to_ulong())});
     }
     m_vco = value;
 }
 
-auto Registers::readVce() -> RSP::ControlReg {
+auto Registers::clearVco() -> void {
+    writeVco(std::bitset<16>{});
+}
+
+auto Registers::readVce() -> std::bitset<8> {
     IF_LOG_ENABLED(m_logger) {
         m_logger->log<Level::MED, Sys::RSP>(
             std::tuple{"op", "read"},
             std::tuple{"reg", "VCE"},
-            std::tuple{"data", "{:#06x}", static_cast<uint16_t>(m_vce)});
+            std::tuple{"data", "{:#04x}", static_cast<uint8_t>(m_vce.to_ulong())});
     }
     return m_vce;
 }
 
-auto Registers::writeVce(RSP::ControlReg value) -> void {
+auto Registers::writeVce(std::bitset<8> value) -> void {
     IF_LOG_ENABLED(m_logger) {
         m_logger->log<Level::MED, Sys::RSP>(
             std::tuple{"op", "write"},
             std::tuple{"reg", "VCE"},
-            std::tuple{"data", "{:#06x}", static_cast<uint16_t>(value)});
+            std::tuple{"data", "{:#04x}", static_cast<uint8_t>(value.to_ulong())});
     }
     m_vce = value;
+}
+
+auto Registers::clearVce() -> void {
+    writeVce(std::bitset<8>{});
 }
 
 auto Registers::readDivIn() -> std::optional<uint32_t> {

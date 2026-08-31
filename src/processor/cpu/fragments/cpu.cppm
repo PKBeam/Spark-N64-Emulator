@@ -402,9 +402,9 @@ auto CPU::runInstruction() -> void {
 auto CPU::dumpIMem(std::filesystem::path file) -> void {
     auto romDumper = Util::Logger(file);
     romDumper.setLevel(Level::MAX);
-    for (auto addr = 0u; addr < Memory::rangeOf(Memory::PhysSeg::RDRAM).upper; addr += 4) {
+    for (auto addr = 0u; addr < Util::rangeOf(Memory::PhysSeg::RDRAM).upper; addr += 4) {
         const auto word = m_memory->readPhysical<uint32_t>(addr);
-        romDumper.print("{:#010x}: {}", Memory::rangeOf(Memory::VirtSeg::KSEG0).lower + addr, ISA::Instruction(word));
+        romDumper.print("{:#010x}: {}", Util::rangeOf(Memory::VirtSeg::KSEG0).lower + addr, ISA::Instruction(word));
     }
     romDumper.flush();
 }

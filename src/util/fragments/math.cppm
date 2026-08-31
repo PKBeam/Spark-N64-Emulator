@@ -58,4 +58,15 @@ constexpr auto clamp(U value_) -> T {
     return std::clamp(value, min, max);
 }
 
+template <std::integral T>
+constexpr auto sign(T value) -> int {
+    if (value > 0) {
+        return 1;
+    } else if (value < 0) {
+        return -1;
+    } else {
+        return 0;
+    }
+}
+
 } // namespace Util

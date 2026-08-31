@@ -186,8 +186,9 @@ auto RSP::runInstruction() -> void {
 
         case UnifiedOpcode::OP_VADD: m_exec.executeBivariateWithCarryIn<P::ACCUM_ZERO_EXT, P::CLAMP_SIGNED>(data, Func::ADD); break;
         case UnifiedOpcode::OP_VSUB: m_exec.executeBivariateWithCarryIn<P::ACCUM_ZERO_EXT, P::CLAMP_SIGNED>(data, Func::SUB); break;
-        case UnifiedOpcode::OP_VADDC: m_exec.executeBivariate<P::ACCUM_ZERO_EXT>(data, Func::ADD, [](uint32_t sum) { return sum >> 16; }, [](auto _) { return 0; }); break;
-        case UnifiedOpcode::OP_VSUBC: m_exec.executeBivariate<P::ACCUM_ZERO_EXT>(data, Func::SUB, [](uint32_t sum) { return sum >> 16; }, [](uint32_t sum) { return (sum & 0x1FFFF) != 0; }); break;
+        case UnifiedOpcode::OP_VADDC: m_exec.executeBivariate(data, Func::ADD, [](uint32_t sum) { return sum >> 16; }, [](auto _) { return 0; }); break;
+        case UnifiedOpcode::OP_VSUBC: m_exec.executeBivariate(data, Func::SUB, [](uint32_t sum) { return sum >> 16; }, [](uint32_t sum) { return (sum & 0x1FFFF) != 0; }); break;
+        case UnifiedOpcode::OP_VABS: m_exec.executeBivariate(data, [](auto vs, auto vt) { return Util::sign(static_cast<int16_t>(vs)) * vt; }); break;
 
         case UnifiedOpcode::OP_VMADL: m_exec.executeMultiply<P::CLAMP_SIGNED, P::UNSIGNED, P::UNSIGNED, P::ACCUM_ADD, P::Shift(-16)>(data); break;
         case UnifiedOpcode::OP_VMUDL: m_exec.executeMultiply<P::CLAMP_SIGNED, P::UNSIGNED, P::UNSIGNED, P::ACCUM_SET, P::Shift(-16)>(data); break;
@@ -203,12 +204,12 @@ auto RSP::runInstruction() -> void {
         case UnifiedOpcode::OP_VMACF: m_exec.executeMultiply<P::CLAMP_SIGNED, P::SIGNED, P::SIGNED, P::ACCUM_ADD, P::Shift(1)>(data); break;
         case UnifiedOpcode::OP_VMACU: m_exec.executeMultiply<P::CLAMP_UNSIGNED, P::SIGNED, P::SIGNED, P::ACCUM_ADD, P::Shift(1)>(data); break;
 
-        case UnifiedOpcode::OP_VAND: m_exec.executeBivariate<P::ACCUM_ZERO_EXT>(data, Func::AND); break;
-        case UnifiedOpcode::OP_VNAND: m_exec.executeBivariate<P::ACCUM_ZERO_EXT>(data, Func::NAND); break;
-        case UnifiedOpcode::OP_VOR: m_exec.executeBivariate<P::ACCUM_ZERO_EXT>(data, Func::OR); break;
-        case UnifiedOpcode::OP_VNOR: m_exec.executeBivariate<P::ACCUM_ZERO_EXT>(data, Func::NOR); break;
-        case UnifiedOpcode::OP_VXOR: m_exec.executeBivariate<P::ACCUM_ZERO_EXT>(data, Func::XOR); break;
-        case UnifiedOpcode::OP_VNXOR: m_exec.executeBivariate<P::ACCUM_ZERO_EXT>(data, Func::NXOR); break;
+        case UnifiedOpcode::OP_VAND: m_exec.executeBivariate(data, Func::AND); break;
+        case UnifiedOpcode::OP_VNAND: m_exec.executeBivariate(data, Func::NAND); break;
+        case UnifiedOpcode::OP_VOR: m_exec.executeBivariate(data, Func::OR); break;
+        case UnifiedOpcode::OP_VNOR: m_exec.executeBivariate(data, Func::NOR); break;
+        case UnifiedOpcode::OP_VXOR: m_exec.executeBivariate(data, Func::XOR); break;
+        case UnifiedOpcode::OP_VNXOR: m_exec.executeBivariate(data, Func::NXOR); break;
 
         case UnifiedOpcode::OP_VMOV: m_exec.executeSingleLane<P::ACCUM_ZERO_EXT>(data, Func::NOP); break;
 
@@ -239,23 +240,99 @@ auto RSP::runInstruction() -> void {
         case UnifiedOpcode::OP_VSAR: m_exec.executeReadAccumulators(data); break;
         case UnifiedOpcode::OP_VRCPH: [[fallthrough]];
         case UnifiedOpcode::OP_VRSQH: m_exec.executeReciprocalHigh(data); break;
+        case UnifiedOpcode::OP_VRCP: WITH_LOG_DISABLED(m_logger, m_vprs.writeDivIn(std::nullopt)); [[fallthrough]];
         case UnifiedOpcode::OP_VRCPL: m_exec.executeReciprocalLow<P::RECIP>(data); break;
+        case UnifiedOpcode::OP_VRSQ: WITH_LOG_DISABLED(m_logger, m_vprs.writeDivIn(std::nullopt)); [[fallthrough]];
         case UnifiedOpcode::OP_VRSQL: m_exec.executeReciprocalLow<P::RECIP_SQRT>(data); break;
 
         // Coprocessor instructions
         case UnifiedOpcode::OP_MFCz: {
             auto cp = inst.getCoprocessor();
-            if (cp != 0) throw Util::Error("Unsupported instruction on coprocessor {}", cp);
-            auto ops = std::bit_cast<TypeR>(data);
-            m_gprs.writeGpr(ops.rt, m_control->readRegister(ops.rd));
-
+            switch (cp) {
+                case 0: {
+                    auto ops = std::bit_cast<TypeR>(data);
+                    m_gprs.writeGpr(ops.rt, m_control->readRegister(ops.rd));
+                    break;
+                }
+                case 2: {
+                    const auto ops = std::bit_cast<ISA::RSP::TypeVM>(data);
+                    const auto vpr = m_vprs.readVpr<int16_t>(ops.vs, static_cast<ISA::VEC_ELEM>(ops.vsElem));
+                    m_gprs.writeGpr<int32_t>(ops.rt, vpr[0]);
+                    break;
+                }
+                default: throw Util::Error("Unsupported instruction on coprocessor {}", cp);
+            }
             break;
         }
         case UnifiedOpcode::OP_MTCz: {
             auto cp = inst.getCoprocessor();
-            if (cp != 0) throw Util::Error("Unsupported instruction on coprocessor {}", cp);
-            auto ops = std::bit_cast<TypeR>(data);
-            m_control->writeRegister(ops.rd, m_gprs.readGpr(ops.rt));
+            switch (cp) {
+                case 0: {
+                    auto ops = std::bit_cast<TypeR>(data);
+                    m_control->writeRegister(ops.rd, m_gprs.readGpr(ops.rt));
+                    break;
+                }
+                case 2: {
+                    const auto ops  = std::bit_cast<ISA::RSP::TypeVM>(data);
+                    const auto gpr  = m_gprs.readGpr<uint16_t>(ops.rt);
+                    const auto elem = static_cast<ISA::VEC_ELEM>(ops.vsElem);
+                    auto       vpr  = WITH_LOG_DISABLED(m_logger, m_vprs.readVpr<uint16_t>(ops.vs));
+                    switch (elem) {
+                        case ISA::VEC_ELEM::e0: vpr[0] = gpr; break;
+                        case ISA::VEC_ELEM::e1: vpr[1] = gpr; break;
+                        case ISA::VEC_ELEM::e2: vpr[2] = gpr; break;
+                        case ISA::VEC_ELEM::e3: vpr[3] = gpr; break;
+                        case ISA::VEC_ELEM::e4: vpr[4] = gpr; break;
+                        case ISA::VEC_ELEM::e5: vpr[5] = gpr; break;
+                        case ISA::VEC_ELEM::e6: vpr[6] = gpr; break;
+                        case ISA::VEC_ELEM::e7: vpr[7] = gpr; break;
+                        default: throw Util::Error("Unsupported vector element {}", static_cast<int>(elem));
+                    }
+                    m_vprs.writeVpr(ops.vs, vpr);
+                    break;
+                }
+                default: throw Util::Error("Unsupported instruction on coprocessor {}", cp);
+            }
+            break;
+        }
+        case UnifiedOpcode::OP_CFCz: {
+            const auto cp = inst.getCoprocessor();
+            if (cp != 2) throw Util::Error("Unsupported instruction on coprocessor {}", cp);
+
+            const auto ops = std::bit_cast<ISA::RSP::TypeVM>(data);
+            switch (ops.vs) {
+                case 0:
+                    m_gprs.writeGpr<int32_t>(ops.rt, static_cast<int16_t>(m_vprs.readVco().to_ulong()));
+                    break;
+                case 1:
+                    m_gprs.writeGpr<int32_t>(ops.rt, static_cast<int16_t>(m_vprs.readVcc().to_ulong()));
+                    break;
+                case 2:
+                    m_gprs.writeGpr<int32_t>(ops.rt, static_cast<int8_t>(m_vprs.readVce().to_ulong()));
+                    break;
+                default: throw Util::Error("Unsupported CP2 control register {}", ops.vs);
+            }
+            break;
+            break;
+        }
+        case UnifiedOpcode::OP_CTCz: {
+            const auto cp = inst.getCoprocessor();
+            if (cp != 2) throw Util::Error("Unsupported instruction on coprocessor {}", cp);
+
+            const auto ops = std::bit_cast<ISA::RSP::TypeVM>(data);
+            switch (ops.vs) {
+                case 0:
+                    m_vprs.writeVco(static_cast<uint16_t>(m_gprs.readGpr(ops.rt)));
+                    break;
+                case 1:
+                    m_vprs.writeVcc(static_cast<uint16_t>(m_gprs.readGpr(ops.rt)));
+                    break;
+                case 2:
+                    m_vprs.writeVce(static_cast<uint8_t>(m_gprs.readGpr(ops.rt)));
+                    break;
+                default: throw Util::Error("Unsupported CP2 control register {}", ops.vs);
+            }
+            break;
             break;
         }
 

@@ -11,7 +11,7 @@ import Util;
 
 import :Registers;
 
-constexpr auto RSP_DMEM_BASE = Memory::rangeOf(Memory::PhysSeg::RSP_DMEM).lower;
+constexpr auto RSP_DMEM_BASE = Util::rangeOf(Memory::PhysSeg::RSP_DMEM).lower;
 
 export namespace Param {
 // clang-format off

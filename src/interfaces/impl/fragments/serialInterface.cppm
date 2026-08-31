@@ -10,6 +10,8 @@ import :Interface;
 import :MipsInterface;
 import InterfaceTypes;
 
+constexpr auto PIF_ADDR_BASE = Util::rangeOf(Interfaces::SiDmaRanges::PIF_ROM).lower;
+
 namespace Interfaces {
 
 export class SerialInterface : public Interface {
@@ -89,13 +91,13 @@ auto SerialInterface::write(uint32_t addr, uint32_t data) -> void {
             break;
         case SI_REG_ADDR::SI_PIF_AD_RD64B: {
             m_pifAddr = std::bit_cast<SI_PIF_AD_RD64B>(data).pifAddr_10_2 << 2;
-            dmaMemcpy(m_dramAddr, m_pifAddr);
+            dmaMemcpy(m_dramAddr, PIF_ADDR_BASE + m_pifAddr);
             m_mipsInterface->setInterrupt<^^MI_INTERRUPT::si>(true);
             break;
         };
         case SI_REG_ADDR::SI_PIF_AD_WR64B: {
             m_pifAddr = std::bit_cast<SI_PIF_AD_WR64B>(data).pifAddr_10_2 << 2;
-            dmaMemcpy(m_pifAddr, m_dramAddr);
+            dmaMemcpy(PIF_ADDR_BASE + m_pifAddr, m_dramAddr);
             m_mipsInterface->setInterrupt<^^MI_INTERRUPT::si>(true);
             break;
         };
