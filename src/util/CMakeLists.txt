@@ -7,6 +7,7 @@ target_sources(util PUBLIC
         fragments/bit.cppm 
         fragments/file.cppm
         fragments/log.cppm
+        fragments/math.cppm
         fragments/meta.cppm
         fragments/types.cppm
 )

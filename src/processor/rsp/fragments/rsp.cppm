@@ -19,9 +19,6 @@ import :Registers;
 
 using Control = RSP::Control;
 
-constexpr auto RSP_IMEM_BASE = Memory::rangeOf(Memory::PhysSeg::RSP_IMEM).lower;
-constexpr auto RSP_DMEM_BASE = Memory::rangeOf(Memory::PhysSeg::RSP_DMEM).lower;
-
 export namespace RSP {
 
 class RSP {
@@ -76,7 +73,6 @@ auto RSP::runInstruction() -> void {
     namespace Func = Util::Function;
     using TypeI    = ISA::CPU::TypeI;
     using TypeR    = ISA::CPU::TypeR;
-    using TypeVI   = ISA::RSP::TypeVI;
 
     switch (op) {
         // unsupported opcodes
@@ -173,30 +169,39 @@ auto RSP::runInstruction() -> void {
         case UnifiedOpcode::OP_SRAV: m_exec.cpuExec()->executeShift<P::WORD, P::RIGHT, P::ARITHMETIC, P::VARIABLE>(data); break;
 
         // Vector instructions
-        case UnifiedOpcode::OP_VADDC: m_exec.executeBivariate<P::ACCUM_ZERO_EXT>(data, Func::ADD, [](uint32_t sum) { return sum >> 16; }); break;
-        case UnifiedOpcode::OP_VSUBC: m_exec.executeBivariate<P::ACCUM_ZERO_EXT>(data, Func::SUB, [](uint32_t sum) { return sum != 0; }); break;
-        case UnifiedOpcode::OP_VSUB: m_exec.executeBivariateWithCarryIn<P::ACCUM_ZERO_EXT>(data, Func::SUB); break;
-        case UnifiedOpcode::OP_LQV: {
-            const auto ops     = std::bit_cast<TypeVI>(data);
-            const auto vaddr   = RSP_DMEM_BASE + Util::signExt32<int16_t>(ops.imm) + m_gprs.readGpr(ops.rs);
-            auto       result  = m_vprs.readVpr(ops.vt);
-            const auto vprData = reinterpret_cast<std::byte*>(result.data()) + ops.vtElem;
-            for (auto byte = 16u; byte > (vaddr % 16) + ops.vtElem; --byte) {
-                vprData[16 - byte] = static_cast<std::byte>(m_memory->readPhysical<uint8_t>(vaddr + (16 - byte)));
-            }
-            m_vprs.writeVpr(ops.vt, result);
-            break;
-        }
-        case UnifiedOpcode::OP_SQV: {
-            const auto ops     = std::bit_cast<TypeVI>(data);
-            const auto vaddr   = RSP_DMEM_BASE + Util::signExt32<int16_t>(ops.imm) + m_gprs.readGpr(ops.rs);
-            auto       result  = m_vprs.readVpr(ops.vt);
-            const auto vprData = reinterpret_cast<std::byte*>(result.data()) + ops.vtElem;
-            for (auto byte = 16u; byte > (vaddr % 16) + ops.vtElem; --byte) {
-                m_memory->writePhysical<uint8_t>(vaddr + (16 - byte), static_cast<uint8_t>(vprData[16 - byte]));
-            }
-            break;
-        }
+        case UnifiedOpcode::OP_LBV: m_exec.executeLoadStore<P::LOADV, 1uz>(data); break;
+        case UnifiedOpcode::OP_LSV: m_exec.executeLoadStore<P::LOADV, 2uz>(data); break;
+        case UnifiedOpcode::OP_LLV: m_exec.executeLoadStore<P::LOADV, 4uz>(data); break;
+        case UnifiedOpcode::OP_LDV: m_exec.executeLoadStore<P::LOADV, 8uz>(data); break;
+        case UnifiedOpcode::OP_SBV: m_exec.executeLoadStore<P::STOREV, 1uz>(data); break;
+        case UnifiedOpcode::OP_SSV: m_exec.executeLoadStore<P::STOREV, 2uz>(data); break;
+        case UnifiedOpcode::OP_SLV: m_exec.executeLoadStore<P::STOREV, 4uz>(data); break;
+        case UnifiedOpcode::OP_SDV: m_exec.executeLoadStore<P::STOREV, 8uz>(data); break;
+        case UnifiedOpcode::OP_LPV: m_exec.executeLoadStorePacked<P::LOADV, P::SIGNED>(data); break;
+        case UnifiedOpcode::OP_LUV: m_exec.executeLoadStorePacked<P::LOADV, P::UNSIGNED>(data); break;
+        case UnifiedOpcode::OP_SPV: m_exec.executeLoadStorePacked<P::STOREV, P::SIGNED>(data); break;
+        case UnifiedOpcode::OP_SUV: m_exec.executeLoadStorePacked<P::STOREV, P::UNSIGNED>(data); break;
+        case UnifiedOpcode::OP_LQV: m_exec.executeLoadStoreQuad<P::LOADV>(data); break;
+        case UnifiedOpcode::OP_SQV: m_exec.executeLoadStoreQuad<P::STOREV>(data); break;
+
+        case UnifiedOpcode::OP_VADD: m_exec.executeBivariateWithCarryIn<P::ACCUM_ZERO_EXT, P::CLAMP_SIGNED>(data, Func::ADD); break;
+        case UnifiedOpcode::OP_VSUB: m_exec.executeBivariateWithCarryIn<P::ACCUM_ZERO_EXT, P::CLAMP_SIGNED>(data, Func::SUB); break;
+        case UnifiedOpcode::OP_VADDC: m_exec.executeBivariate<P::ACCUM_ZERO_EXT>(data, Func::ADD, [](uint32_t sum) { return sum >> 16; }, [](auto _) { return 0; }); break;
+        case UnifiedOpcode::OP_VSUBC: m_exec.executeBivariate<P::ACCUM_ZERO_EXT>(data, Func::SUB, [](uint32_t sum) { return sum >> 16; }, [](uint32_t sum) { return (sum & 0x1FFFF) != 0; }); break;
+
+        case UnifiedOpcode::OP_VMADL: m_exec.executeMultiply<P::CLAMP_SIGNED, P::UNSIGNED, P::UNSIGNED, P::ACCUM_ADD, P::Shift(-16)>(data); break;
+        case UnifiedOpcode::OP_VMUDL: m_exec.executeMultiply<P::CLAMP_SIGNED, P::UNSIGNED, P::UNSIGNED, P::ACCUM_SET, P::Shift(-16)>(data); break;
+        case UnifiedOpcode::OP_VMADN: m_exec.executeMultiply<P::CLAMP_SIGNED, P::UNSIGNED, P::SIGNED, P::ACCUM_ADD>(data); break;
+        case UnifiedOpcode::OP_VMUDN: m_exec.executeMultiply<P::CLAMP_SIGNED, P::UNSIGNED, P::SIGNED, P::ACCUM_SET>(data); break;
+        case UnifiedOpcode::OP_VMADM: m_exec.executeMultiply<P::CLAMP_SIGNED, P::SIGNED, P::UNSIGNED, P::ACCUM_ADD>(data); break;
+        case UnifiedOpcode::OP_VMUDM: m_exec.executeMultiply<P::CLAMP_SIGNED, P::SIGNED, P::UNSIGNED, P::ACCUM_SET>(data); break;
+        case UnifiedOpcode::OP_VMADH: m_exec.executeMultiply<P::CLAMP_SIGNED, P::SIGNED, P::SIGNED, P::ACCUM_ADD, P::Shift(16)>(data); break;
+        case UnifiedOpcode::OP_VMUDH: m_exec.executeMultiply<P::CLAMP_SIGNED, P::SIGNED, P::SIGNED, P::ACCUM_SET, P::Shift(16)>(data); break;
+
+        case UnifiedOpcode::OP_VMULF: m_exec.executeMultiply<P::CLAMP_SIGNED, P::SIGNED, P::SIGNED, P::ACCUM_SET, P::Shift(1), P::ROUND>(data); break;
+        case UnifiedOpcode::OP_VMULU: m_exec.executeMultiply<P::CLAMP_UNSIGNED, P::SIGNED, P::SIGNED, P::ACCUM_SET, P::Shift(1), P::ROUND>(data); break;
+        case UnifiedOpcode::OP_VMACF: m_exec.executeMultiply<P::CLAMP_SIGNED, P::SIGNED, P::SIGNED, P::ACCUM_ADD, P::Shift(1)>(data); break;
+        case UnifiedOpcode::OP_VMACU: m_exec.executeMultiply<P::CLAMP_UNSIGNED, P::SIGNED, P::SIGNED, P::ACCUM_ADD, P::Shift(1)>(data); break;
 
         case UnifiedOpcode::OP_VAND: m_exec.executeBivariate<P::ACCUM_ZERO_EXT>(data, Func::AND); break;
         case UnifiedOpcode::OP_VNAND: m_exec.executeBivariate<P::ACCUM_ZERO_EXT>(data, Func::NAND); break;
@@ -204,6 +209,38 @@ auto RSP::runInstruction() -> void {
         case UnifiedOpcode::OP_VNOR: m_exec.executeBivariate<P::ACCUM_ZERO_EXT>(data, Func::NOR); break;
         case UnifiedOpcode::OP_VXOR: m_exec.executeBivariate<P::ACCUM_ZERO_EXT>(data, Func::XOR); break;
         case UnifiedOpcode::OP_VNXOR: m_exec.executeBivariate<P::ACCUM_ZERO_EXT>(data, Func::NXOR); break;
+
+        case UnifiedOpcode::OP_VMOV: m_exec.executeSingleLane<P::ACCUM_ZERO_EXT>(data, Func::NOP); break;
+
+        case UnifiedOpcode::OP_VLT:
+            m_exec.executeSelectCompare(data, [](uint16_t vs, uint16_t vt, bool vco, bool vce) {
+                return (vs < vt) | (vs == vt && vco && !vce);
+            });
+            break;
+        case UnifiedOpcode::OP_VNE:
+            m_exec.executeSelectCompare(data, [](uint16_t vs, uint16_t vt, bool _, bool vce) {
+                return (vs < vt) | (vs > vt) | (vs == vt && !vce);
+            });
+            break;
+        case UnifiedOpcode::OP_VEQ:
+            m_exec.executeSelectCompare(data, [](uint16_t vs, uint16_t vt, bool _, bool vce) {
+                return vs == vt && vce;
+            });
+            break;
+        case UnifiedOpcode::OP_VGE:
+            m_exec.executeSelectCompare(data, [](uint16_t vs, uint16_t vt, bool vco, bool vce) {
+                return (vs > vt) | (vs == vt && ((!vco) | vce));
+            });
+            break;
+        case UnifiedOpcode::OP_VCH: m_exec.executeSelectClipHigh(data); break;
+        case UnifiedOpcode::OP_VCL: m_exec.executeSelectClipLow(data); break;
+        case UnifiedOpcode::OP_VCR: m_exec.executeSelectCrimpLow(data); break;
+        case UnifiedOpcode::OP_VMRG: m_exec.executeSelectMerge(data); break;
+        case UnifiedOpcode::OP_VSAR: m_exec.executeReadAccumulators(data); break;
+        case UnifiedOpcode::OP_VRCPH: [[fallthrough]];
+        case UnifiedOpcode::OP_VRSQH: m_exec.executeReciprocalHigh(data); break;
+        case UnifiedOpcode::OP_VRCPL: m_exec.executeReciprocalLow<P::RECIP>(data); break;
+        case UnifiedOpcode::OP_VRSQL: m_exec.executeReciprocalLow<P::RECIP_SQRT>(data); break;
 
         // Coprocessor instructions
         case UnifiedOpcode::OP_MFCz: {

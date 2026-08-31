@@ -12,10 +12,20 @@ import Util;
 
 import :Registers;
 
+constexpr auto RSP_IMEM_BASE = Memory::rangeOf(Memory::PhysSeg::RSP_IMEM).lower;
+constexpr auto RSP_DMEM_BASE = Memory::rangeOf(Memory::PhysSeg::RSP_DMEM).lower;
+
 export namespace Param {
 // clang-format off
-enum Accumulator : uint8_t { ACCUM_NONE, ACCUM_ZERO_EXT, ACCUM_SIGN_EXT };
-enum CarryIn     : uint8_t { CARRY_IN_NONE, CARRY_IN };
+enum Accumulator  : uint8_t { ACCUM_NONE, ACCUM_ZERO_EXT, ACCUM_SIGN_EXT };
+enum CarryIn      : uint8_t { CARRY_IN_NONE, CARRY_IN };
+enum OperandSign  : uint8_t { UNSIGNED, SIGNED };
+enum ResultClamp  : uint8_t { CLAMP_NONE, CLAMP_UNSIGNED, CLAMP_SIGNED };
+enum ProductAccum : uint8_t { ACCUM_SET, ACCUM_ADD };
+enum ProductRound : uint8_t { ROUND_NONE, ROUND };
+enum MemoryTypeV  : uint8_t { LOADV, STOREV };
+enum RecipFunc    : uint8_t { RECIP, RECIP_SQRT };
+struct Shift { int8_t value; constexpr operator int8_t() const { return value; } };
 // clang-format on
 } // namespace Param
 
@@ -30,17 +40,54 @@ class InstructionExecutor {
         return &m_cpuExec;
     }
 
-    template <Param::Accumulator Accum, typename VcoLoFunc = std::nullptr_t, typename VcoHiFunc = std::nullptr_t, Param::CarryIn Carry = Param::CARRY_IN_NONE, typename Function>
+    template <Param::Accumulator Accum, Param::ResultClamp VdClamp = Param::CLAMP_NONE, typename VcoLoFunc = std::nullptr_t, typename VcoHiFunc = std::nullptr_t, Param::CarryIn Carry = Param::CARRY_IN_NONE, typename Function>
         requires(std::integral<std::invoke_result_t<Function, uint16_t, uint16_t>> &&
                  (std::same_as<std::nullptr_t, VcoLoFunc> || std::integral<std::invoke_result_t<VcoLoFunc, uint32_t>>) &&
                  (std::same_as<std::nullptr_t, VcoHiFunc> || std::integral<std::invoke_result_t<VcoHiFunc, uint32_t>>))
     auto executeBivariate(uint32_t inst, Function&& func, VcoLoFunc vcoLoFunc = nullptr, VcoHiFunc vcoHiFunc = nullptr) -> void;
 
-    template <Param::Accumulator Accum, typename Function>
+    template <Param::Accumulator Accum, Param::ResultClamp VdClamp = Param::CLAMP_NONE, typename Function>
         requires(std::integral<std::invoke_result_t<Function, uint16_t, uint16_t>>)
     auto executeBivariateWithCarryIn(uint32_t inst, Function&& func) -> void {
-        executeBivariate<Accum, std::nullptr_t, std::nullptr_t, Param::CARRY_IN, Function>(inst, std::forward<Function>(func));
+        executeBivariate<Accum, VdClamp, std::nullptr_t, std::nullptr_t, Param::CARRY_IN, Function>(inst, std::forward<Function>(func));
     }
+
+    template <Param::ResultClamp VdClamp, Param::OperandSign VsSign, Param::OperandSign VtSign, Param::ProductAccum Accum, Param::Shift ShiftValue = Param::Shift(0), Param::ProductRound Round = Param::ROUND_NONE>
+        requires(VdClamp != Param::ResultClamp::CLAMP_NONE)
+    auto executeMultiply(uint32_t inst) -> void;
+
+    template <Param::MemoryTypeV Type, std::size_t Size>
+        requires(Size == 1uz || Size == 2uz || Size == 4uz || Size == 8uz)
+    auto executeLoadStore(uint32_t inst) -> void;
+
+    template <Param::MemoryTypeV Type, Param::OperandSign Sign>
+    auto executeLoadStorePacked(uint32_t inst) -> void;
+
+    template <Param::MemoryTypeV Type>
+    auto executeLoadStoreQuad(uint32_t inst) -> void;
+
+    template <Param::Accumulator Accum, typename Function>
+        requires(std::integral<std::invoke_result_t<Function, uint16_t, uint16_t>>)
+    auto executeSingleLane(uint32_t inst, Function&& func) -> void;
+
+    template <typename Function> // vcc <- f(vs, vt, vco, vce)
+        requires(std::integral<std::invoke_result_t<Function, uint16_t, uint16_t, bool, bool>>)
+    auto executeSelectCompare(uint32_t inst, Function&& func) -> void;
+
+    auto executeSelectMerge(uint32_t inst) -> void;
+
+    auto executeReadAccumulators(uint32_t inst) -> void;
+
+    auto executeReciprocalHigh(uint32_t inst) -> void;
+
+    template <Param::RecipFunc Func>
+    auto executeReciprocalLow(uint32_t inst) -> void;
+
+    auto executeSelectClipHigh(uint32_t inst) -> void;
+
+    auto executeSelectClipLow(uint32_t inst) -> void;
+
+    auto executeSelectCrimpLow(uint32_t inst) -> void;
 
   private:
     std::shared_ptr<Util::Logger> m_logger;
@@ -51,7 +98,7 @@ class InstructionExecutor {
     CPU::InstructionExecutor<Sys::RSP> m_cpuExec;
 };
 
-template <Param::Accumulator Accum, typename VcoLoFunc, typename VcoHiFunc, Param::CarryIn Carry, typename Function>
+template <Param::Accumulator Accum, Param::ResultClamp VdClamp, typename VcoLoFunc, typename VcoHiFunc, Param::CarryIn Carry, typename Function>
     requires(std::integral<std::invoke_result_t<Function, uint16_t, uint16_t>> &&
              (std::same_as<std::nullptr_t, VcoLoFunc> || std::integral<std::invoke_result_t<VcoLoFunc, uint32_t>>) &&
              (std::same_as<std::nullptr_t, VcoHiFunc> || std::integral<std::invoke_result_t<VcoHiFunc, uint32_t>>))
@@ -68,7 +115,7 @@ auto InstructionExecutor::executeBivariate(uint32_t inst, Function&& func, VcoLo
 
     static_assert(Carry != Param::CarryIn::CARRY_IN || (!hasVcoLoFunc && !hasVcoHiFunc), "Cannot use carry-in with vco functions");
 
-    auto vco = Registers::Control{};
+    auto vco = RSP::ControlReg{};
     if constexpr (Carry == Param::CarryIn::CARRY_IN) {
         vco = m_vprs->readVco();
     }
@@ -76,7 +123,12 @@ auto InstructionExecutor::executeBivariate(uint32_t inst, Function&& func, VcoLo
     for (auto i = 0uz; i < 8; ++i) {
         auto value = func(vsVpr[i], vtVpr[i]);
         if constexpr (Carry == Param::CarryIn::CARRY_IN) {
-            value = func(value, std::bit_cast<uint16_t>(vco));
+            value = func(value, (static_cast<uint16_t>(vco) >> i) & 1);
+        }
+        if constexpr (VdClamp == Param::ResultClamp::CLAMP_SIGNED) {
+            value = Util::clamp<int16_t>(value);
+        } else if constexpr (VdClamp == Param::ResultClamp::CLAMP_UNSIGNED) {
+            value = Util::clamp<uint16_t>(value);
         }
         result[i] = value;
         if constexpr (hasVcoLoFunc) {
@@ -90,27 +142,417 @@ auto InstructionExecutor::executeBivariate(uint32_t inst, Function&& func, VcoLo
     if constexpr (hasVcoLoFunc || hasVcoHiFunc) {
         m_vprs->writeVco(vco);
     } else if constexpr (Carry == Param::CarryIn::CARRY_IN) {
-        m_vprs->writeVco(Registers::Control{});
+        m_vprs->writeVco(RSP::ControlReg{});
     }
     if constexpr (Accum != Param::Accumulator::ACCUM_NONE) {
-        m_vprs->writeAccumulators(result);
+        m_vprs->setAccumulators(result);
     }
     m_vprs->writeVpr(op.vd, result);
 }
 
-// auto InstructionExecutor::executeAdd(uint32_t inst, Function&& func) -> void {
-//     const auto op    = std::bit_cast<ISA::RSP::TypeVR>(inst);
-//     const auto vsVpr = m_vprs->readVpr(op.vs);
-//     const auto vtVpr = m_vprs->readVpr(op.vt, static_cast<ISA::VEC_ELEM>(op.vtElem));
-//
-//     auto     result = RSP::Registers::VPR{};
-//     uint16_t vco{};
-//     for (auto i = 0uz; i < 8; ++i) {
-//         uint32_t sum = vsVpr[i] + vtVpr[i];
-//         vco |= (((sum >> 16) & 1) << i);
-//         result[i] = sum;
-//     }
-//     m_vprs->writeVpr(op.vd, result);
-//     m_vprs->writeVco(vco);
-// }
+template <Param::ResultClamp VdClamp, Param::OperandSign VsSign, Param::OperandSign VtSign, Param::ProductAccum Accum, Param::Shift ShiftValue, Param::ProductRound Round>
+    requires(VdClamp != Param::ResultClamp::CLAMP_NONE)
+auto InstructionExecutor::executeMultiply(uint32_t inst) -> void {
+    using VsRegType   = std::conditional_t<VsSign == Param::SIGNED, int16_t, uint16_t>;
+    using VtRegType   = std::conditional_t<VtSign == Param::SIGNED, int16_t, uint16_t>;
+    using VdClampType = std::conditional_t<VdClamp == Param::CLAMP_SIGNED, int16_t, uint16_t>;
+
+    const auto op    = std::bit_cast<ISA::RSP::TypeVR>(inst);
+    const auto vsVpr = m_vprs->readVpr<VsRegType>(op.vs);
+    const auto vtVpr = m_vprs->readVpr<VtRegType>(op.vt, static_cast<ISA::VEC_ELEM>(op.vtElem));
+
+    auto accums = std::array<RSP::Accumulator, 8>{};
+    if constexpr (Accum != Param::ProductAccum::ACCUM_SET) {
+        accums = m_vprs->readAccumulators();
+    }
+    auto result = Registers::VPR<uint16_t>{};
+
+    for (auto i = 0uz; i < 8; ++i) {
+        using VsExtType = std::conditional_t<VsSign == Param::SIGNED, int32_t, uint32_t>;
+        using VtExtType = std::conditional_t<VtSign == Param::SIGNED, int32_t, uint32_t>;
+        auto product    = static_cast<int32_t>(static_cast<VsExtType>(vsVpr[i]) * static_cast<VtExtType>(vtVpr[i]));
+
+        if constexpr (ShiftValue < 0) {
+            product >>= -ShiftValue;
+        } else if constexpr (ShiftValue > 0) {
+            product <<= ShiftValue;
+        }
+        if constexpr (Round == Param::ROUND) {
+            product += 0x8000;
+        }
+        if constexpr (Accum == Param::ProductAccum::ACCUM_SET) {
+            accums[i] = static_cast<int64_t>(product);
+        } else { // ACCUM_ADD
+            accums[i] = static_cast<int64_t>(accums[i]) + product;
+        }
+        result[i] = std::bit_cast<uint16_t>(Util::clamp<VdClampType>(static_cast<int64_t>(accums[i])));
+    }
+
+    m_vprs->writeAccumulators(accums);
+    m_vprs->writeVpr(op.vd, result);
+}
+
+template <Param::MemoryTypeV Type, std::size_t Size>
+    requires(Size == 1uz || Size == 2uz || Size == 4uz || Size == 8uz)
+auto InstructionExecutor::executeLoadStore(uint32_t inst) -> void {
+    const auto ops       = std::bit_cast<ISA::RSP::TypeVI>(inst);
+    const auto vaddr     = RSP_DMEM_BASE + Util::signExt32<int16_t>(ops.imm) + m_gprs->readGpr(ops.rs);
+    const auto byteRange = std::views::iota(ops.vtElem, std::min(16uz, ops.vtElem + Size));
+
+    auto vt      = m_vprs->readVpr(ops.vt);
+    auto vtBytes = reinterpret_cast<std::byte*>(vt.data());
+    for (const auto i : byteRange) {
+        if constexpr (Type == Param::LOADV) {
+            const auto data = m_memory->readPhysical<uint8_t>(vaddr + i);
+            vtBytes[i]      = static_cast<std::byte>(data);
+        } else if constexpr (Type == Param::STOREV) {
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
+            const auto data = static_cast<uint8_t>(vtBytes[i]);
+#pragma GCC diagnostic pop
+            m_memory->writePhysical<uint8_t>(vaddr + i, data);
+        }
+    }
+    if constexpr (Type == Param::LOADV) {
+        m_vprs->writeVpr(ops.vt, vt);
+    }
+}
+
+template <Param::MemoryTypeV Type, Param::OperandSign Sign>
+auto InstructionExecutor::executeLoadStorePacked(uint32_t inst) -> void {
+    const auto ops       = std::bit_cast<ISA::RSP::TypeVI>(inst);
+    const auto vaddr     = RSP_DMEM_BASE + Util::signExt32<int16_t>(ops.imm) + m_gprs->readGpr(ops.rs);
+    const auto byteRange = std::views::iota(0, 8);
+
+    auto vt = m_vprs->readVpr(ops.vt);
+
+    const auto vaddrBase   = vaddr & ~0x7;
+    const auto vaddrOffset = vaddr & 0x7;
+    for (const auto i : byteRange) {
+        const auto vtIdx     = ops.vtElem + i;
+        const auto vaddrWrap = vaddrBase + ((vaddrOffset + i) % 8);
+        if constexpr (Type == Param::LOADV) {
+            const auto byte   = m_memory->readPhysical<uint8_t>(vaddrWrap);
+            auto&      vtElem = vt[(ops.vtElem + i) % 8];
+            if constexpr (Sign == Param::SIGNED) {
+                vtElem = (byte << 8) | (vtElem & 0xFF);
+            } else {
+                vtElem = byte;
+            }
+        } else {
+            auto& vtElem = vt[vtIdx % 8];
+            auto  byte   = uint8_t();
+            if ((Sign == Param::SIGNED && vtIdx < 8) || (Sign == Param::UNSIGNED && vtIdx >= 8)) {
+                byte = static_cast<uint8_t>(vtElem >> 8);
+            } else {
+                byte = static_cast<uint8_t>(vtElem);
+            }
+            m_memory->writePhysical<uint8_t>(vaddrWrap, byte);
+        }
+    }
+    if constexpr (Type == Param::LOADV) {
+        m_vprs->writeVpr(ops.vt, vt);
+    }
+}
+
+template <Param::MemoryTypeV Type>
+auto InstructionExecutor::executeLoadStoreQuad(uint32_t inst) -> void {
+    const auto ops    = std::bit_cast<ISA::RSP::TypeVI>(inst);
+    const auto vaddr  = RSP_DMEM_BASE + Util::signExt32<int16_t>(ops.imm) + m_gprs->readGpr(ops.rs);
+    auto       vt     = m_vprs->readVpr(ops.vt);
+    const auto vtData = reinterpret_cast<std::byte*>(vt.data()) + ops.vtElem;
+    for (auto byte = 16u; byte > (vaddr % 16) + ops.vtElem; --byte) {
+        if constexpr (Type == Param::LOADV) {
+            vtData[16 - byte] = static_cast<std::byte>(m_memory->readPhysical<uint8_t>(vaddr + (16 - byte)));
+        } else {
+            m_memory->writePhysical<uint8_t>(vaddr + (16 - byte), static_cast<uint8_t>(vtData[16 - byte]));
+        }
+    }
+    if constexpr (Type == Param::LOADV) {
+        m_vprs->writeVpr(ops.vt, vt);
+    }
+}
+
+template <Param::Accumulator Accum, typename Function>
+    requires(std::integral<std::invoke_result_t<Function, uint16_t, uint16_t>>)
+auto InstructionExecutor::executeSingleLane(uint32_t inst, Function&& func) -> void {
+    const auto ops = std::bit_cast<ISA::RSP::TypeVS>(inst);
+    const auto vt  = m_vprs->readVpr<uint16_t>(ops.vt);
+
+    auto vd = m_vprs->readVpr<uint16_t>(ops.vd);
+
+    const auto result = func(vt[ops.vtElem], 0);
+    vd[ops.vdElem]    = result;
+
+    if constexpr (Accum != Param::Accumulator::ACCUM_NONE) {
+        auto accs = m_vprs->readAccumulators();
+        for (auto& acc : accs) {
+            acc.low = static_cast<uint16_t>(result);
+        }
+        m_vprs->writeAccumulators(accs);
+    }
+}
+
+template <typename Function>
+    requires(std::integral<std::invoke_result_t<Function, uint16_t, uint16_t, bool, bool>>)
+auto InstructionExecutor::executeSelectCompare(uint32_t inst, Function&& func) -> void {
+    const auto op = std::bit_cast<ISA::RSP::TypeVR>(inst);
+    const auto vs = m_vprs->readVpr<int16_t>(op.vs);
+    const auto vt = m_vprs->readVpr<int16_t>(op.vt, static_cast<ISA::VEC_ELEM>(op.vtElem));
+
+    auto vd   = ::RSP::Registers::VPR<uint16_t>{};
+    auto vcc  = uint16_t();
+    auto accs = m_vprs->readAccumulators();
+    for (auto i : std::views::iota(0, 8)) {
+        const auto vco_i = (static_cast<uint16_t>(m_vprs->readVco()) >> i) & 1;
+        const auto vce_i = (static_cast<uint16_t>(m_vprs->readVce()) >> i) & 1;
+        const auto vcc_i = (func(vs[i], vt[i], vco_i, vce_i) & 1) << i;
+        vcc |= vcc_i;
+
+        const auto result = static_cast<uint16_t>(vcc_i ? vs[i] : vt[i]);
+        accs[i].low       = result;
+        vd[i]             = result;
+    }
+    m_vprs->writeVcc(RSP::ControlReg(vcc));
+    m_vprs->writeAccumulators(accs);
+    m_vprs->writeVpr(op.vd, vd);
+    m_vprs->writeVco(RSP::ControlReg(0));
+    m_vprs->writeVce(RSP::ControlReg(0));
+}
+
+auto InstructionExecutor::executeSelectMerge(uint32_t inst) -> void {
+    const auto ops = std::bit_cast<ISA::RSP::TypeVR>(inst);
+    const auto vcc = m_vprs->readVcc();
+    const auto vs  = m_vprs->readVpr<uint16_t>(ops.vs);
+    const auto vt  = m_vprs->readVpr<uint16_t>(ops.vt);
+
+    auto vd   = ::RSP::Registers::VPR<uint16_t>();
+    auto accs = m_vprs->readAccumulators();
+    for (auto i : std::views::iota(0, 8)) {
+        const auto vcc_i = (static_cast<uint16_t>(vcc) >> i) & 1;
+        vd[i]            = vcc_i ? vs[i] : vt[i];
+    }
+    m_vprs->writeVpr(ops.vd, vd);
+    m_vprs->writeAccumulators(accs);
+}
+
+auto InstructionExecutor::executeReadAccumulators(uint32_t inst) -> void {
+    const auto ops = std::bit_cast<ISA::RSP::TypeVR>(inst);
+    const auto vs  = m_vprs->readVpr<uint16_t>(ops.vs);
+
+    auto vd     = ::RSP::Registers::VPR<uint16_t>();
+    auto accums = m_vprs->readAccumulators();
+
+    for (auto i : std::views::iota(0, 8)) {
+        switch (static_cast<ISA::VEC_ELEM>(ops.vtElem)) {
+            case ISA::VEC_ELEM::e0:
+                vd[i]         = accums[i].low;
+                accums[i].low = vs[i];
+                break;
+            case ISA::VEC_ELEM::e1:
+                vd[i]         = accums[i].mid;
+                accums[i].mid = vs[i];
+                break;
+            case ISA::VEC_ELEM::e2:
+                vd[i]          = accums[i].high;
+                accums[i].high = vs[i];
+                break;
+            default: throw Util::Error("Invalid element {} for VSAR instruction", static_cast<int>(ops.vtElem));
+        }
+    };
+    m_vprs->writeVpr(ops.vd, vd);
+    m_vprs->writeAccumulators(accums);
+}
+
+auto InstructionExecutor::executeReciprocalHigh(uint32_t inst) -> void {
+    const auto ops = std::bit_cast<ISA::RSP::TypeVS>(inst);
+
+    // read VT into DivIn
+    const auto vt = m_vprs->readVpr<uint16_t>(ops.vt, static_cast<ISA::VEC_ELEM>(ops.vtElem))[0];
+    m_vprs->writeDivIn(static_cast<uint32_t>(vt) << 16);
+
+    // read VT into Accumulators
+    auto accums = m_vprs->readAccumulators();
+    for (auto i : std::views::iota(0, 8)) {
+        accums[i].low = vt;
+    }
+    m_vprs->writeAccumulators(accums);
+
+    // write VD with DivOut
+    const auto vd = static_cast<uint16_t>(m_vprs->readDivOut() >> 16);
+    m_vprs->writeVpr(ops.vd, vd, static_cast<ISA::VEC_ELEM>(ops.vdElem));
+}
+
+template <Param::RecipFunc Func>
+auto InstructionExecutor::executeReciprocalLow(uint32_t inst) -> void {
+    const auto ops = std::bit_cast<ISA::RSP::TypeVS>(inst);
+
+    const auto vt = m_vprs->readVpr<uint16_t>(ops.vt, static_cast<ISA::VEC_ELEM>(ops.vtElem))[0];
+
+    auto input = static_cast<uint32_t>(vt);
+    input |= m_vprs->readDivIn().value_or(vt >> 16 ? 0xFFFF : 0) << 16;
+
+    // TODO use lookup tables
+    auto result = int32_t();
+    if (input == 0) {
+        result = 0x7FFFFFFF;
+    } else {
+        auto resultf = static_cast<double>(input);
+        if constexpr (Func == Param::RECIP_SQRT) {
+            resultf = std::sqrt(resultf);
+        }
+        resultf = 1 / resultf;
+        if (resultf >= 1.0f) {
+            result = 0x7FFFFFFF;
+        } else {
+            result = resultf * 0xFFFFFFFF;
+        }
+    }
+
+    // read VT into Accumulators
+    auto accums = m_vprs->readAccumulators();
+    for (auto i : std::views::iota(0, 8)) {
+        accums[i].low = vt;
+    }
+    m_vprs->writeAccumulators(accums);
+
+    m_vprs->writeVpr(ops.vd, static_cast<uint16_t>(result), static_cast<ISA::VEC_ELEM>(ops.vdElem));
+    m_vprs->writeDivOut(result);
+    m_vprs->writeDivIn(std::nullopt);
+}
+
+auto InstructionExecutor::executeSelectClipHigh(uint32_t inst) -> void {
+    const auto ops = std::bit_cast<ISA::RSP::TypeVR>(inst);
+    const auto vs  = m_vprs->readVpr<int16_t>(ops.vs);
+    const auto vt  = m_vprs->readVpr<int16_t>(ops.vt, static_cast<ISA::VEC_ELEM>(ops.vtElem));
+
+    auto vd     = ::RSP::Registers::VPR<int16_t>();
+    auto accums = m_vprs->readAccumulators();
+
+    m_vprs->writeVcc(RSP::ControlReg(0));
+    m_vprs->writeVco(RSP::ControlReg(0));
+    m_vprs->writeVce(RSP::ControlReg(0));
+
+    auto vcc = std::bitset<16>{};
+    auto vco = std::bitset<16>{};
+    auto vce = std::bitset<16>{};
+
+    for (auto i : std::views::iota(0, 8)) {
+        const auto sign = static_cast<int16_t>(vs[i] ^ vt[i]) < 0;
+
+        auto result = uint16_t();
+        bool le{}, ge{}, eq{}, vce_i{};
+        if (sign) {
+            ge     = vt[i] < 0;
+            le     = vt[i] <= 0;
+            vce_i  = vs[i] + vt[i] == -1;
+            eq     = vs[i] + vt[i] == 0;
+            result = le ? -vt[i] : vs[i];
+        } else {
+            le     = vt[i] < 0;
+            ge     = (vs[i] - vt[i]) >= 0;
+            vce_i  = 0;
+            eq     = (vs[i] - vt[i]) == 0;
+            result = ge ? vt[i] : vs[i];
+        }
+        accums[i].low = result & 0xFFFF;
+        vd[i]         = result & 0xFFFF;
+
+        vcc[i]     = le;
+        vcc[i + 8] = ge;
+        vco[i]     = sign;
+        vco[i + 8] = !eq;
+        vce[i]     = vce_i;
+    }
+    m_vprs->writeAccumulators(accums);
+    m_vprs->writeVpr(ops.vd, vd);
+    m_vprs->writeVcc(RSP::ControlReg(vcc.to_ulong()));
+    m_vprs->writeVco(RSP::ControlReg(vco.to_ulong()));
+    m_vprs->writeVce(RSP::ControlReg(vce.to_ulong()));
+}
+
+auto InstructionExecutor::executeSelectClipLow(uint32_t inst) -> void {
+    const auto ops = std::bit_cast<ISA::RSP::TypeVR>(inst);
+    const auto vs  = m_vprs->readVpr<uint16_t>(ops.vs);
+    const auto vt  = m_vprs->readVpr<uint16_t>(ops.vt, static_cast<ISA::VEC_ELEM>(ops.vtElem));
+    auto       vcc = std::bitset<16>(static_cast<uint16_t>(m_vprs->readVcc()));
+    const auto vco = std::bitset<16>(static_cast<uint16_t>(m_vprs->readVco()));
+    const auto vce = std::bitset<16>(static_cast<uint16_t>(m_vprs->readVce()));
+
+    auto vd     = ::RSP::Registers::VPR<uint16_t>();
+    auto accums = m_vprs->readAccumulators();
+
+    for (auto i : std::views::iota(0, 8)) {
+        const auto eq   = !vco[i + 8];
+        const auto sign = vco[i];
+
+        auto le = vcc[i];
+        auto ge = vcc[i + 8];
+
+        auto result = uint32_t();
+        if (sign) {
+            result     = static_cast<uint32_t>(vs[i]) + static_cast<uint32_t>(vt[i]);
+            auto carry = (result >> 16) & 1;
+            if (eq) {
+                le = (!vce[i] && (((result & 0xFFFF) == 0) && !carry)) ||
+                     (vce[i] && (((result & 0xFFFF) == 0) || !carry));
+            }
+            result = le ? -vt[i] : vs[i];
+        } else {
+            result = static_cast<uint32_t>(vs[i]) - static_cast<uint32_t>(vt[i]);
+            if (eq) {
+                ge = static_cast<int16_t>(result & 0xFFFF) >= 0;
+            }
+            result = ge ? vt[i] : vs[i];
+        }
+        accums[i].low = result & 0xFFFF;
+        vd[i]         = result & 0xFFFF;
+
+        vcc[i]     = le;
+        vcc[i + 8] = ge;
+    }
+    m_vprs->writeAccumulators(accums);
+    m_vprs->writeVpr(ops.vd, vd);
+    m_vprs->writeVcc(RSP::ControlReg(vcc.to_ulong()));
+    m_vprs->writeVco(RSP::ControlReg(0));
+    m_vprs->writeVce(RSP::ControlReg(0));
+}
+
+auto InstructionExecutor::executeSelectCrimpLow(uint32_t inst) -> void {
+    const auto ops = std::bit_cast<ISA::RSP::TypeVR>(inst);
+    const auto vs  = m_vprs->readVpr<int16_t>(ops.vs);
+    const auto vt  = m_vprs->readVpr<int16_t>(ops.vt, static_cast<ISA::VEC_ELEM>(ops.vtElem));
+    auto       vcc = std::bitset<16>();
+    const auto vco = std::bitset<16>(static_cast<uint16_t>(m_vprs->readVco()));
+    const auto vce = std::bitset<16>(static_cast<uint16_t>(m_vprs->readVce()));
+
+    auto vd     = ::RSP::Registers::VPR<uint16_t>();
+    auto accums = m_vprs->readAccumulators();
+
+    for (auto i : std::views::iota(0, 8)) {
+        const auto sign = static_cast<int16_t>(vs[i] ^ vt[i]) < 0;
+
+        auto result = uint16_t();
+        bool le{}, ge{};
+        if (sign) {
+            ge     = vt[i] < 0;
+            le     = (vs[i] + vt[i] + 1) <= 0;
+            result = le ? ~(vt[i]) : vs[i];
+        } else {
+            le     = vt[i] < 0;
+            ge     = (vs[i] - vt[i]) >= 0;
+            result = ge ? vt[i] : vs[i];
+        }
+        accums[i].low = result & 0xFFFF;
+        vd[i]         = result & 0xFFFF;
+
+        vcc[i]     = le;
+        vcc[i + 8] = ge;
+    }
+    m_vprs->writeAccumulators(accums);
+    m_vprs->writeVpr(ops.vd, vd);
+    m_vprs->writeVcc(RSP::ControlReg(vcc.to_ulong()));
+    m_vprs->writeVco(RSP::ControlReg(0));
+    m_vprs->writeVce(RSP::ControlReg(0));
+}
 } // namespace RSP
