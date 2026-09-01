@@ -23,8 +23,8 @@ export namespace RSP {
 
 class RSP {
   public:
-    RSP(std::shared_ptr<Util::Logger> logger, Memory::Memory* memory, Control* control, Interfaces::MipsInterface* mipsInterface)
-        : m_logger(logger), m_memory(memory), m_gprs(logger), m_vprs(logger), m_control(control), m_exec(m_logger, &m_gprs, &m_vprs, m_memory), m_mipsInterface(mipsInterface) {};
+    RSP(std::shared_ptr<Util::Logger> logger, Control* control, Interfaces::MipsInterface* mipsInterface, Memory::Memory* memory)
+        : m_logger(logger), m_control(control), m_mipsInterface(mipsInterface), m_memory(memory), m_gprs(logger), m_vprs(logger), m_exec(m_logger, &m_gprs, &m_vprs, m_memory) {};
 
     auto runInstruction() -> void;
 
@@ -34,13 +34,13 @@ class RSP {
 
   private:
     std::shared_ptr<Util::Logger> m_logger;
+    Control*                      m_control{};
+    Interfaces::MipsInterface*    m_mipsInterface{};
     Memory::Memory*               m_memory{};
     CPU::Registers<Sys::RSP>      m_gprs;
     ::RSP::Registers              m_vprs;
-    Control*                      m_control{};
     ::RSP::InstructionExecutor    m_exec;
     std::optional<VirtualAddr>    m_delaySlotPc;
-    Interfaces::MipsInterface*    m_mipsInterface{};
 };
 
 auto RSP::runInstruction() -> void {

@@ -8,6 +8,8 @@ import CP0;
 import CP1;
 import CPU;
 import Rom;
+import RDP;
+import RdpControl;
 import RSP;
 import RspControl;
 import Interfaces;
@@ -44,6 +46,8 @@ export class Emulator {
     CPU::CPU*              m_cpu{};
     CP0::CP0*              m_cp0{};
     CP1::CP1*              m_cp1{};
+    RDP::RDP*              m_rdp{};
+    RDP::Control*          m_rdpControl{};
     RSP::RSP*              m_rsp{};
     RSP::Control*          m_rspControl{};
     std::optional<RomFile> m_rom;
@@ -53,6 +57,7 @@ export class Emulator {
     Interfaces::AudioInterface*      m_audioInterface{};
     Interfaces::MipsInterface*       m_mipsInterface{};
     Interfaces::RdramInterface*      m_rdramInterface{};
+    Interfaces::RdpRegisters*        m_rdpRegisters{};
     Interfaces::RspRegisters*        m_rspRegisters{};
     Interfaces::PeripheralInterface* m_peripheralInterface{};
     Interfaces::SerialInterface*     m_serialInterface{};
@@ -90,12 +95,15 @@ constexpr Emulator::Emulator(Config config) : m_config(config) {
 
     m_cpu = new CPU::CPU(m_logger, m_memoryManager, m_cp0, m_cp1);
 
-    m_rspControl = new RSP::Control(m_logger, reinterpret_cast<std::byte*>(m_memory));
-    m_rsp        = new RSP::RSP(m_logger, m_memoryManager, m_rspControl, m_mipsInterface);
+    m_rdpControl = new RDP::Control(m_logger, reinterpret_cast<std::byte*>(m_memory));
+    m_rdp        = new RDP::RDP(m_logger, m_rdpControl, m_mipsInterface);
+    m_rspControl = new RSP::Control(m_logger, reinterpret_cast<std::byte*>(m_memory), m_rdpControl);
+    m_rsp        = new RSP::RSP(m_logger, m_rspControl, m_mipsInterface, m_memoryManager);
 
     m_rdramInterface      = new Interfaces::RdramInterface(m_logger);
     m_videoInterface      = new Interfaces::VideoInterface(m_logger, m_mipsInterface);
     m_audioInterface      = new Interfaces::AudioInterface(m_logger, m_mipsInterface);
+    m_rdpRegisters        = new Interfaces::RdpRegisters(m_logger, m_rdpControl);
     m_rspRegisters        = new Interfaces::RspRegisters(m_logger, m_mipsInterface, m_rspControl);
     m_peripheralInterface = new Interfaces::PeripheralInterface(m_logger, reinterpret_cast<std::byte*>(m_memory), m_mipsInterface);
     m_serialInterface     = new Interfaces::SerialInterface(m_logger, reinterpret_cast<std::byte*>(m_memory), m_mipsInterface);
@@ -114,13 +122,16 @@ Emulator::~Emulator() {
     std::free(m_memory);
     delete m_cp0;
     delete m_cp1;
+    delete m_rdpControl;
     delete m_rspControl;
     delete m_cpu;
+    delete m_rdp;
     delete m_rsp;
     delete m_memoryManager;
     delete m_audioInterface;
     delete m_mipsInterface;
     delete m_rdramInterface;
+    delete m_rdpRegisters;
     delete m_rspRegisters;
     delete m_peripheralInterface;
     delete m_serialInterface;
@@ -162,6 +173,7 @@ constexpr auto Emulator::loadRom(std::filesystem::path path) -> void {
                 m_rsp->dumpIMem("rsp_imem.txt");
                 throw;
             }
+            m_rdp->runCommand();
         }
     } catch (const Util::Error& e) {
         if (m_logger) {

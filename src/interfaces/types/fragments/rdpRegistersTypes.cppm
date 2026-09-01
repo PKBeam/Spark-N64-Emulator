@@ -25,15 +25,13 @@ struct RDP_REG_ADDR {
 };
 
 struct DPC_START {
-    uint32_t            : 3;
-    uint32_t start_24_3 : 21;
-    uint32_t            : 8;
+    uint32_t start : 24;
+    uint32_t       : 8;
 };
 
 struct DPC_END {
-    uint32_t          : 3;
-    uint32_t end_24_3 : 21;
-    uint32_t          : 8;
+    uint32_t end : 24;
+    uint32_t     : 8;
 };
 
 struct DPC_CURRENT {

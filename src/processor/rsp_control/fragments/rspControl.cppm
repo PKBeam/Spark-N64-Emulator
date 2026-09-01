@@ -4,6 +4,7 @@ export module RspControl:RspControl;
 
 import std;
 import InterfaceTypes;
+import RdpControl;
 import Util;
 
 using namespace std::string_view_literals;
@@ -41,7 +42,7 @@ class Control {
   public:
     using SignalSet = std::bitset<8>;
 
-    Control(std::shared_ptr<Util::Logger> logger, std::byte* memory) : m_logger(logger), m_memory(memory) {};
+    Control(std::shared_ptr<Util::Logger> logger, std::byte* memory, RDP::Control* rdpControl) : m_logger(logger), m_memory(memory), m_rdpControl(rdpControl) {};
 
     auto setSignal(std::size_t signal, bool value) -> void //
         pre(signal < SignalSet{}.size());
@@ -87,6 +88,7 @@ class Control {
     std::shared_ptr<Util::Logger> m_logger;
     std::optional<uint32_t>       m_pc = 0;
     std::byte*                    m_memory{};
+    RDP::Control*                 m_rdpControl{};
     SignalSet                     m_signals          = {};
     bool                          m_broke            = false;
     bool                          m_halt             = true;
@@ -95,8 +97,7 @@ class Control {
     bool                          m_semaphore        = 0;
     uint32_t                      m_rspAddr{};
     uint32_t                      m_ramAddr{};
-
-    bool m_cic6105rspBootPatched = false; // TODO reset when new rom loaded
+    bool                          m_cic6105rspBootPatched = false; // TODO reset when new rom loaded
 };
 
 template <RSP_DMA_DIRECTION Dir>
@@ -189,10 +190,7 @@ auto Control::readRegister(std::size_t index) -> uint32_t {
             case RSP_CP0_REGS::DPC_BUF_BUSY: [[fallthrough]];
             case RSP_CP0_REGS::DPC_PIPE_BUSY: [[fallthrough]];
             case RSP_CP0_REGS::DPC_TMEM_BUSY:
-                IF_LOG_ENABLED(m_logger) {
-                    m_logger->log<Level::HIGH, Sev::WARNING, Sys::RSP_REG>("Ignoring read from RDP register {}", index);
-                }
-                return 0;
+                return m_rdpControl->readRegister(static_cast<RDP::CMD_REGS>(index - static_cast<uint8_t>(RSP_CP0_REGS::DPC_START)));
             default:
                 throw Util::Error("Invalid RSP control register index {}", index);
         }
@@ -263,7 +261,7 @@ auto Control::writeRegister(std::size_t index, uint32_t data) -> void {
             if (status.setSig6) setSignal(6, true);
             if (status.clrSig7) setSignal(7, false);
             if (status.setSig7) setSignal(7, true);
-            return;
+            break;
         }
         case RSP_CP0_REGS::SP_DMA_FULL: [[fallthrough]];
         case RSP_CP0_REGS::SP_DMA_BUSY:
@@ -273,7 +271,7 @@ auto Control::writeRegister(std::size_t index, uint32_t data) -> void {
             break;
         case RSP_CP0_REGS::SP_SEMAPHORE:
             m_semaphore = std::bit_cast<SP_SEMAPHORE>(data).semaphore;
-            return;
+            break;
         case RSP_CP0_REGS::DPC_START: [[fallthrough]];
         case RSP_CP0_REGS::DPC_END: [[fallthrough]];
         case RSP_CP0_REGS::DPC_CURRENT: [[fallthrough]];
@@ -282,10 +280,8 @@ auto Control::writeRegister(std::size_t index, uint32_t data) -> void {
         case RSP_CP0_REGS::DPC_BUF_BUSY: [[fallthrough]];
         case RSP_CP0_REGS::DPC_PIPE_BUSY: [[fallthrough]];
         case RSP_CP0_REGS::DPC_TMEM_BUSY:
-            IF_LOG_ENABLED(m_logger) {
-                m_logger->log<Level::HIGH, Sev::WARNING, Sys::RSP_REG>("Ignoring write to RDP register {}", index);
-            }
-            return;
+            m_rdpControl->writeRegister(static_cast<RDP::CMD_REGS>(index - static_cast<uint8_t>(RSP_CP0_REGS::DPC_START)), data);
+            break;
         default:
             throw Util::Error("No RSP register found for index {}", index);
     }

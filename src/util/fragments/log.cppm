@@ -24,6 +24,7 @@ class Logger {
         CPU,
         CP0,
         CP1,
+        RDP,
         RSP,
 
         // memory

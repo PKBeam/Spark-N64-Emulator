@@ -31,42 +31,30 @@ export class RspRegisters : public Interface {
 auto RspRegisters::read(uint32_t addr) -> uint32_t {
     contract_assert(addr % 4 == 0 &&
                     RSP_REG_ADDR::BASE <= addr && addr <= RSP_REG_ADDR::END);
-
-    auto readReg = [this](uint32_t addr) -> uint32_t {
-        switch (addr) {
-            case RSP_REG_ADDR::SP_DMA_SPADDR: return m_rspCtrl->readRegister(0);
-            case RSP_REG_ADDR::SP_DMA_RAMADDR: return m_rspCtrl->readRegister(1);
-            case RSP_REG_ADDR::SP_DMA_RDLEN: return m_rspCtrl->readRegister(2);
-            case RSP_REG_ADDR::SP_DMA_WRLEN: return m_rspCtrl->readRegister(3);
-            case RSP_REG_ADDR::SP_STATUS: return m_rspCtrl->readRegister(4);
-            case RSP_REG_ADDR::SP_DMA_FULL: return m_rspCtrl->readRegister(5);
-            case RSP_REG_ADDR::SP_DMA_BUSY: return m_rspCtrl->readRegister(6);
-            case RSP_REG_ADDR::SP_SEMAPHORE: return m_rspCtrl->readRegister(7);
-            case RSP_REG_ADDR::SP_PC:
-                if (!m_rspCtrl->getHalt()) {
-                    IF_LOG_ENABLED(m_logger) {
-                        m_logger->log<Level::HIGH, Sev::WARNING, Sys::RSP_REG>("Attempted to read PC while RSP is not halted");
-                    }
+    switch (addr) {
+        case RSP_REG_ADDR::SP_DMA_SPADDR: return m_rspCtrl->readRegister(0);
+        case RSP_REG_ADDR::SP_DMA_RAMADDR: return m_rspCtrl->readRegister(1);
+        case RSP_REG_ADDR::SP_DMA_RDLEN: return m_rspCtrl->readRegister(2);
+        case RSP_REG_ADDR::SP_DMA_WRLEN: return m_rspCtrl->readRegister(3);
+        case RSP_REG_ADDR::SP_STATUS: return m_rspCtrl->readRegister(4);
+        case RSP_REG_ADDR::SP_DMA_FULL: return m_rspCtrl->readRegister(5);
+        case RSP_REG_ADDR::SP_DMA_BUSY: return m_rspCtrl->readRegister(6);
+        case RSP_REG_ADDR::SP_SEMAPHORE: return m_rspCtrl->readRegister(7);
+        case RSP_REG_ADDR::SP_PC:
+            if (!m_rspCtrl->getHalt()) {
+                IF_LOG_ENABLED(m_logger) {
+                    m_logger->log<Level::HIGH, Sev::WARNING, Sys::RSP_REG>("Attempted to read PC while RSP is not halted");
                 }
-                return m_rspCtrl->getPc().value_or(0);
-            default:
-                throw Util::Error("No RSP register found for addr {:#08x}", addr);
-        }
-    };
-
-    auto data = readReg(addr);
-
-    logOperation<Sys::RSP_REG, RSP_REG_ADDR>(m_logger, "read", addr, data);
-
-    return data;
+            }
+            return m_rspCtrl->getPc().value_or(0);
+        default:
+            throw Util::Error("No RSP register found for addr {:#08x}", addr);
+    }
 }
 
 auto RspRegisters::write(uint32_t addr, uint32_t data) -> void {
     contract_assert(addr % 4 == 0 &&
                     RSP_REG_ADDR::BASE <= addr && addr <= RSP_REG_ADDR::END);
-
-    logOperation<Sys::RSP_REG, RSP_REG_ADDR>(m_logger, "write", addr, data);
-
     switch (addr) {
         case RSP_REG_ADDR::SP_DMA_SPADDR: m_rspCtrl->writeRegister(0, data); return;
         case RSP_REG_ADDR::SP_DMA_RAMADDR: m_rspCtrl->writeRegister(1, data); return;

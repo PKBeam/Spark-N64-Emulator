@@ -16,5 +16,5 @@ target_sources(interface_types PUBLIC
 )
 target_compile_options(interface_types PUBLIC ${CXX_COMPILE_OPTIONS})
 target_include_directories(interface_types PUBLIC ${CMAKE_SOURCE_DIR}/src)
-target_link_libraries(interface_types PUBLIC util )
+target_link_libraries(interface_types PUBLIC util)
 

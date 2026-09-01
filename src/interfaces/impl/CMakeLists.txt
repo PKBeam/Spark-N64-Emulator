@@ -19,5 +19,5 @@ target_sources(interfaces PUBLIC
 )
 target_compile_options(interfaces PUBLIC ${CXX_COMPILE_OPTIONS})
 target_include_directories(interfaces PUBLIC ${CMAKE_SOURCE_DIR}/src)
-target_link_libraries(interfaces PUBLIC cp0 rsp_control util isa rom)
+target_link_libraries(interfaces PUBLIC cp0 rdp_control rsp_control util isa rom)
 
