@@ -62,12 +62,12 @@ set(CMAKE_CXX_FLAGS "-freflection ${CMAKE_CXX_FLAGS}")
 # TODO cross platform compatibility
 set(CMAKE_CXX_COMPILER "/usr/bin/g++-16")
 
-# Add AddressSanitizer to Debug builds
+# Add sanitisers to Debug builds
 if(CMAKE_BUILD_TYPE)
     string(TOUPPER ${CMAKE_BUILD_TYPE} BUILD_TYPE_UPPER)
     if(BUILD_TYPE_UPPER STREQUAL "DEBUG")
-        add_compile_options(-fsanitize=address -fno-omit-frame-pointer)
-        add_link_options(-fsanitize=address)
+        add_compile_options(-fsanitize=address -fsanitize=undefined -fno-omit-frame-pointer)
+        add_link_options(-fsanitize=address -fsanitize=undefined)
     endif()
 endif()
 

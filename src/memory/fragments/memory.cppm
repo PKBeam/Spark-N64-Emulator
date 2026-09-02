@@ -137,7 +137,6 @@ auto Memory::readPhysical(PhysicalAddr paddr) const -> T { // TODO improve perfo
             std::tuple{"op", "read"},
             std::tuple{"size", sizeof(T)},
             std::tuple{"addr", "0x{:08x}", paddr},
-            std::tuple{"ptr", "{:p}", (void*)hostAddr},
             std::tuple{"data", "0x{:08x}", static_cast<std::make_unsigned_t<T>>(data)});
     }
     return data;
@@ -192,7 +191,6 @@ auto Memory::writePhysical(PhysicalAddr paddr, T data) const -> void {
             std::tuple{"op", "write"},
             std::tuple{"size", sizeof(T)},
             std::tuple{"addr", "0x{:08x}", paddr},
-            std::tuple{"ptr", "{:p}", (void*)hostAddr},
             std::tuple{"data", "0x{:08x}", static_cast<std::make_unsigned_t<T>>(printData)});
     }
 }

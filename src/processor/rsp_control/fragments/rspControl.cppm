@@ -343,7 +343,7 @@ auto Control::getIntBreak() -> bool {
 
 auto Control::patchRspBootAntiPiracyCheck() -> void {
     // Patch CIC-6105 RSP boot anti piracy check
-    if (!m_cic6105rspBootPatched && m_rspAddr == 0x1000) {
+    if (m_rspAddr == 0x1000) {
         auto firstInst = *reinterpret_cast<uint32_t*>(m_memory + m_ramAddr);
         Util::byteswapIfLittleEndian(firstInst);
         if (firstInst == 0x08000411 /* J  0x411 */) {

@@ -10,6 +10,8 @@ import ISA;
 import RdpControl;
 import Util;
 
+import :Commands;
+
 export namespace RDP {
 
 class RDP {
@@ -32,6 +34,15 @@ auto RDP::runCommand() -> void {
     if (cmds.empty()) {
         return;
     }
+    for (const auto cmd : cmds) {
+        const auto cmdType = (cmd >> 56) & 0x3F;
+        std::println("Command: {}",
+                     Util::enumName(static_cast<Command>(cmdType)).value_or(std::format("Unknown Command {:#018x}", cmd)));
+    }
     std::println("Received {} commands from RDP", cmds.size());
+    if (m_logger) {
+        m_logger->flush();
+    }
+    std::terminate();
 }
 } // namespace RDP

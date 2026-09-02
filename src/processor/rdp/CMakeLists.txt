@@ -5,6 +5,7 @@ target_sources(rdp PUBLIC
     FILES
         module.cppm
         fragments/rdp.cppm
+        fragments/rdpCommands.cppm
 )
 target_compile_options(rdp PUBLIC ${CXX_COMPILE_OPTIONS})
 target_include_directories(rdp PUBLIC ${CMAKE_SOURCE_DIR}/src)

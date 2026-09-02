@@ -47,6 +47,17 @@ int main(int argc, char* argv[]) {
         if (arg.starts_with("--log-sys=")) {
             auto systems = std::string_view(arg).substr(10);
             for (const auto system : std::views::split(systems, ","sv)) {
+                if (std::string_view(system) == "ALL_INTERFACES"sv) {
+                    logFilterSys.push_back(Sys::AI);
+                    logFilterSys.push_back(Sys::MI);
+                    logFilterSys.push_back(Sys::PI);
+                    logFilterSys.push_back(Sys::RDRAM_REG);
+                    logFilterSys.push_back(Sys::RI);
+                    logFilterSys.push_back(Sys::RSP_REG);
+                    logFilterSys.push_back(Sys::RDP_REG);
+                    logFilterSys.push_back(Sys::SI);
+                    logFilterSys.push_back(Sys::VI);
+                }
                 template for (constexpr auto e : Util::staticEnumeratorsOf(^^Sys)) {
                     if (std::meta::identifier_of(e) == std::string_view(system)) {
                         logFilterSys.push_back([:e:]);

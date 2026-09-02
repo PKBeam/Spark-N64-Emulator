@@ -30,7 +30,7 @@ class RSP {
 
     auto halt() -> void;
 
-    auto dumpIMem(std::filesystem::path file) -> void;
+    auto dumpIMem(std::filesystem::path file = "rsp_imem.txt") -> void;
 
   private:
     std::shared_ptr<Util::Logger> m_logger;
