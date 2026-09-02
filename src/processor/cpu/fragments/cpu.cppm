@@ -186,7 +186,7 @@ auto CPU::runInstruction() -> void {
         case UnifiedOpcode::OP_MTLO: m_regs.writeLo(m_regs.readGpr(std::bit_cast<TypeR>(data).rs)); break;
         case UnifiedOpcode::OP_MTHI: m_regs.writeHi(m_regs.readGpr(std::bit_cast<TypeR>(data).rs)); break;
         case UnifiedOpcode::OP_ADD: [[fallthrough]]; // TODO overflow exception
-        case UnifiedOpcode::OP_ADDU: m_exec.executeBivariate(data, Func::ADD); break;
+        case UnifiedOpcode::OP_ADDU: m_exec.executeBivariate<uint32_t>(data, Func::ADD); break;
         case UnifiedOpcode::OP_ADDI: [[fallthrough]]; // TODO overflow exception
         case UnifiedOpcode::OP_ADDIU: m_exec.executeBivariateImmediate<P::SIGN_EXTEND>(data, Func::ADD); break;
         case UnifiedOpcode::OP_SLT: m_exec.executeBivariate(data, Func::CMP_LT); break;
@@ -194,7 +194,7 @@ auto CPU::runInstruction() -> void {
         case UnifiedOpcode::OP_SLTI: m_exec.executeBivariateImmediate<P::SIGN_EXTEND, int32_t>(data, Func::CMP_LT); break;
         case UnifiedOpcode::OP_SLTIU: m_exec.executeBivariateImmediate<P::ZERO_EXTEND, uint32_t>(data, Func::CMP_LT); break;
         case UnifiedOpcode::OP_SUB: [[fallthrough]]; // TODO overflow exception
-        case UnifiedOpcode::OP_SUBU: m_exec.executeBivariate(data, Func::SUB); break;
+        case UnifiedOpcode::OP_SUBU: m_exec.executeBivariate<uint32_t>(data, Func::SUB); break;
         case UnifiedOpcode::OP_AND: m_exec.executeBivariate(data, Func::AND); break;
         case UnifiedOpcode::OP_ANDI: m_exec.executeBivariateImmediate<P::ZERO_EXTEND>(data, Func::AND); break;
         case UnifiedOpcode::OP_OR: m_exec.executeBivariate(data, Func::OR); break;

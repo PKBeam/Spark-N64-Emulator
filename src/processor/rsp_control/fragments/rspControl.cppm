@@ -232,7 +232,7 @@ auto Control::writeRegister(std::size_t index, uint32_t data) -> void {
         }
         case RSP_CP0_REGS::SP_DMA_WRLEN: {
             auto wrlen = std::bit_cast<SP_DMA_WRLEN>(data);
-            dmaMemcpy<RSP_DMA_DIRECTION::TO_RDRAM>(m_rspAddr + RSP_MEM_BASE, m_ramAddr, wrlen.wrlen, wrlen.count, wrlen.skip_11_3 << 3);
+            dmaMemcpy<RSP_DMA_DIRECTION::TO_RDRAM>(m_ramAddr, m_rspAddr + RSP_MEM_BASE, wrlen.wrlen, wrlen.count, wrlen.skip_11_3 << 3);
             break;
         }
         case RSP_CP0_REGS::SP_STATUS: {
@@ -345,10 +345,10 @@ auto Control::patchRspBootAntiPiracyCheck() -> void {
     // Patch CIC-6105 RSP boot anti piracy check
     if (m_rspAddr == 0x1000) {
         auto firstInst = *reinterpret_cast<uint32_t*>(m_memory + m_ramAddr);
-        Util::byteswapIfLittleEndian(firstInst);
+        firstInst      = Util::byteswapIfLittleEndian(firstInst);
         if (firstInst == 0x08000411 /* J  0x411 */) {
-            auto patchInst = 0x08000025; // J  0x25
-            Util::byteswapIfLittleEndian(patchInst);
+            auto patchInst = Util::byteswapIfLittleEndian(0x08000025); // J  0x25
+
             *reinterpret_cast<uint32_t*>(m_memory + RSP_MEM_BASE + m_rspAddr) = patchInst;
             IF_LOG_ENABLED(m_logger) {
                 m_logger->log<Level::MAX, Sev::WARNING, Sys::RSP_REG>("Patched out the CIC-6105 anti-piracy check in RSP boot code");

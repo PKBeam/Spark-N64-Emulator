@@ -8,6 +8,7 @@
         "cmake": true
     },
     "clangd.arguments": [
-        "-header-insertion=never"
+        "-header-insertion=never",
+        "--compile-commands-dir=${workspaceFolder}/build/reldeb"
     ],
 }

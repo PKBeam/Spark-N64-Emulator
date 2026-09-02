@@ -169,14 +169,14 @@ auto RSP::runInstruction() -> void {
         case UnifiedOpcode::OP_SRAV: m_exec.cpuExec()->executeShift<P::WORD, P::RIGHT, P::ARITHMETIC, P::VARIABLE>(data); break;
 
         // Vector instructions
-        case UnifiedOpcode::OP_LBV: m_exec.executeLoadStore<P::LOADV, 1uz>(data); break;
-        case UnifiedOpcode::OP_LSV: m_exec.executeLoadStore<P::LOADV, 2uz>(data); break;
-        case UnifiedOpcode::OP_LLV: m_exec.executeLoadStore<P::LOADV, 4uz>(data); break;
-        case UnifiedOpcode::OP_LDV: m_exec.executeLoadStore<P::LOADV, 8uz>(data); break;
-        case UnifiedOpcode::OP_SBV: m_exec.executeLoadStore<P::STOREV, 1uz>(data); break;
-        case UnifiedOpcode::OP_SSV: m_exec.executeLoadStore<P::STOREV, 2uz>(data); break;
-        case UnifiedOpcode::OP_SLV: m_exec.executeLoadStore<P::STOREV, 4uz>(data); break;
-        case UnifiedOpcode::OP_SDV: m_exec.executeLoadStore<P::STOREV, 8uz>(data); break;
+        case UnifiedOpcode::OP_LBV: m_exec.executeLoadStore<P::LOADV, 0uz>(data); break;
+        case UnifiedOpcode::OP_LSV: m_exec.executeLoadStore<P::LOADV, 1uz>(data); break;
+        case UnifiedOpcode::OP_LLV: m_exec.executeLoadStore<P::LOADV, 2uz>(data); break;
+        case UnifiedOpcode::OP_LDV: m_exec.executeLoadStore<P::LOADV, 3uz>(data); break;
+        case UnifiedOpcode::OP_SBV: m_exec.executeLoadStore<P::STOREV, 0uz>(data); break;
+        case UnifiedOpcode::OP_SSV: m_exec.executeLoadStore<P::STOREV, 1uz>(data); break;
+        case UnifiedOpcode::OP_SLV: m_exec.executeLoadStore<P::STOREV, 2uz>(data); break;
+        case UnifiedOpcode::OP_SDV: m_exec.executeLoadStore<P::STOREV, 3uz>(data); break;
         case UnifiedOpcode::OP_LPV: m_exec.executeLoadStorePacked<P::LOADV, P::SIGNED>(data); break;
         case UnifiedOpcode::OP_LUV: m_exec.executeLoadStorePacked<P::LOADV, P::UNSIGNED>(data); break;
         case UnifiedOpcode::OP_SPV: m_exec.executeLoadStorePacked<P::STOREV, P::SIGNED>(data); break;
@@ -214,22 +214,22 @@ auto RSP::runInstruction() -> void {
         case UnifiedOpcode::OP_VMOV: m_exec.executeSingleLane<P::ACCUM_ZERO_EXT>(data, Func::NOP); break;
 
         case UnifiedOpcode::OP_VLT:
-            m_exec.executeSelectCompare(data, [](uint16_t vs, uint16_t vt, bool vco, bool vce) {
+            m_exec.executeSelectCompare(data, [](int16_t vs, int16_t vt, bool vco, bool vce) {
                 return (vs < vt) | (vs == vt && vco && !vce);
             });
             break;
         case UnifiedOpcode::OP_VNE:
-            m_exec.executeSelectCompare(data, [](uint16_t vs, uint16_t vt, bool _, bool vce) {
+            m_exec.executeSelectCompare(data, [](int16_t vs, int16_t vt, bool _, bool vce) {
                 return (vs < vt) | (vs > vt) | (vs == vt && !vce);
             });
             break;
         case UnifiedOpcode::OP_VEQ:
-            m_exec.executeSelectCompare(data, [](uint16_t vs, uint16_t vt, bool _, bool vce) {
+            m_exec.executeSelectCompare(data, [](int16_t vs, int16_t vt, bool _, bool vce) {
                 return vs == vt && vce;
             });
             break;
         case UnifiedOpcode::OP_VGE:
-            m_exec.executeSelectCompare(data, [](uint16_t vs, uint16_t vt, bool vco, bool vce) {
+            m_exec.executeSelectCompare(data, [](int16_t vs, int16_t vt, bool vco, bool vce) {
                 return (vs > vt) | (vs == vt && ((!vco) | vce));
             });
             break;

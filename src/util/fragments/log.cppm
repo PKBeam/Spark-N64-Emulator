@@ -184,6 +184,9 @@ auto Logger::log(Args... args) -> void {
 
     str += "}"sv;
     std::println(m_file, "{}", str);
+    if constexpr (Level == Logger::Level::MAX) {
+        std::println("{}", str);
+    }
 }
 
 template <Logger::Level Level, Logger::Severity Sev, Logger::Sys Sys, typename... Args>
@@ -191,20 +194,26 @@ auto Logger::log(const char* fmt, Args... args) -> void {
     if (!m_enabled || Level < m_level || (!m_sys.empty() && !std::ranges::contains(m_sys, Sys))) {
         return;
     }
-    auto str = std::format(std::runtime_format(fmt), args...);
-    if constexpr (Sys != Logger::Sys::NONE) {
-        std::println(m_file,
-                     "{{\"level\": \"{}\", \"sys\": \"{}\", \"{}\": \"{}\"}}",
-                     *Util::enumName(Level),
-                     *Util::enumName(Sys),
-                     Util::toLower(*Util::enumName(Sev)),
-                     str);
-    } else {
-        std::println(m_file,
-                     "{{\"level\": \"{}\", \"{}\": \"{}\"}}",
-                     *Util::enumName(Level),
-                     Util::toLower(*Util::enumName(Sev)),
-                     str);
+    const auto str    = std::format(std::runtime_format(fmt), args...);
+    const auto outStr = [&]() {
+        if constexpr (Sys != Logger::Sys::NONE) {
+            return std::format(
+                "{{\"level\": \"{}\", \"sys\": \"{}\", \"{}\": \"{}\"}}",
+                *Util::enumName(Level),
+                *Util::enumName(Sys),
+                Util::toLower(*Util::enumName(Sev)),
+                str);
+        } else {
+            return std::format(
+                "{{\"level\": \"{}\", \"{}\": \"{}\"}}",
+                *Util::enumName(Level),
+                Util::toLower(*Util::enumName(Sev)),
+                str);
+        }
+    }();
+    std::println(m_file, "{}", outStr);
+    if constexpr (Level == Logger::Level::MAX) {
+        std::println("{}", outStr);
     }
 }
 

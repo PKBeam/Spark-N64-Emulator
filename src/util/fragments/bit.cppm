@@ -30,10 +30,11 @@ constexpr auto isLittleEndian() -> bool {
 }
 
 template <std::integral T>
-constexpr auto byteswapIfLittleEndian(T& data) -> void {
+constexpr auto byteswapIfLittleEndian(T data) -> T {
     if constexpr (std::endian::native == std::endian::little) {
-        data = std::byteswap(data);
+        return std::byteswap(data);
     }
+    return data;
 }
 
 template <std::integral T>

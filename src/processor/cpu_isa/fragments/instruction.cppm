@@ -123,7 +123,10 @@ constexpr auto formatOperands(Instruction inst) -> std::vector<std::string> {
                         }
                     }
 
-                    const auto opStr = std::format([:fmtStr:], static_cast<typename[:fmtType:]>(instData.[:[:op:]:]));
+                    // vformat does runtime format-string checking, avoiding a compiler
+                    // limitation checking consteval format strings produced via reflection
+                    const auto arg   = static_cast<typename[:fmtType:]>(instData.[:[:op:]:]);
+                    const auto opStr = std::vformat(std::string_view{[:fmtStr:]}, std::make_format_args(arg));
                     if (!opStr.empty()) {
                         result.push_back(opStr);
                     }

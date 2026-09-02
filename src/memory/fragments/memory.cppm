@@ -96,7 +96,7 @@ auto Memory::readPhysical(PhysicalAddr paddr) const -> T { // TODO improve perfo
         case PhysSeg::RSP_DMEM: [[fallthrough]];
         case PhysSeg::RSP_IMEM:
             std::memcpy(&data, hostAddr, sizeof(T));
-            Util::byteswapIfLittleEndian(data);
+            data = Util::byteswapIfLittleEndian(data);
             break;
         case PhysSeg::RDRAM_UNUSED: data = 0; break;
         case PhysSeg::RDRAM_REG: {
@@ -150,7 +150,7 @@ auto Memory::writePhysical(PhysicalAddr paddr, T data) const -> void {
         case PhysSeg::RDRAM: [[fallthrough]];
         case PhysSeg::RSP_DMEM: [[fallthrough]];
         case PhysSeg::RSP_IMEM:
-            Util::byteswapIfLittleEndian(data);
+            data = Util::byteswapIfLittleEndian(data);
             std::memcpy(hostAddr, &data, sizeof(T));
             break;
         case PhysSeg::RDRAM_UNUSED: break;
@@ -184,7 +184,7 @@ auto Memory::writePhysical(PhysicalAddr paddr, T data) const -> void {
             case PhysSeg::RDRAM: [[fallthrough]];
             case PhysSeg::RSP_DMEM: [[fallthrough]];
             case PhysSeg::RSP_IMEM:
-                Util::byteswapIfLittleEndian(printData);
+                printData = Util::byteswapIfLittleEndian(printData);
             default: break;
         }
         m_logger->log<Level::HIGH, Sys::RDRAM>(

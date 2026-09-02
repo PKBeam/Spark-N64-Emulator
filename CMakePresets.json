@@ -5,29 +5,29 @@
             "name": "debug",
             "displayName": "Debug",
             "generator": "Ninja",
-            "binaryDir": "${sourceDir}/build/",
+            "binaryDir": "${sourceDir}/build/debug",
             "cacheVariables": {
                 "CMAKE_CXX_COMPILER": "/usr/bin/g++-16",
                 "CMAKE_BUILD_TYPE": "Debug",
-                "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+                "CMAKE_EXPORT_COMPILE_COMMANDS": "OFF"
             }
         },
         {
             "name": "release",
             "displayName": "Release",
             "generator": "Ninja",
-            "binaryDir": "${sourceDir}/build/",
+            "binaryDir": "${sourceDir}/build/release",
             "cacheVariables": {
                 "CMAKE_CXX_COMPILER": "/usr/bin/g++-16",
                 "CMAKE_BUILD_TYPE": "Release",
-                "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+                "CMAKE_EXPORT_COMPILE_COMMANDS": "OFF"
             }
         },
         {
             "name": "reldeb",
             "displayName": "RelWithDebInfo",
             "generator": "Ninja",
-            "binaryDir": "${sourceDir}/build/",
+            "binaryDir": "${sourceDir}/build/reldeb",
             "cacheVariables": {
                 "CMAKE_CXX_COMPILER": "/usr/bin/g++-16",
                 "CMAKE_BUILD_TYPE": "RelWithDebInfo",

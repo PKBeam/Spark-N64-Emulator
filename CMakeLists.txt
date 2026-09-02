@@ -47,7 +47,6 @@ set(CXX_COMPILE_OPTIONS
 set(CMAKE_CXX_STANDARD 26)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
-set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(CXX_SCAN_FOR_MODULES ON)
 set(CXX_MODULE_STD ON)
 
@@ -63,12 +62,12 @@ set(CMAKE_CXX_FLAGS "-freflection ${CMAKE_CXX_FLAGS}")
 set(CMAKE_CXX_COMPILER "/usr/bin/g++-16")
 
 # Add sanitisers to Debug builds
-if(CMAKE_BUILD_TYPE)
-    string(TOUPPER ${CMAKE_BUILD_TYPE} BUILD_TYPE_UPPER)
-    if(BUILD_TYPE_UPPER STREQUAL "DEBUG")
-        add_compile_options(-fsanitize=address -fsanitize=undefined -fno-omit-frame-pointer)
-        add_link_options(-fsanitize=address -fsanitize=undefined)
-    endif()
-endif()
+#if(CMAKE_BUILD_TYPE)
+#    string(TOUPPER ${CMAKE_BUILD_TYPE} BUILD_TYPE_UPPER)
+#    if(BUILD_TYPE_UPPER STREQUAL "DEBUG")
+#        add_compile_options(-fsanitize=address -fsanitize=undefined -fno-omit-frame-pointer)
+#        add_link_options(-fsanitize=address -fsanitize=undefined)
+#    endif()
+#endif()
 
 add_subdirectory(src)

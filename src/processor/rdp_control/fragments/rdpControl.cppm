@@ -86,12 +86,15 @@ auto Control::fetchCommands() -> void {
         return;
     }
     const auto baseAddr = m_startAddr + (m_status.xbus == 0 ? 0 : 0x04000000) /* RSP DMEM base */;
-
+    if (m_logger) {
+        m_logger->flush();
+    }
     { // lock commands
         auto _ = std::scoped_lock(m_mutex);
         for (auto offset : std::views::iota(0uz, numCommands)) {
             const auto addr = reinterpret_cast<const uint64_t*>(m_memory + baseAddr) + offset;
-            m_cmdBufferIn.push_back(*addr);
+            const auto cmd  = Util::byteswapIfLittleEndian(*addr);
+            m_cmdBufferIn.push_back(cmd);
         }
     } // release commands
 

@@ -64,6 +64,20 @@ enum class VEC_ELEM : uint8_t {
     // clang-format on
 };
 
+constexpr auto singleLaneFor(VEC_ELEM elem) -> std::size_t {
+    switch (elem) {
+        case VEC_ELEM::e0: return 0;
+        case VEC_ELEM::e1: return 1;
+        case VEC_ELEM::e2: return 2;
+        case VEC_ELEM::e3: return 3;
+        case VEC_ELEM::e4: return 4;
+        case VEC_ELEM::e5: return 5;
+        case VEC_ELEM::e6: return 6;
+        case VEC_ELEM::e7: return 7;
+        default: throw Util::Error("Invalid vector element {} for single-lane operation", static_cast<int>(elem));
+    }
+}
+
 struct CP0Status {
     uint32_t ie  : 1 = 0;
     uint32_t exl : 1 = 0;
