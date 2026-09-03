@@ -43,3 +43,32 @@ struct info {};
             return result;                      \
         }                                       \
     }();
+
+#define HEXFMT8 "{:#04x}"
+#define HEXFMT12 "{:#05x}"
+#define HEXFMT16 "{:#06x}"
+#define HEXFMT24 "{:#08x}"
+#define HEXFMT32 "{:#010x}"
+#define HEXFMT48 "{:#014x}"
+#define HEXFMT64 "{:#018x}"
+
+#define STD_FORMATTER_ENUM(ENUM, FMT_FUNC)                               \
+    template <>                                                          \
+    struct std::formatter<ENUM> {                                        \
+        constexpr auto parse(std::format_parse_context& ctx)             \
+            -> std::format_parse_context::iterator {                     \
+            return ctx.begin();                                          \
+        }                                                                \
+                                                                         \
+        auto format(const ENUM& value, std::format_context& ctx) const { \
+            return std::format_to(ctx.out(), "{}", FMT_FUNC(value));     \
+        }                                                                \
+    }
+
+#define STD_FORMATTER_ENUM_NAME(ENUM)                                   \
+    STD_FORMATTER_ENUM(ENUM, [](auto&& e) {                             \
+        return Util::enumName(e).value_or(                              \
+            std::format("{}({})",                                       \
+                        std::meta::display_string_of(^^ENUM),           \
+                        static_cast<std::underlying_type_t<ENUM>>(e))); \
+    })

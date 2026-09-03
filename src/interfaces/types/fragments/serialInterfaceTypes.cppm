@@ -1,3 +1,5 @@
+module;
+#include <util/defines.hpp>
 export module InterfaceTypes:SerialInterfaceTypes;
 
 import std;
@@ -63,3 +65,5 @@ struct SI_STATUS {
 };
 
 } // namespace Interfaces
+
+STD_FORMATTER_ENUM_NAME(Interfaces::SiDmaRanges);

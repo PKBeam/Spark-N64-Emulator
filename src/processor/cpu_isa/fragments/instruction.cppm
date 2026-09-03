@@ -1,3 +1,5 @@
+module;
+#include <util/defines.hpp>
 export module ISA:Instruction;
 
 import std;
@@ -126,8 +128,9 @@ constexpr auto formatOperands(Instruction inst) -> std::vector<std::string> {
                             continue;
                         }
                         if (opName == "imm") { // offsets must be shifted
-                            const auto shift = [inst.opcode] {
-                                switch (inst.opcode) {
+                            const auto opcode = inst.opcode;
+                            const auto shift  = [opcode] {
+                                switch (opcode) {
                                     case UnifiedOpcode::OP_LBV: [[fallthrough]];
                                     case UnifiedOpcode::OP_SBV: return 0;
                                     case UnifiedOpcode::OP_LSV: [[fallthrough]];
@@ -146,7 +149,7 @@ constexpr auto formatOperands(Instruction inst) -> std::vector<std::string> {
                                     case UnifiedOpcode::OP_SRV: [[fallthrough]];
                                     case UnifiedOpcode::OP_LHV: [[fallthrough]];
                                     case UnifiedOpcode::OP_SHV: return 4;
-                                    default: throw Util::Error("Unexpected RSP Load/Store opcode {}", inst.opcode);
+                                    default: throw Util::Error("Unexpected RSP Load/Store opcode {}", opcode);
                                 }
                             }();
                             result.push_back(std::format("{:#x}", opValue << shift));
@@ -194,7 +197,7 @@ constexpr auto formatInstruction(const Instruction& inst) -> std::string {
         }
         instStr += std::format("{:8}", std::string_view(*opcode).substr(3));
     } else {
-        instStr += std::format("UNKNOWN INSTRUCTION (0x{:08X})", inst.data);
+        instStr += std::format("UNKNOWN INSTRUCTION (" HEXFMT32 ")", inst.data);
     }
 
     // format the operands
@@ -221,10 +224,7 @@ constexpr auto formatInstruction(const Instruction& inst) -> std::string {
 }
 } // namespace Impl
 
-constexpr Instruction::Instruction(uint32_t bits) {
-    opcode = Impl::opcodeFor(bits);
-    data   = bits;
-}
+constexpr Instruction::Instruction(uint32_t bits) : opcode(Impl::opcodeFor(bits)), data(bits) {}
 
 } // namespace ISA
 

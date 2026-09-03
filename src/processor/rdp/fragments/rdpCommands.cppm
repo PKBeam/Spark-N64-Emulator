@@ -77,14 +77,4 @@ struct FillTriangle {
 } // namespace Commands
 }; // namespace RDP
 
-template <>
-struct std::formatter<RDP::Command> {
-    constexpr auto parse(std::format_parse_context& ctx) -> std::format_parse_context::iterator {
-        return ctx.begin();
-    }
-
-    auto format(const RDP::Command& command, std::format_context& ctx) const {
-        const auto str = Util::enumName(command).value_or("NOP");
-        return std::format_to(ctx.out(), "{}", str);
-    }
-};
+STD_FORMATTER_ENUM(RDP::Command, [](auto&& e) { return Util::enumName(e).value_or("NOP"); });

@@ -1,3 +1,5 @@
+module;
+#include <util/defines.hpp>
 export module ISA:Registers;
 
 import std;
@@ -115,7 +117,7 @@ struct CP0Cause {
     uint32_t bd  : 1 = 0;
 };
 
-enum class CP0_EXCEPTION_CODE : uint8_t {
+enum class CP0_EXCEPTION : uint8_t {
     INTERRUPT     = 0,
     TLB_MOD       = 1,
     TLB_LOAD      = 2,
@@ -228,53 +230,18 @@ constexpr auto getFormatType(CP1_FORMAT fmt) -> std::variant<float, double, uint
 
 } // namespace ISA
 
-template <>
-struct std::formatter<ISA::CPU_REG> {
-    constexpr auto parse(std::format_parse_context& ctx) -> std::format_parse_context::iterator {
-        return ctx.begin();
+STD_FORMATTER_ENUM_NAME(ISA::CPU_REG);
+STD_FORMATTER_ENUM(ISA::VEC_ELEM, [](auto&& e) {
+    if (e == ISA::VEC_ELEM::NONE_0 || e == ISA::VEC_ELEM::NONE_1) {
+        return std::string("");
     }
-
-    auto format(const ISA::CPU_REG& reg, std::format_context& ctx) const {
-        auto str = Util::enumName(reg).value_or(std::format("r{}", static_cast<uint8_t>(reg)));
-        return std::format_to(ctx.out(), "{}", str);
+    if (auto name = Util::enumName(e)) {
+        return std::format("[{}]", *name);
     }
-};
-
-template <>
-struct std::formatter<ISA::VEC_ELEM> {
-    constexpr auto parse(std::format_parse_context& ctx) -> std::format_parse_context::iterator {
-        return ctx.begin();
-    }
-
-    auto format(const ISA::VEC_ELEM& elem, std::format_context& ctx) const {
-        const auto enumName = Util::enumName(elem);
-        if (elem == ISA::VEC_ELEM::NONE_0 || elem == ISA::VEC_ELEM::NONE_1 || !enumName.has_value()) {
-            return std::format_to(ctx.out(), "");
-        }
-        return std::format_to(ctx.out(), "[{}]", enumName); // remove the leading 'e' from the enum name
-    }
-};
-
-template <>
-struct std::formatter<ISA::CP0_REG> {
-    constexpr auto parse(std::format_parse_context& ctx) -> std::format_parse_context::iterator {
-        return ctx.begin();
-    }
-
-    auto format(const ISA::CP0_REG& reg, std::format_context& ctx) const {
-        auto str = Util::enumName(reg).value_or(std::format("{}", static_cast<uint8_t>(reg)));
-        return std::format_to(ctx.out(), "{}", str);
-    }
-};
-
-template <>
-struct std::formatter<ISA::CP1_FORMAT> {
-    constexpr auto parse(std::format_parse_context& ctx) -> std::format_parse_context::iterator {
-        return ctx.begin();
-    }
-
-    auto format(const ISA::CP1_FORMAT& format, std::format_context& ctx) const {
-        auto str = Util::enumName(format).value_or(std::format("FMT{}", static_cast<uint8_t>(format)));
-        return std::format_to(ctx.out(), "{}", str);
-    }
-};
+    return std::format("UNK{}", static_cast<uint8_t>(e));
+});
+STD_FORMATTER_ENUM_NAME(ISA::CP0_EXCEPTION);
+STD_FORMATTER_ENUM_NAME(ISA::CP0_REG);
+STD_FORMATTER_ENUM_NAME(ISA::CP1_ROUND_MODE);
+STD_FORMATTER_ENUM_NAME(ISA::CP1_EXCEPTION);
+STD_FORMATTER_ENUM_NAME(ISA::CP1_FORMAT);

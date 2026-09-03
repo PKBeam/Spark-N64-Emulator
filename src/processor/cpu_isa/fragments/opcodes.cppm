@@ -1,3 +1,5 @@
+module;
+#include <util/defines.hpp>
 export module ISA:Opcodes;
 
 import std;
@@ -747,3 +749,15 @@ enum class UnifiedOpcode : uint32_t {
 };
 
 } // namespace Opcodes
+
+STD_FORMATTER_ENUM_NAME(Opcodes::OPCODE);
+STD_FORMATTER_ENUM_NAME(Opcodes::SPECIAL);
+STD_FORMATTER_ENUM_NAME(Opcodes::REGIMM_rt);
+STD_FORMATTER_ENUM_NAME(Opcodes::COPz_rs);
+STD_FORMATTER_ENUM_NAME(Opcodes::COPz_rt);
+STD_FORMATTER_ENUM_NAME(Opcodes::CP0);
+STD_FORMATTER_ENUM_NAME(Opcodes::COP1);
+STD_FORMATTER_ENUM_NAME(Opcodes::COP2_LOAD);
+STD_FORMATTER_ENUM_NAME(Opcodes::COP2_STORE);
+STD_FORMATTER_ENUM_NAME(Opcodes::COP2_VECTOR);
+STD_FORMATTER_ENUM_NAME(Opcodes::UnifiedOpcode);

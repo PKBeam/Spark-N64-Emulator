@@ -34,8 +34,15 @@ export namespace RSP {
 
 class InstructionExecutor {
   public:
-    InstructionExecutor(std::shared_ptr<Util::Logger> logger, CPU::Registers<Sys::RSP>* gprs, RSP::Registers* vprs, Memory::Memory* memory)
-        : m_logger(logger), m_gprs(gprs), m_vprs(vprs), m_memory(memory), m_cpuExec(logger, gprs, memory) {}
+    InstructionExecutor(std::shared_ptr<Util::Logger> logger,
+                        CPU::Registers<Sys::RSP>*     gprs,
+                        RSP::Registers*               vprs,
+                        Memory::Memory*               memory)
+        : m_logger(logger),
+          m_cpuExec(logger, gprs, memory),
+          m_gprs(gprs),
+          m_vprs(vprs),
+          m_memory(memory) {}
 
     auto cpuExec() {
         return &m_cpuExec;
@@ -92,46 +99,17 @@ class InstructionExecutor {
 
   private:
     template <std::integral T>
-    auto readDMem(uint32_t addr) -> T;
+    auto readDMem(uint32_t addr) const -> T;
 
     template <std::integral T>
     auto writeDMem(uint32_t addr, T value) -> void;
 
-    std::shared_ptr<Util::Logger> m_logger;
-    CPU::Registers<Sys::RSP>*     m_gprs{};
-    RSP::Registers*               m_vprs{};
-    Memory::Memory*               m_memory{};
-
+    std::shared_ptr<Util::Logger>      m_logger;
     CPU::InstructionExecutor<Sys::RSP> m_cpuExec;
+    CPU::Registers<Sys::RSP>*          m_gprs{};
+    RSP::Registers*                    m_vprs{};
+    Memory::Memory*                    m_memory{};
 };
-
-template <std::integral T>
-auto InstructionExecutor::readDMem(uint32_t addr) -> T {
-    addr = (addr & 0xFFF) + RSP_DMEM_BASE;
-
-    const auto value = m_memory->readPhysical<T>(addr);
-    IF_LOG_ENABLED(m_logger) {
-        m_logger->log<Level::HIGH, Sys::RSP>(
-            std::tuple{"op", "read"},
-            std::tuple{"size", sizeof(T)},
-            std::tuple{"addr", "0x{:05x}", addr - RSP_DMEM_BASE},
-            std::tuple{"data", "0x{:08x}", static_cast<std::make_unsigned_t<T>>(value)});
-    }
-    return value;
-}
-
-template <std::integral T>
-auto InstructionExecutor::writeDMem(uint32_t addr, T value) -> void {
-    addr = (addr & 0xFFF) + RSP_DMEM_BASE;
-    m_memory->writePhysical<T>(addr, value);
-    IF_LOG_ENABLED(m_logger) {
-        m_logger->log<Level::HIGH, Sys::RSP>(
-            std::tuple{"op", "write"},
-            std::tuple{"size", sizeof(T)},
-            std::tuple{"addr", "{:#05x}", addr - RSP_DMEM_BASE},
-            std::tuple{"data", "{:#010x}", static_cast<std::make_unsigned_t<T>>(value)});
-    }
-}
 
 template <Param::Accumulator Accum, Param::ResultClamp VdClamp, typename VcoLoFunc, typename VcoHiFunc, Param::CarryIn Carry, typename Function>
     requires(std::integral<std::invoke_result_t<Function, uint16_t, uint16_t>> &&
@@ -618,4 +596,33 @@ auto InstructionExecutor::executeSelectCrimpLow(uint32_t inst) -> void {
     m_vprs->clearVco();
     m_vprs->clearVce();
 }
+
+template <std::integral T>
+auto InstructionExecutor::readDMem(uint32_t addr) const -> T {
+    addr = (addr & 0xFFF) + RSP_DMEM_BASE;
+
+    const auto value = m_memory->readPhysical<T>(addr);
+    IF_LOG_ENABLED(m_logger) {
+        m_logger->log<Level::HIGH, Sys::RSP>(
+            std::tuple{"op", "read"},
+            std::tuple{"size", sizeof(T)},
+            std::tuple{"addr", HEXFMT12, addr - RSP_DMEM_BASE},
+            std::tuple{"data", HEXFMT32, static_cast<std::make_unsigned_t<T>>(value)});
+    }
+    return value;
+}
+
+template <std::integral T>
+auto InstructionExecutor::writeDMem(uint32_t addr, T value) -> void {
+    addr = (addr & 0xFFF) + RSP_DMEM_BASE;
+    m_memory->writePhysical<T>(addr, value);
+    IF_LOG_ENABLED(m_logger) {
+        m_logger->log<Level::HIGH, Sys::RSP>(
+            std::tuple{"op", "write"},
+            std::tuple{"size", sizeof(T)},
+            std::tuple{"addr", HEXFMT12, addr - RSP_DMEM_BASE},
+            std::tuple{"data", HEXFMT32, static_cast<std::make_unsigned_t<T>>(value)});
+    }
+}
+
 } // namespace RSP

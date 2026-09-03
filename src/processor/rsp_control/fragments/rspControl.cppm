@@ -14,6 +14,7 @@ enum class RSP_DMA_DIRECTION : bool {
     TO_RDRAM   = 0,
     FROM_RDRAM = 1,
 };
+STD_FORMATTER_ENUM_NAME(RSP_DMA_DIRECTION);
 
 enum class RSP_CP0_REGS : uint8_t {
     SP_DMA_SPADDR  = 0,
@@ -33,6 +34,7 @@ enum class RSP_CP0_REGS : uint8_t {
     DPC_PIPE_BUSY  = 14,
     DPC_TMEM_BUSY  = 15,
 };
+STD_FORMATTER_ENUM_NAME(RSP_CP0_REGS);
 
 constexpr auto RSP_MEM_BASE = 0x04000000u;
 
@@ -44,11 +46,17 @@ class Control {
 
     Control(std::shared_ptr<Util::Logger> logger, std::byte* memory, RDP::Control* rdpControl) : m_logger(logger), m_memory(memory), m_rdpControl(rdpControl) {};
 
+    auto getSignal(std::size_t signal) const -> bool //
+        pre(signal < SignalSet{}.size());
+
     auto setSignal(std::size_t signal, bool value) -> void //
         pre(signal < SignalSet{}.size());
 
-    auto getSignal(std::size_t signal) -> bool //
-        pre(signal < SignalSet{}.size());
+    template <std::size_t signal>
+        requires(signal < SignalSet{}.size())
+    auto getSignal() const -> bool {
+        return getSignal(signal);
+    }
 
     template <std::size_t signal>
         requires(signal < SignalSet{}.size())
@@ -56,25 +64,22 @@ class Control {
         setSignal(signal, value);
     }
 
-    template <std::size_t signal>
-        requires(signal < SignalSet{}.size())
-    auto getSignal() -> bool {
-        return getSignal(signal);
-    }
-
-    auto setPc(uint32_t pc) -> void //
+    auto readPc() const -> std::optional<uint32_t>;
+    auto writePc(uint32_t pc) -> void //
         pre(m_halt);
-    auto getPc() -> std::optional<uint32_t>;
     auto clearPc() -> void;
-    auto incrementPc() -> void;
+
+    auto getSingleStep() const -> bool;
     auto setSingleStep(bool value) -> void;
-    auto getSingleStep() -> bool;
+
+    auto getBroke() const -> bool;
     auto clearBroke() -> void;
-    auto getBroke() -> bool;
-    auto getHalt() -> bool;
+
+    auto getHalt() const -> bool;
     auto setHalt(bool value) -> void;
+
+    auto getIntBreak() const -> bool;
     auto setIntBreak(bool value) -> void;
-    auto getIntBreak() -> bool;
 
     auto readRegister(std::size_t index) -> uint32_t;
     auto writeRegister(std::size_t index, uint32_t data) -> void;
@@ -131,7 +136,7 @@ auto Control::dmaMemcpy(uint32_t dst, uint32_t src, std::size_t len, uint8_t cou
             }
         };
         m_logger->log<Level::HIGH, Sev::INFO, Sys::RSP_REG>(
-            "DMA {} {} bytes from {:#010x} to {:#010x} ({} rows, skip {})", dirStr(), len, src, dst, count + 1, skip);
+            "DMA {} {} bytes from " HEXFMT32 " to " HEXFMT32 " ({} rows, skip {})", dirStr(), len, src, dst, count + 1, skip);
     }
 }
 
@@ -203,7 +208,7 @@ auto Control::readRegister(std::size_t index) -> uint32_t {
         m_logger->log<Level::HIGH, Sys::RSP_REG>(
             std::tuple{"op", "read"},
             std::tuple{"reg", "{}", name},
-            std::tuple{"data", "0x{:08x}", data});
+            std::tuple{"data", HEXFMT32, data});
     }
     return data;
 }
@@ -214,7 +219,7 @@ auto Control::writeRegister(std::size_t index, uint32_t data) -> void {
         m_logger->log<Level::HIGH, Sys::RSP_REG>(
             std::tuple{"op", "write"},
             std::tuple{"reg", "{}", name},
-            std::tuple{"data", "0x{:08x}", data});
+            std::tuple{"data", HEXFMT32, data});
     }
 
     switch (static_cast<RSP_CP0_REGS>(index)) {
@@ -287,16 +292,21 @@ auto Control::writeRegister(std::size_t index, uint32_t data) -> void {
     }
 }
 
-auto Control::setPc(uint32_t pc) -> void {
-    m_pc = pc;
+auto Control::readPc() const -> std::optional<uint32_t> {
+    return m_pc;
 }
 
-auto Control::getPc() -> std::optional<uint32_t> {
-    return m_pc;
+auto Control::writePc(uint32_t pc) -> void {
+    m_pc = pc;
 }
 
 auto Control::clearPc() -> void {
     m_pc.reset();
+}
+
+auto Control::getSignal(std::size_t signal) const -> bool {
+    contract_assert(signal < m_signals.size());
+    return m_signals[signal];
 }
 
 auto Control::setSignal(std::size_t signal, bool value) -> void {
@@ -304,28 +314,23 @@ auto Control::setSignal(std::size_t signal, bool value) -> void {
     m_signals[signal] = value;
 }
 
-auto Control::getSignal(std::size_t signal) -> bool {
-    contract_assert(signal < m_signals.size());
-    return m_signals[signal];
+auto Control::getSingleStep() const -> bool {
+    return m_singleStep;
 }
 
 auto Control::setSingleStep(bool value) -> void {
     m_singleStep = value;
 }
 
-auto Control::getSingleStep() -> bool {
-    return m_singleStep;
+auto Control::getBroke() const -> bool {
+    return m_broke;
 }
 
 auto Control::clearBroke() -> void {
     m_broke = false;
 }
 
-auto Control::getBroke() -> bool {
-    return m_broke;
-}
-
-auto Control::getHalt() -> bool {
+auto Control::getHalt() const -> bool {
     return m_halt;
 }
 
@@ -333,12 +338,12 @@ auto Control::setHalt(bool value) -> void {
     m_halt = value;
 }
 
-auto Control::setIntBreak(bool value) -> void {
-    m_interruptOnBreak = value;
+auto Control::getIntBreak() const -> bool {
+    return m_interruptOnBreak;
 }
 
-auto Control::getIntBreak() -> bool {
-    return m_interruptOnBreak;
+auto Control::setIntBreak(bool value) -> void {
+    m_interruptOnBreak = value;
 }
 
 auto Control::patchRspBootAntiPiracyCheck() -> void {

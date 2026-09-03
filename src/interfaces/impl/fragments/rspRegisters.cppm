@@ -46,9 +46,9 @@ auto RspRegisters::read(uint32_t addr) -> uint32_t {
                     m_logger->log<Level::HIGH, Sev::WARNING, Sys::RSP_REG>("Attempted to read PC while RSP is not halted");
                 }
             }
-            return m_rspCtrl->getPc().value_or(0);
+            return m_rspCtrl->readPc().value_or(0);
         default:
-            throw Util::Error("No RSP register found for addr {:#08x}", addr);
+            throw Util::Error("No RSP register found for addr " HEXFMT32, addr);
     }
 }
 
@@ -72,10 +72,10 @@ auto RspRegisters::write(uint32_t addr, uint32_t data) -> void {
         case RSP_REG_ADDR::SP_DMA_BUSY: m_rspCtrl->writeRegister(6, data); return;
         case RSP_REG_ADDR::SP_SEMAPHORE: m_rspCtrl->writeRegister(7, data); return;
         case RSP_REG_ADDR::SP_PC:
-            m_rspCtrl->setPc(data & 0xFFF);
+            m_rspCtrl->writePc(data & 0xFFF);
             return;
         default:
-            throw Util::Error("No RSP register found for addr {:#08x}", addr);
+            throw Util::Error("No RSP register found for addr " HEXFMT32, addr);
     }
 }
 

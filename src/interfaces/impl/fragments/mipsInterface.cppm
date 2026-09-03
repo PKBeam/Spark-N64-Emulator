@@ -76,7 +76,7 @@ auto MipsInterface::read(uint32_t addr) -> uint32_t {
             case MI_REG_ADDR::MI_INTERRUPT: return std::bit_cast<uint32_t>(m_interrupt);
             case MI_REG_ADDR::MI_MASK: return std::bit_cast<uint32_t>(m_mask);
             default:
-                throw Util::Error("No MI register found for addr {:#08x}", addr);
+                throw Util::Error("No MI register found for addr " HEXFMT32, addr);
         }
     };
 

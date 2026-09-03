@@ -69,7 +69,7 @@ auto Interface::sizedWrite(uint32_t addr, std::size_t size, uint32_t data) -> vo
 
 template <typename RegAddrStruct>
 auto getRegisterName(uint32_t addr) -> std::string {
-    return Util::enumName(static_cast<RegAddrStruct::Address>(addr)).value_or(std::format("{:#08x}", addr));
+    return Util::enumName(static_cast<RegAddrStruct::Address>(addr)).value_or(std::format(HEXFMT32, addr));
 }
 
 template <Sys S, typename RegAddrStruct, typename Self>
@@ -79,7 +79,7 @@ auto Interface::logOperation(this Self&& self, std::shared_ptr<Util::Logger> log
         logger->log<Level::HIGH, S>(
             std::tuple{"op", operationName},
             std::tuple{"reg", "{}", name},
-            std::tuple{"data", "0x{:08x}", data});
+            std::tuple{"data", HEXFMT32, data});
     }
 }
 

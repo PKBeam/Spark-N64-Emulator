@@ -77,7 +77,7 @@ auto VideoInterface::read(uint32_t addr) -> uint32_t {
                 logWarnOnIgnoredRegister<Sys::VI, VI_REG_ADDR>(m_logger, addr);
                 return 0;
             default:
-                throw Util::Error("No VI register found for addr {:#08x}", addr);
+                throw Util::Error("No VI register found for addr " HEXFMT32, addr);
         }
     };
 
@@ -123,7 +123,7 @@ auto VideoInterface::write(uint32_t addr, uint32_t data) -> void {
             logWarnOnIgnoredRegister<Sys::VI, VI_REG_ADDR>(m_logger, addr);
             return; // Placeholder
         default:
-            throw Util::Error("No VI register found for addr {:#08x}", addr);
+            throw Util::Error("No VI register found for addr " HEXFMT32, addr);
     }
 }
 

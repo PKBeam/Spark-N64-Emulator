@@ -20,7 +20,9 @@ class RDP {
     RDP(std::shared_ptr<Util::Logger> logger,
         ::RDP::Control*               rdpControl,
         Interfaces::MipsInterface*    mipsInterface)
-        : m_logger(logger), m_rdpControl(rdpControl), m_mipsInterface(mipsInterface) {};
+        : m_logger(logger),
+          m_rdpControl(rdpControl),
+          m_mipsInterface(mipsInterface) {};
 
     auto runCommand() -> void;
 

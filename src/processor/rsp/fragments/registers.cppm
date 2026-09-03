@@ -68,7 +68,7 @@ struct std::formatter<std::array<RSP::Accumulator, 8>> {
             if (i > 0) {
                 out = std::format_to(out, " ");
             }
-            out = std::format_to(out, "{:#014x}", static_cast<uint64_t>(accum));
+            out = std::format_to(out, HEXFMT48, static_cast<uint64_t>(accum));
         }
         return out;
     }
@@ -79,14 +79,8 @@ export namespace RSP {
 template <std::integral T>
     requires(sizeof(T) == 2)
 struct VPR {
-    static constexpr auto Size = 8uz;
-
-    template <typename Self>
-    constexpr auto operator[](this Self&& self, std::size_t index) -> decltype(auto) {
-        return std::forward<Self>(self).m_data[Size - 1 - index];
-    }
-
-    constexpr auto getIndices(std::size_t byte) -> std::pair<std::size_t, std::size_t> {
+  private:
+    constexpr auto getIndices(std::size_t byte) const -> std::pair<std::size_t, std::size_t> {
         if (byte >= Size * sizeof(T)) {
             throw Util::Error("VPR byte index {} out of range (max {})", byte, Size * sizeof(T));
         }
@@ -95,7 +89,15 @@ struct VPR {
         return {index, indexByte};
     }
 
-    constexpr auto getByte(std::size_t index) -> uint8_t {
+  public:
+    static constexpr auto Size = 8uz;
+
+    template <typename Self>
+    constexpr auto operator[](this Self&& self, std::size_t index) -> decltype(auto) {
+        return std::forward<Self>(self).m_data[Size - 1 - index];
+    }
+
+    constexpr auto getByte(std::size_t index) const -> uint8_t {
         const auto [i, byte] = getIndices(index);
         return static_cast<uint8_t>((*this)[i] >> (byte * 8));
     }
@@ -167,29 +169,18 @@ struct Registers {
     constexpr auto addToAccumulators(VPR<T> vpr) -> void;
 
   private:
-    constexpr auto readAccumulator(std::size_t index) const -> uint64_t;
-
-    template <std::integral T>
-    constexpr auto writeAccumulator(std::size_t index, T value) -> void;
-
     std::shared_ptr<Util::Logger> m_logger;
 
-    std::array<VPR<uint16_t>, 32> m_vprs{};
-    std::array<Accumulator, 8>    m_accums{};
-    std::bitset<16>               m_vcc{};
-    std::bitset<16>               m_vco{};
-    std::bitset<8>                m_vce{};
-    std::optional<uint32_t>       m_divIn{};
+    std::array<VPR<uint16_t>, 32> m_vprs;
+    std::array<Accumulator, 8>    m_accums;
+    std::bitset<16>               m_vcc;
+    std::bitset<16>               m_vco;
+    std::bitset<8>                m_vce;
+    std::optional<uint32_t>       m_divIn;
     uint32_t                      m_divOut{};
 
     template <std::meta::info vecElem>
-    consteval auto getLanesForElement() const {
-        auto result = std::array<int, 8>{};
-        template for (auto i = 0; constexpr auto a : Util::staticAnnotationsOf(vecElem)) {
-            result[i++] = std::meta::extract<int>(a);
-        }
-        return result;
-    }
+    consteval auto getLanesForElement() const -> std::array<std::size_t, 8>;
 };
 
 template <std::integral T>
@@ -248,7 +239,7 @@ constexpr auto Registers::readVcc() const -> std::bitset<16> {
         m_logger->log<Level::MED, Sys::RSP>(
             std::tuple{"op", "read"},
             std::tuple{"reg", "VCC"},
-            std::tuple{"data", "{:#06x}", static_cast<uint16_t>(m_vcc.to_ulong())});
+            std::tuple{"data", HEXFMT16, static_cast<uint16_t>(m_vcc.to_ulong())});
     }
     return m_vcc;
 }
@@ -258,7 +249,7 @@ constexpr auto Registers::writeVcc(std::bitset<16> value) -> void {
         m_logger->log<Level::MED, Sys::RSP>(
             std::tuple{"op", "write"},
             std::tuple{"reg", "VCC"},
-            std::tuple{"data", "{:#06x}", static_cast<uint16_t>(value.to_ulong())});
+            std::tuple{"data", HEXFMT16, static_cast<uint16_t>(value.to_ulong())});
     }
     m_vcc = value;
 }
@@ -272,7 +263,7 @@ constexpr auto Registers::readVco() const -> std::bitset<16> {
         m_logger->log<Level::MED, Sys::RSP>(
             std::tuple{"op", "read"},
             std::tuple{"reg", "VCO"},
-            std::tuple{"data", "{:#06x}", static_cast<uint16_t>(m_vco.to_ulong())});
+            std::tuple{"data", HEXFMT16, static_cast<uint16_t>(m_vco.to_ulong())});
     }
     return m_vco;
 }
@@ -282,7 +273,7 @@ constexpr auto Registers::writeVco(std::bitset<16> value) -> void {
         m_logger->log<Level::MED, Sys::RSP>(
             std::tuple{"op", "write"},
             std::tuple{"reg", "VCO"},
-            std::tuple{"data", "{:#06x}", static_cast<uint16_t>(value.to_ulong())});
+            std::tuple{"data", HEXFMT16, static_cast<uint16_t>(value.to_ulong())});
     }
     m_vco = value;
 }
@@ -296,7 +287,7 @@ constexpr auto Registers::readVce() const -> std::bitset<8> {
         m_logger->log<Level::MED, Sys::RSP>(
             std::tuple{"op", "read"},
             std::tuple{"reg", "VCE"},
-            std::tuple{"data", "{:#04x}", static_cast<uint8_t>(m_vce.to_ulong())});
+            std::tuple{"data", HEXFMT8, static_cast<uint8_t>(m_vce.to_ulong())});
     }
     return m_vce;
 }
@@ -306,7 +297,7 @@ constexpr auto Registers::writeVce(std::bitset<8> value) -> void {
         m_logger->log<Level::MED, Sys::RSP>(
             std::tuple{"op", "write"},
             std::tuple{"reg", "VCE"},
-            std::tuple{"data", "{:#04x}", static_cast<uint8_t>(value.to_ulong())});
+            std::tuple{"data", HEXFMT8, static_cast<uint8_t>(value.to_ulong())});
     }
     m_vce = value;
 }
@@ -321,7 +312,7 @@ constexpr auto Registers::readDivIn() const -> std::optional<uint32_t> {
             m_logger->log<Level::MED, Sys::RSP>(
                 std::tuple{"op", "read"},
                 std::tuple{"reg", "DIV_IN"},
-                std::tuple{"data", "{:#010x}", *m_divIn});
+                std::tuple{"data", HEXFMT32, *m_divIn});
         } else {
             m_logger->log<Level::MED, Sys::RSP>(
                 std::tuple{"op", "read"},
@@ -338,7 +329,7 @@ constexpr auto Registers::writeDivIn(std::optional<uint32_t> value) -> void {
             m_logger->log<Level::MED, Sys::RSP>(
                 std::tuple{"op", "write"},
                 std::tuple{"reg", "DIV_IN"},
-                std::tuple{"data", "{:#010x}", *value});
+                std::tuple{"data", HEXFMT32, *value});
         } else {
             m_logger->log<Level::MED, Sys::RSP>(
                 std::tuple{"op", "write"},
@@ -354,7 +345,7 @@ constexpr auto Registers::readDivOut() const -> uint32_t {
         m_logger->log<Level::MED, Sys::RSP>(
             std::tuple{"op", "read"},
             std::tuple{"reg", "DIV_OUT"},
-            std::tuple{"data", "{:#010x}", m_divOut});
+            std::tuple{"data", HEXFMT32, m_divOut});
     }
     return m_divOut;
 }
@@ -364,18 +355,9 @@ constexpr auto Registers::writeDivOut(uint32_t value) -> void {
         m_logger->log<Level::MED, Sys::RSP>(
             std::tuple{"op", "write"},
             std::tuple{"reg", "DIV_OUT"},
-            std::tuple{"data", "{:#010x}", value});
+            std::tuple{"data", HEXFMT32, value});
     }
     m_divOut = value;
-}
-
-constexpr auto Registers::readAccumulator(std::size_t index) const -> uint64_t {
-    return std::bit_cast<uint64_t>(static_cast<int64_t>(m_accums[index]));
-}
-
-template <std::integral T>
-constexpr auto Registers::writeAccumulator(std::size_t index, T value) -> void {
-    m_accums[index] = Accumulator(static_cast<int64_t>(value));
 }
 
 constexpr auto Registers::readAccumulators() const -> std::array<Accumulator, 8> {
@@ -421,6 +403,15 @@ constexpr auto Registers::addToAccumulators(VPR<T> vpr) -> void {
         result[i]        = Accumulator(value);
     }
     writeAccumulators(result);
+}
+
+template <std::meta::info vecElem>
+consteval auto Registers::getLanesForElement() const -> std::array<std::size_t, 8> {
+    auto result = std::array<std::size_t, 8>{};
+    template for (auto i = 0; constexpr auto a : Util::staticAnnotationsOf(vecElem)) {
+        result[i++] = std::meta::extract<int>(a);
+    }
+    return result;
 }
 
 } // namespace RSP

@@ -37,25 +37,6 @@ constexpr auto byteswapIfLittleEndian(T data) -> T {
     return data;
 }
 
-template <std::integral T>
-constexpr auto endianNormalisedMemoryRanges(T start, T end) {
-    auto range = std::views::iota(start, end);
-    if (Util::isLittleEndian()) {
-        return std::views::zip(range |= std::views::reverse, range);
-    }
-    return std::views::zip(range, range);
-}
-
-template <std::integral T>
-constexpr auto bytesFromKiB(T KiB) -> T {
-    return 1024 * KiB;
-}
-
-template <std::integral T>
-constexpr auto bytesFromMiB(T MiB) -> T {
-    return 1024 * 1024 * MiB;
-}
-
 template <std::signed_integral To, std::integral From>
 constexpr auto signExt(From bits) -> To {
     if constexpr (std::is_same_v<bool, From>) {

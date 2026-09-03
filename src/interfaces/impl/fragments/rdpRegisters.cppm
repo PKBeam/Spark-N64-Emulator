@@ -41,7 +41,7 @@ auto RdpRegisters::read(uint32_t addr) -> uint32_t {
         case RDP_REG_ADDR::DPS_TEST_MODE: return m_rdpCtrl->readRegister(RDP::CMD_REGS::DPS_TEST_MODE);
         case RDP_REG_ADDR::DPS_BUFTEST_ADDR: return m_rdpCtrl->readRegister(RDP::CMD_REGS::DPS_BUFTEST_ADDR);
         case RDP_REG_ADDR::DPS_BUFTEST_DATA: return m_rdpCtrl->readRegister(RDP::CMD_REGS::DPS_BUFTEST_DATA);
-        default: throw Util::Error("No RDP register found for addr {:#08x}", addr);
+        default: throw Util::Error("No RDP register found for addr " HEXFMT32, addr);
     }
 }
 
@@ -62,7 +62,7 @@ auto RdpRegisters::write(uint32_t addr, uint32_t data) -> void {
         case RDP_REG_ADDR::DPS_BUFTEST_ADDR: m_rdpCtrl->writeRegister(RDP::CMD_REGS::DPS_BUFTEST_ADDR, data); return;
         case RDP_REG_ADDR::DPS_BUFTEST_DATA: m_rdpCtrl->writeRegister(RDP::CMD_REGS::DPS_BUFTEST_DATA, data); return;
         default:
-            throw Util::Error("No RDP register found for addr {:#08x}", addr);
+            throw Util::Error("No RDP register found for addr " HEXFMT32, addr);
     }
 }
 

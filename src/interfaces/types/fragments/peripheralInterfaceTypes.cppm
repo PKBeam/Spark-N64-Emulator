@@ -1,3 +1,5 @@
+module;
+#include <util/defines.hpp>
 export module InterfaceTypes:PeripheralInterfaceTypes;
 
 import std;
@@ -104,3 +106,5 @@ struct PI_BSD_DOM1_RLS : PI_BSD_DOM_RLS {};
 struct PI_BSD_DOM2_RLS : PI_BSD_DOM_RLS {};
 
 } // namespace Interfaces
+
+STD_FORMATTER_ENUM_NAME(Interfaces::PiDmaRanges);

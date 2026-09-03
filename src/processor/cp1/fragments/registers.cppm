@@ -1,4 +1,3 @@
-
 module;
 #include <util/defines.hpp>
 export module CP1:Registers;
@@ -66,7 +65,7 @@ constexpr auto Registers::readStatus() const -> ISA::CP1Status {
         m_logger->log<Level::HIGH, Sys::CP1>(
             std::tuple{"op", "read"},
             std::tuple{"reg", "FCR31"},
-            std::tuple{"data", "{:#010X}", std::bit_cast<uint32_t>(m_fcr31)});
+            std::tuple{"data", HEXFMT32, std::bit_cast<uint32_t>(m_fcr31)});
     }
     return m_fcr31;
 }
@@ -76,7 +75,7 @@ constexpr auto Registers::writeStatus(uint32_t value) -> void {
         m_logger->log<Level::HIGH, Sys::CP1>(
             std::tuple{"op", "write"},
             std::tuple{"reg", "FCR31"},
-            std::tuple{"data", "{:#010X}", std::bit_cast<uint32_t>(value)});
+            std::tuple{"data", HEXFMT32, std::bit_cast<uint32_t>(value)});
     }
     m_fcr31 = std::bit_cast<ISA::CP1Status>(value);
 }
@@ -90,7 +89,7 @@ constexpr auto Registers::readRevision() const -> ISA::CP1Revision {
         m_logger->log<Level::HIGH, Sys::CP1>(
             std::tuple{"op", "read"},
             std::tuple{"reg", "FCR0"},
-            std::tuple{"data", "{:#010X}", std::bit_cast<uint32_t>(m_fcr0)});
+            std::tuple{"data", HEXFMT32, std::bit_cast<uint32_t>(m_fcr0)});
     }
     return m_fcr0;
 }
@@ -119,12 +118,12 @@ constexpr auto Registers::readFpr(std::size_t index) const -> T {
             m_logger->log<Level::MED, Sys::CP1>(
                 std::tuple{"op", "read"},
                 std::tuple{"reg", "$f{}", index},
-                std::tuple{"data", "{:#010X}", std::bit_cast<uint32_t>(value)});
+                std::tuple{"data", HEXFMT32, std::bit_cast<uint32_t>(value)});
         } else /* 64 bit */ {
             m_logger->log<Level::MED, Sys::CP1>(
                 std::tuple{"op", "read"},
                 std::tuple{"reg", "$f{}", index},
-                std::tuple{"data", "{:#018X}", std::bit_cast<uint64_t>(value)});
+                std::tuple{"data", HEXFMT64, std::bit_cast<uint64_t>(value)});
         }
     }
     return value;
@@ -165,12 +164,12 @@ constexpr auto Registers::writeFpr(std::size_t index, T value) -> void {
             m_logger->log<Level::MED, Sys::CP1>(
                 std::tuple{"op", "write"},
                 std::tuple{"reg", "$f{}", index},
-                std::tuple{"data", "{:#010X}", std::bit_cast<uint32_t>(value)});
+                std::tuple{"data", HEXFMT32, std::bit_cast<uint32_t>(value)});
         } else /* 64 bit */ {
             m_logger->log<Level::MED, Sys::CP1>(
                 std::tuple{"op", "write"},
                 std::tuple{"reg", "$f{}", index},
-                std::tuple{"data", "{:#018X}", std::bit_cast<uint64_t>(value)});
+                std::tuple{"data", HEXFMT64, std::bit_cast<uint64_t>(value)});
         }
     }
 }
@@ -199,12 +198,12 @@ constexpr auto Registers::readFgr(std::size_t index) const -> T {
             m_logger->log<Level::MED, Sys::CP1>(
                 std::tuple{"op", "read"},
                 std::tuple{"reg", "$f{}", index},
-                std::tuple{"data", "{:#010X}", std::bit_cast<uint32_t>(value)});
+                std::tuple{"data", HEXFMT32, std::bit_cast<uint32_t>(value)});
         } else {
             m_logger->log<Level::MED, Sys::CP1>(
                 std::tuple{"op", "read"},
                 std::tuple{"reg", "$f{}", index},
-                std::tuple{"data", "{:#018X}", std::bit_cast<uint64_t>(value)});
+                std::tuple{"data", HEXFMT64, std::bit_cast<uint64_t>(value)});
         }
     }
     return Util::signExt32(value);
@@ -228,12 +227,12 @@ constexpr auto Registers::writeFgr(std::size_t index, T value) -> void {
             m_logger->log<Level::MED, Sys::CP1>(
                 std::tuple{"op", "write"},
                 std::tuple{"reg", "$f{}", index},
-                std::tuple{"data", "{:#010X}", std::bit_cast<uint32_t>(value)});
+                std::tuple{"data", HEXFMT32, std::bit_cast<uint32_t>(value)});
         } else {
             m_logger->log<Level::MED, Sys::CP1>(
                 std::tuple{"op", "write"},
                 std::tuple{"reg", "$f{}", index},
-                std::tuple{"data", "{:#018X}", std::bit_cast<uint64_t>(value)});
+                std::tuple{"data", HEXFMT64, std::bit_cast<uint64_t>(value)});
         }
     }
 }

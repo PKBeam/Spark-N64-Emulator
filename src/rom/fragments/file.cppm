@@ -1,3 +1,5 @@
+module;
+#include <util/defines.hpp>
 export module Rom:File;
 
 import std;
@@ -8,21 +10,19 @@ import :Types;
 
 export class RomFile {
   public:
-    constexpr RomFile(std::filesystem::path path);
+    constexpr RomFile(std::filesystem::path path) : m_romFilePath(path),
+                                                    m_size(std::filesystem::file_size(m_romFilePath)),
+                                                    m_mappedFile(Util::memMapFile(path)) {}
     constexpr ~RomFile();
 
-    constexpr auto readHeader() const
-        -> N64RomHeader;
+    constexpr auto readHeader() const -> N64RomHeader;
 
     template <std::integral T>
-    constexpr auto read(uint64_t addr) const
-        -> T;
+    constexpr auto read(uint64_t addr) const -> T;
 
-    constexpr auto size() const
-        -> std::size_t;
+    constexpr auto size() const -> std::size_t;
 
-    constexpr auto data() const
-        -> std::byte*;
+    constexpr auto data() const -> std::byte*;
 
     constexpr auto dump(std::filesystem::path file) const -> void;
 
@@ -31,13 +31,6 @@ export class RomFile {
     std::size_t           m_size{};
     std::byte*            m_mappedFile{};
 };
-
-// implementation
-
-constexpr RomFile::RomFile(std::filesystem::path path)
-    : m_romFilePath(path),
-      m_size(std::filesystem::file_size(m_romFilePath)),
-      m_mappedFile(Util::memMapFile(path)) {}
 
 constexpr RomFile::~RomFile() {
     Util::memUnmapFile(m_romFilePath, const_cast<std::byte*>(m_mappedFile));
@@ -66,8 +59,7 @@ constexpr auto RomFile::size() const -> std::size_t {
     return m_size;
 }
 
-constexpr auto RomFile::data() const
-    -> std::byte* {
+constexpr auto RomFile::data() const -> std::byte* {
     return m_mappedFile;
 }
 
@@ -76,7 +68,7 @@ constexpr auto RomFile::dump(std::filesystem::path file) const -> void {
     romDumper.setLevel(Level::MAX);
     for (auto i = 0uz; i < m_size; i += 4) {
         const auto word = read<uint32_t>(i);
-        romDumper.print("0x{:08x}: {}", i, ISA::Instruction(word));
+        romDumper.print(HEXFMT32 ": {}", i, ISA::Instruction(word));
     }
     romDumper.flush();
 }

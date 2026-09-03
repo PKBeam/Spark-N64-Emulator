@@ -1,7 +1,5 @@
 module;
-
 #include <util/defines.hpp>
-
 export module RdpControl:RdpControl;
 
 import std;
@@ -11,7 +9,6 @@ import Util;
 using namespace Interfaces;
 
 export namespace RDP {
-
 enum class CMD_REGS : uint8_t {
     DPC_START = 0,
     DPC_END,
@@ -26,12 +23,15 @@ enum class CMD_REGS : uint8_t {
     DPS_BUFTEST_ADDR,
     DPS_BUFTEST_DATA,
 };
+};
+STD_FORMATTER_ENUM_NAME(RDP::CMD_REGS);
 
+export namespace RDP {
 class Control {
   public:
     Control(std::shared_ptr<Util::Logger> logger, std::byte* memory) : m_logger(logger), m_memory(memory) {};
 
-    auto readRegister(CMD_REGS index) -> uint32_t;
+    auto readRegister(CMD_REGS index) const -> uint32_t;
     auto writeRegister(CMD_REGS index, uint32_t data) -> void;
 
     auto hasCommands() const -> bool;
@@ -44,11 +44,11 @@ class Control {
     std::shared_ptr<Util::Logger> m_logger;
     std::byte*                    m_memory{};
 
-    std::vector<uint64_t> m_cmdBufferIn{};  // From Memory
-    std::vector<uint64_t> m_cmdBufferOut{}; // To RDP
-    std::mutex            m_mutex{};
+    std::vector<uint64_t> m_cmdBufferIn;  // From Memory
+    std::vector<uint64_t> m_cmdBufferOut; // To RDP
+    std::mutex            m_mutex;
 
-    DPC_STATUS m_status{};
+    DPC_STATUS m_status;
     uint32_t   m_startAddr{};
     uint32_t   m_endAddr{};
     uint32_t   m_clock{};
@@ -83,7 +83,7 @@ auto Control::getCommands() -> std::vector<uint64_t> {
 auto Control::fetchCommands() -> void {
     const auto numCommands = (static_cast<int32_t>(m_endAddr) - static_cast<int32_t>(m_startAddr)) / 8;
     if (numCommands < 0) {
-        throw Util::Error("RDP command endAddr ({:#010x}) was before startAddr ({:#010x})", m_endAddr, m_startAddr);
+        throw Util::Error("RDP command endAddr (" HEXFMT32 ") was before startAddr (" HEXFMT32 ")", m_endAddr, m_startAddr);
     } else if (numCommands == 0) {
         return;
     }
@@ -101,12 +101,12 @@ auto Control::fetchCommands() -> void {
     } // release commands
 
     IF_LOG_ENABLED(m_logger) {
-        m_logger->log<Level::HIGH, Sev::INFO, Sys::RDP>("DMA {} commands from 0x{:08x} into command buffer", numCommands, baseAddr);
+        m_logger->log<Level::HIGH, Sev::INFO, Sys::RDP>("DMA {} commands from " HEXFMT32 " into command buffer", numCommands, baseAddr);
     }
     m_current = m_endAddr;
 }
 
-auto Control::readRegister(CMD_REGS index) -> uint32_t {
+auto Control::readRegister(CMD_REGS index) const -> uint32_t {
     auto readReg = [this](CMD_REGS index) -> uint32_t {
         switch (index) {
             case CMD_REGS::DPC_START: return m_startAddr & 0x00FFFFFF;
@@ -126,7 +126,7 @@ auto Control::readRegister(CMD_REGS index) -> uint32_t {
                 }
                 return 0;
             default:
-                throw Util::Error("Invalid RDP control register index {}", static_cast<uint8_t>(index));
+                throw Util::Error("Invalid RDP control register index {}", index);
         }
     };
 
@@ -137,7 +137,7 @@ auto Control::readRegister(CMD_REGS index) -> uint32_t {
         m_logger->log<Level::HIGH, Sys::RDP_REG>(
             std::tuple{"op", "read"},
             std::tuple{"reg", "{}", name},
-            std::tuple{"data", "0x{:08x}", data});
+            std::tuple{"data", HEXFMT32, data});
     }
     return data;
 }
@@ -148,7 +148,7 @@ auto Control::writeRegister(CMD_REGS index, uint32_t data) -> void {
         m_logger->log<Level::HIGH, Sys::RDP_REG>(
             std::tuple{"op", "write"},
             std::tuple{"reg", "{}", name},
-            std::tuple{"data", "0x{:08x}", data});
+            std::tuple{"data", HEXFMT32, data});
     }
 
     switch (index) {
@@ -205,7 +205,7 @@ auto Control::writeRegister(CMD_REGS index, uint32_t data) -> void {
             }
             return;
         default:
-            throw Util::Error("No RDP register found for index {}", static_cast<uint8_t>(index));
+            throw Util::Error("No RDP register found for index {}", index);
     }
 }
 

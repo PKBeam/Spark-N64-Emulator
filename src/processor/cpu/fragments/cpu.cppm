@@ -1,7 +1,5 @@
 module;
-
 #include <util/defines.hpp>
-
 export module CPU:CPU;
 
 import std;
@@ -18,35 +16,58 @@ export namespace CPU {
 
 class CPU {
   public:
+    static constexpr auto INITIAL_PC = 0xBFC00000;
+
     CPU(std::shared_ptr<Util::Logger> logger,
         Memory::Memory*               memory,
         CP0::CP0*                     cp0,
         CP1::CP1*                     cp1)
-        : m_regs(logger), m_logger(logger), m_memory(memory), m_cp0(cp0), m_cp1(cp1), m_exec(logger, &m_regs, m_memory) {
-        m_regs.writePc(0xBFC00000);
+        : m_regs(logger),
+          m_logger(logger),
+          m_memory(memory),
+          m_cp0(cp0),
+          m_cp1(cp1),
+          m_exec(logger, &m_regs, m_memory) {
+        m_regs.writePc(INITIAL_PC);
     }
+
+    auto dumpIMem(std::filesystem::path file) const -> void;
 
     auto registerBootCallback(uint32_t callbackBootAddress, std::function<void()> callback) -> void;
 
-    auto checkInterrupts() -> void;
-    auto runInstruction() -> void;
-
     auto emulateInitialBoot() -> void;
 
-    auto dumpIMem(std::filesystem::path file) -> void;
+    auto checkInterrupts() -> void;
+
+    auto runInstruction() -> void;
 
   private:
     Registers<Sys::CPU>                  m_regs;
     std::shared_ptr<Util::Logger>        m_logger;
-    Memory::Memory*                      m_memory;
-    CP0::CP0*                            m_cp0;
-    CP1::CP1*                            m_cp1;
+    Memory::Memory*                      m_memory{};
+    CP0::CP0*                            m_cp0{};
+    CP1::CP1*                            m_cp1{};
     ::CPU::InstructionExecutor<Sys::CPU> m_exec;
 
     bool                  m_hasBooted{};
     std::function<void()> m_bootCallback;
     uint32_t              m_bootAddress{};
 };
+
+auto CPU::dumpIMem(std::filesystem::path file) const -> void {
+    auto romDumper = Util::Logger(file);
+    romDumper.setLevel(Level::MAX);
+    for (auto addr = 0u; addr < Util::rangeOf(Memory::PhysSeg::RDRAM).upper; addr += 4) {
+        const auto word = m_memory->readPhysical<uint32_t>(addr);
+        romDumper.print(HEXFMT32 ": {}", Util::rangeOf(Memory::VirtSeg::KSEG0).lower + addr, ISA::Instruction(word));
+    }
+    romDumper.flush();
+}
+
+auto CPU::registerBootCallback(uint32_t callbackBootAddress, std::function<void()> callback) -> void {
+    m_bootAddress  = callbackBootAddress;
+    m_bootCallback = std::move(callback);
+}
 
 auto CPU::emulateInitialBoot() -> void {
     // DMA 1 MiB of ROM code into RSP DMEM
@@ -73,25 +94,20 @@ auto CPU::emulateInitialBoot() -> void {
     m_cp0->writeReg<ISA::CP0_REG::CONFIG>(static_cast<uint32_t>(0x0006E463));
 }
 
-auto CPU::registerBootCallback(uint32_t callbackBootAddress, std::function<void()> callback) -> void {
-    m_bootAddress  = callbackBootAddress;
-    m_bootCallback = std::move(callback);
-}
-
 auto CPU::checkInterrupts() -> void {
     if (m_cp0->hasInterrupt()) {
         auto status = m_cp0->readReg<ISA::CP0_REG::STATUS>();
         status.exl  = 1;
         m_cp0->writeReg(status);
-        auto nextPc = m_regs.pcIsDelaySlot() ? m_regs.readPc() - 4 : m_regs.readPc();
+        const auto nextPc = m_regs.pcIsDelaySlot() ? m_regs.readPc() - 4 : m_regs.readPc();
         m_cp0->writeReg<ISA::CP0_REG::EPC>(nextPc);
         m_regs.writePc(status.bev ? 0xBFC00000 : 0x80000000);
         m_regs.clearDelaySlot();
         IF_LOG_ENABLED(m_logger) {
             m_logger->log<Level::HIGH, Sys::CPU>(
-                std::tuple{"interruptStatus", "{:#08x}", std::bit_cast<uint32_t>(status)},
-                std::tuple{"interruptCause", "{:#08x}", std::bit_cast<uint32_t>(m_cp0->readReg<ISA::CP0_REG::CAUSE>())},
-                std::tuple{"returnPc", "{:#08x}", nextPc});
+                std::tuple{"interruptStatus", HEXFMT32, std::bit_cast<uint32_t>(status)},
+                std::tuple{"interruptCause", HEXFMT32, std::bit_cast<uint32_t>(m_cp0->readReg<ISA::CP0_REG::CAUSE>())},
+                std::tuple{"returnPc", HEXFMT32, nextPc});
         }
     }
 }
@@ -115,7 +131,7 @@ auto CPU::runInstruction() -> void {
 
     IF_LOG_ENABLED(m_logger) {
         m_logger->log<Level::HIGH, Sys::CPU>(
-            std::tuple{"PC", "0x{:08x}", static_cast<uint32_t>(m_regs.readPc())},
+            std::tuple{"PC", HEXFMT32, static_cast<uint32_t>(m_regs.readPc())},
             std::tuple{"inst", "{}", inst});
     }
 
@@ -152,7 +168,7 @@ auto CPU::runInstruction() -> void {
 
         // Load/Store instructions
         case UnifiedOpcode::OP_LUI: {
-            auto ops = std::bit_cast<TypeI>(data);
+            const auto ops = std::bit_cast<TypeI>(data);
             m_regs.writeGpr(ops.rt, Util::signExt32(ops.imm << 16));
             break;
         }
@@ -391,22 +407,12 @@ auto CPU::runInstruction() -> void {
         }
         default:
             dumpIMem("cpu_imem.txt");
-            throw Util::Error("CPU unimplemented instruction @ PC {:#08x}: {} ({:#08x})", m_regs.readPc(), inst, data);
+            throw Util::Error("CPU unimplemented instruction @ PC " HEXFMT32 ": {} (" HEXFMT32 ")", m_regs.readPc(), inst, data);
     }
 
     if (op != UnifiedOpcode::OP_ERET) {
         m_regs.advancePc();
     }
-}
-
-auto CPU::dumpIMem(std::filesystem::path file) -> void {
-    auto romDumper = Util::Logger(file);
-    romDumper.setLevel(Level::MAX);
-    for (auto addr = 0u; addr < Util::rangeOf(Memory::PhysSeg::RDRAM).upper; addr += 4) {
-        const auto word = m_memory->readPhysical<uint32_t>(addr);
-        romDumper.print("{:#010x}: {}", Util::rangeOf(Memory::VirtSeg::KSEG0).lower + addr, ISA::Instruction(word));
-    }
-    romDumper.flush();
 }
 
 } // namespace CPU

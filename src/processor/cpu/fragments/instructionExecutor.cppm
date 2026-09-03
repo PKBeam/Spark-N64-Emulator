@@ -33,8 +33,12 @@ export namespace CPU {
 template <Sys System>
 class InstructionExecutor {
   public:
-    InstructionExecutor(std::shared_ptr<Util::Logger> logger, CPU::Registers<System>* regs, Memory::Memory* memory)
-        : m_logger(logger), m_regs(regs), m_memory(memory) {}
+    InstructionExecutor(std::shared_ptr<Util::Logger> logger,
+                        CPU::Registers<System>*       regs,
+                        Memory::Memory*               memory)
+        : m_logger(logger),
+          m_regs(regs),
+          m_memory(memory) {}
 
     template <Param::BranchLink Link, Param::BranchSource Source>
     auto executeJump(uint32_t inst) -> void;
@@ -48,7 +52,9 @@ class InstructionExecutor {
 
     template <Param::BranchLikelihood Likely = Param::BranchLikelihood::NOT_LIKELY, typename Function>
         requires std::same_as<bool, std::invoke_result_t<Function, int32_t, int32_t>>
-    auto executeBranchAndLink(uint32_t inst, Function&& func) -> void;
+    auto executeBranchAndLink(uint32_t inst, Function&& func) -> void {
+        executeBranch<Likely, Param::BranchLink::LINK>(inst, std::forward<Function>(func));
+    }
 
     template <Param::ShiftLen Len, Param::Direction Dir, Param::ShiftType Type, Param::ShiftVar Var = Param::ShiftVar::FIXED, Param::ShiftAdd Add = Param::ShiftAdd::ADD_NONE>
     auto executeShift(uint32_t inst) -> void;
@@ -59,7 +65,9 @@ class InstructionExecutor {
 
     template <Param::ImmediateExtend I = Param::ImmediateExtend::NO_IMM, std::integral RegisterType = int32_t, typename Function>
         requires std::integral<std::invoke_result_t<Function, RegisterType, RegisterType>>
-    auto executeBivariateImmediate(uint32_t inst, Function&& func) -> void;
+    auto executeBivariateImmediate(uint32_t inst, Function&& func) -> void {
+        executeBivariate<RegisterType, I>(inst, std::forward<Function>(func));
+    }
 
     template <Param::MemoryType Type, std::integral T>
     auto executeMemoryOperation(uint32_t inst) -> void;
@@ -83,13 +91,13 @@ template <Sys System>
 template <Param::BranchLink Link, Param::BranchSource Source>
 auto InstructionExecutor<System>::executeJump(uint32_t inst) -> void {
     if constexpr (Source == Param::BranchSource::IMM) {
-        auto ops = std::bit_cast<ISA::CPU::TypeJ>(inst);
+        const auto ops = std::bit_cast<ISA::CPU::TypeJ>(inst);
         if constexpr (Link == Param::BranchLink::LINK) {
             m_regs->template writeGpr<ISA::CPU_REG::ra>(m_regs->readPc() + 8);
         }
         m_regs->writePcDelayed((m_regs->readPc() & 0xF0000000) | (ops.tgt << 2));
     } else {
-        auto ops = std::bit_cast<ISA::CPU::TypeR>(inst);
+        const auto ops = std::bit_cast<ISA::CPU::TypeR>(inst);
         if constexpr (Link == Param::BranchLink::LINK) {
             m_regs->template writeGpr(ops.rd, m_regs->readPc() + 8);
         }
@@ -102,11 +110,11 @@ template <Param::BranchLikelihood Likely>
 auto InstructionExecutor<System>::executeBranch(uint32_t inst, bool cond) -> void {
     auto ops = std::bit_cast<ISA::CPU::TypeI>(inst);
     if (cond) {
-        auto instOffset = Util::signExt32<int16_t>(ops.imm);
+        const auto instOffset = Util::signExt32<int16_t>(ops.imm);
         m_regs->writePcDelayed((m_regs->readPc() + 4) + (instOffset << 2));
     } else {
         if constexpr (Likely == Param::BranchLikelihood::LIKELY) {
-            auto nextPc = m_regs->readPc() + 4;
+            const auto nextPc = m_regs->readPc() + 4;
             m_regs->writePc(nextPc);
         }
     }
@@ -119,29 +127,15 @@ auto InstructionExecutor<System>::executeBranch(uint32_t inst, Function&& func) 
     if constexpr (Link == Param::BranchLink::LINK) {
         m_regs->template writeGpr<ISA::CPU_REG::ra>(m_regs->readPc() + 8);
     }
-    auto ops       = std::bit_cast<ISA::CPU::TypeI>(inst);
-    bool condition = func(m_regs->readGpr(ops.rs), m_regs->readGpr(ops.rt));
+    const auto ops       = std::bit_cast<ISA::CPU::TypeI>(inst);
+    const bool condition = func(m_regs->readGpr(ops.rs), m_regs->readGpr(ops.rt));
     executeBranch<Likely>(inst, condition);
-}
-
-template <Sys System>
-template <Param::BranchLikelihood Likely, typename Function>
-    requires std::same_as<bool, std::invoke_result_t<Function, int32_t, int32_t>>
-auto InstructionExecutor<System>::executeBranchAndLink(uint32_t inst, Function&& func) -> void {
-    executeBranch<Likely, Param::BranchLink::LINK>(inst, std::forward<Function>(func));
-}
-
-template <Sys System>
-template <Param::ImmediateExtend I, std::integral RegisterType, typename Function>
-    requires std::integral<std::invoke_result_t<Function, RegisterType, RegisterType>>
-auto InstructionExecutor<System>::executeBivariateImmediate(uint32_t inst, Function&& func) -> void {
-    executeBivariate<RegisterType, I>(inst, std::forward<Function>(func));
 }
 
 template <Sys System>
 template <Param::ShiftLen Len, Param::Direction Dir, Param::ShiftType Type, Param::ShiftVar Var, Param::ShiftAdd Add>
 auto InstructionExecutor<System>::executeShift(uint32_t inst) -> void {
-    auto ops = std::bit_cast<ISA::CPU::TypeR>(inst);
+    const auto ops = std::bit_cast<ISA::CPU::TypeR>(inst);
 
     constexpr uint8_t rsMask      = Len == Param::ShiftLen::WORD ? 0x1F : 0x3F;
     const uint8_t     fixedShift  = ops.sa + ((Add == Param::ShiftAdd::ADD32) ? 32 : 0);
@@ -172,7 +166,7 @@ template <Sys System>
 template <std::integral RegisterType, Param::ImmediateExtend I, typename Function>
     requires std::integral<std::invoke_result_t<Function, RegisterType, RegisterType>>
 auto InstructionExecutor<System>::executeBivariate(uint32_t inst, Function&& func) -> void {
-    auto ops = [&] {
+    const auto ops = [&] {
         if constexpr (I == Param::ImmediateExtend::NO_IMM) {
             return std::bit_cast<ISA::CPU::TypeR>(inst);
         } else {
@@ -180,8 +174,8 @@ auto InstructionExecutor<System>::executeBivariate(uint32_t inst, Function&& fun
         }
     }();
 
-    auto arg1 = m_regs->template readGpr<RegisterType>(ops.rs);
-    auto arg2 = [&] {
+    const auto arg1 = m_regs->template readGpr<RegisterType>(ops.rs);
+    const auto arg2 = [&] {
         if constexpr (I == Param::ImmediateExtend::NO_IMM) {
             return m_regs->template readGpr<RegisterType>(ops.rt);
         } else if constexpr (I == Param::ImmediateExtend::SIGN_EXTEND) {
@@ -191,7 +185,7 @@ auto InstructionExecutor<System>::executeBivariate(uint32_t inst, Function&& fun
         }
     }();
 
-    auto dst = [&] {
+    const auto dst = [&] {
         if constexpr (I == Param::ImmediateExtend::NO_IMM) {
             return ops.rd;
         } else {
@@ -209,10 +203,10 @@ auto InstructionExecutor<System>::executeMultiply(uint32_t inst) -> void {
 #else
     static_assert(false, "No 128-bit integer available to implement DMULTU");
 #endif
-    auto ops    = std::bit_cast<ISA::CPU::TypeR>(inst);
-    auto rs     = static_cast<ResultType>(m_regs->template readGpr<T>(ops.rs));
-    auto rt     = static_cast<ResultType>(m_regs->template readGpr<T>(ops.rt));
-    auto result = rs * rt;
+    const auto ops    = std::bit_cast<ISA::CPU::TypeR>(inst);
+    const auto rs     = static_cast<ResultType>(m_regs->template readGpr<T>(ops.rs));
+    const auto rt     = static_cast<ResultType>(m_regs->template readGpr<T>(ops.rt));
+    const auto result = rs * rt;
     m_regs->writeHi(static_cast<T>(result >> (sizeof(T) * 8)));
     m_regs->writeLo(static_cast<T>(result & ((static_cast<ResultType>(1) << (sizeof(T) * 8)) - 1)));
 }
@@ -220,19 +214,19 @@ auto InstructionExecutor<System>::executeMultiply(uint32_t inst) -> void {
 template <Sys System>
 template <std::integral T>
 auto InstructionExecutor<System>::executeDivide(uint32_t inst) -> void {
-    auto ops = std::bit_cast<ISA::CPU::TypeR>(inst);
-    auto rs  = m_regs->template readGpr<T>(ops.rs);
-    auto rt  = m_regs->template readGpr<T>(ops.rt);
+    const auto ops = std::bit_cast<ISA::CPU::TypeR>(inst);
+    const auto rs  = m_regs->template readGpr<T>(ops.rs);
+    const auto rt  = m_regs->template readGpr<T>(ops.rt);
     if (rt == 0) {
         IF_LOG_ENABLED(m_logger) {
-            m_logger->log<Level::HIGH, Sev::WARNING, Sys::CPU>("division by zero @ PC 0x{:08x}", m_regs->readPc());
+            m_logger->log<Level::HIGH, Sev::WARNING, Sys::CPU>("division by zero @ PC " HEXFMT32, m_regs->readPc());
         }
         return;
     }
     if constexpr (std::is_signed_v<T>) {
         if (rs == std::numeric_limits<T>::min() && rt == -1) {
             IF_LOG_ENABLED(m_logger) {
-                m_logger->log<Level::HIGH, Sev::WARNING, Sys::CPU>("division overflow @ PC 0x{:08x}", m_regs->readPc());
+                m_logger->log<Level::HIGH, Sev::WARNING, Sys::CPU>("division overflow @ PC " HEXFMT32, m_regs->readPc());
             }
         }
     }
@@ -243,7 +237,8 @@ auto InstructionExecutor<System>::executeDivide(uint32_t inst) -> void {
 template <Sys System>
 template <Param::MemoryType Type, std::integral T>
 auto InstructionExecutor<System>::executeMemoryOperation(uint32_t inst) -> void {
-    auto ops  = std::bit_cast<ISA::CPU::TypeI>(inst);
+    const auto ops = std::bit_cast<ISA::CPU::TypeI>(inst);
+
     auto addr = Util::signExt32<int16_t>(ops.imm) + m_regs->readGpr(ops.rs);
     if constexpr (System == Sys::RSP) {
         addr &= 0xFFF;
@@ -277,8 +272,8 @@ auto InstructionExecutor<System>::executeMemoryOperation(uint32_t inst) -> void 
 template <Sys System>
 template <Param::MemoryType Type, Param::Direction Dir, std::integral T>
 auto InstructionExecutor<System>::executeMemoryOperationUnaligned(uint32_t inst) -> void {
-    auto ops   = std::bit_cast<ISA::CPU::TypeI>(inst);
-    auto vaddr = Util::signExt32<int16_t>(ops.imm) + m_regs->readGpr(ops.rs);
+    const auto ops   = std::bit_cast<ISA::CPU::TypeI>(inst);
+    const auto vaddr = Util::signExt32<int16_t>(ops.imm) + m_regs->readGpr(ops.rs);
 
     const auto addrRange = [vaddr]() {
         const auto base = static_cast<std::size_t>(vaddr);

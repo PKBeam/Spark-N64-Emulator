@@ -1,3 +1,5 @@
+module;
+#include <util/defines.hpp>
 export module Interfaces:RdramInterface;
 
 import std;
@@ -52,7 +54,7 @@ auto RdramInterface::read(uint32_t addr) -> uint32_t {
             case RI_REG_ADDR::RI_BANK_STATUS:
                 return std::bit_cast<uint32_t>(m_bankStatus);
             default:
-                throw Util::Error("No RI register found for addr {:#08x}", addr);
+                throw Util::Error("No RI register found for addr " HEXFMT32, addr);
         }
     };
 
@@ -105,7 +107,7 @@ auto RdramInterface::write(uint32_t addr, uint32_t data) -> void {
             break;
         }
         default:
-            throw Util::Error("No RI register found for addr {:#08x}", addr);
+            throw Util::Error("No RI register found for addr " HEXFMT32, addr);
     }
 }
 

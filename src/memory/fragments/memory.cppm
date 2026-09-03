@@ -80,7 +80,7 @@ auto getPhysicalSegment(PhysicalAddr paddr) -> PhysSeg {
             return [:e:];
         }
     }
-    throw Util::Error("Translation failed on N64 physical address {:#08x}", paddr);
+    throw Util::Error("Translation failed on N64 physical address " HEXFMT32, paddr);
 }
 } // namespace Impl
 
@@ -136,8 +136,8 @@ auto Memory::readPhysical(PhysicalAddr paddr) const -> T { // TODO improve perfo
         m_logger->log<Level::HIGH, Sys::RDRAM>(
             std::tuple{"op", "read"},
             std::tuple{"size", sizeof(T)},
-            std::tuple{"addr", "0x{:08x}", paddr},
-            std::tuple{"data", "0x{:08x}", static_cast<std::make_unsigned_t<T>>(data)});
+            std::tuple{"addr", HEXFMT32, paddr},
+            std::tuple{"data", HEXFMT32, static_cast<std::make_unsigned_t<T>>(data)});
     }
     return data;
 }
@@ -190,8 +190,8 @@ auto Memory::writePhysical(PhysicalAddr paddr, T data) const -> void {
         m_logger->log<Level::HIGH, Sys::RDRAM>(
             std::tuple{"op", "write"},
             std::tuple{"size", sizeof(T)},
-            std::tuple{"addr", "0x{:08x}", paddr},
-            std::tuple{"data", "0x{:08x}", static_cast<std::make_unsigned_t<T>>(printData)});
+            std::tuple{"addr", HEXFMT32, paddr},
+            std::tuple{"data", HEXFMT32, static_cast<std::make_unsigned_t<T>>(printData)});
     }
 }
 
@@ -199,7 +199,7 @@ template <std::integral T>
 auto Memory::translate(VirtualAddr vaddr) const -> PhysicalAddr {
     IF_LOG_ENABLED(m_logger) {
         if (vaddr % sizeof(T) != 0) {
-            m_logger->log<Level::HIGH, Sev::WARNING, Sys::RDRAM>("Unaligned virtual address access {:#08x}, size {}", vaddr, sizeof(T));
+            m_logger->log<Level::HIGH, Sev::WARNING, Sys::RDRAM>("Unaligned virtual address access " HEXFMT32 ", size {}", vaddr, sizeof(T));
         }
     }
 
@@ -212,12 +212,12 @@ auto Memory::translate(VirtualAddr vaddr) const -> PhysicalAddr {
                     "Unimplemented virtual memory range {}", std::meta::identifier_of(e));
             }
             if (!range.contains(vaddr + sizeof(T) - 1)) {
-                throw Util::Error("Out of bounds N64 virtual address access {:#08x}, size {}", vaddr, sizeof(T));
+                throw Util::Error("Out of bounds N64 virtual address access " HEXFMT32 ", size {}", vaddr, sizeof(T));
             }
             return vaddr - range.lower;
         }
     }
-    throw Util::Error("Translation failed on N64 virtual address {:#08x}", vaddr);
+    throw Util::Error("Translation failed on N64 virtual address " HEXFMT32, vaddr);
 }
 
 auto Memory::registerAudioInterface(Interfaces::Interface* interface) -> void {

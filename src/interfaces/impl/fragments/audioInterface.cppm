@@ -1,3 +1,5 @@
+module;
+#include <util/defines.hpp>
 export module Interfaces:AudioInterface;
 
 import std;
@@ -47,7 +49,7 @@ auto AudioInterface::read(uint32_t addr) -> uint32_t {
             case AI_REG_ADDR::AI_STATUS:
                 return std::bit_cast<uint32_t>(m_status);
             default:
-                throw Util::Error("No AI register found for addr {:#08x}", addr);
+                throw Util::Error("No AI register found for addr " HEXFMT32, addr);
         }
     };
 

@@ -68,7 +68,9 @@ class InstructionExecutor {
 
     template <typename To>
         requires(FloatType_c<To>)
-    auto executeConvert(uint32_t inst) -> void;
+    auto executeConvert(uint32_t inst) -> void {
+        executeConvert<To>(inst, m_fprs->getRoundingMode());
+    }
 
     template <Param::ComparisonOrder Order = Param::ORDERED, Param::ComparisonSignal Signal = Param::NO_SIGNAL, typename Function>
         requires std::same_as<bool, std::invoke_result_t<Function, float, float>>
@@ -101,12 +103,6 @@ auto InstructionExecutor::executeConvert(uint32_t inst, Util::FP_ROUND_MODE roun
     });
 }
 
-template <typename To>
-    requires(FloatType_c<To>)
-auto InstructionExecutor::executeConvert(uint32_t inst) -> void {
-    executeConvert<To>(inst, m_fprs->getRoundingMode());
-}
-
 template <Param::ComparisonOrder Order, Param::ComparisonSignal Signal, typename Function>
     requires std::same_as<bool, std::invoke_result_t<Function, float, float>>
 auto InstructionExecutor::executeCompare(uint32_t inst, Function&& func) -> void {
@@ -117,7 +113,7 @@ auto InstructionExecutor::executeCompare(uint32_t inst, Function&& func) -> void
         const auto fs = m_fprs->readFpr<decltype(T)>(ops.fs);
         const auto ft = m_fprs->readFpr<decltype(T)>(ops.ft);
 
-        bool result{};
+        auto result = bool();
         if (std::isnan(fs) || std::isnan(ft)) {
             if constexpr (Signal == Param::SIGNAL) {
                 // TODO signal exception
@@ -165,7 +161,7 @@ auto InstructionExecutor::executeMemoryOperation(uint32_t inst, U gprValue) -> v
     const auto ops  = std::bit_cast<ISA::FPU::TypeI>(inst);
     const auto addr = Util::signExt32<int16_t>(ops.imm) + gprValue;
 
-    T data{};
+    auto data = T{};
     if constexpr (Type == Param::MemoryTypeFloat::LOAD_F) {
         data = m_memory->read<T>(addr);
         m_fprs->writeFgr<T>(ops.ft, data);

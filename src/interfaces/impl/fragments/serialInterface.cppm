@@ -68,7 +68,7 @@ auto SerialInterface::read(uint32_t addr) -> uint32_t {
                 m_status.interrupt = m_mipsInterface->getInterrupt<^^MI_INTERRUPT::si>();
                 return std::bit_cast<uint32_t>(m_status);
             default:
-                throw Util::Error("No SI register found for addr {:#08x}", addr);
+                throw Util::Error("No SI register found for addr " HEXFMT32, addr);
         }
     };
 
@@ -136,11 +136,11 @@ auto SerialInterface::readBus(uint32_t addr) -> T {
                 return static_cast<T>(m_pifCmdPending << 7);
             }
             IF_LOG_ENABLED(m_logger) {
-                m_logger->log<Level::HIGH, Sev::WARNING, Sys::SI>("Ignoring access to PIF RAM @ {:#08x}", addr);
+                m_logger->log<Level::HIGH, Sev::WARNING, Sys::SI>("Ignoring access to PIF RAM @ " HEXFMT32, addr);
             }
             return 0;
         default:
-            throw Util::Error("SI: Read from unknown address {:#08x}", addr);
+            throw Util::Error("SI: Read from unknown address " HEXFMT32, addr);
     }
     return 0;
 }
@@ -159,11 +159,11 @@ auto SerialInterface::writeBus(uint32_t addr, T data) -> void {
                 return;
             }
             IF_LOG_ENABLED(m_logger) {
-                m_logger->log<Level::HIGH, Sev::WARNING, Sys::SI>("Ignoring write to PIF RAM @ {:#08x}", addr);
+                m_logger->log<Level::HIGH, Sev::WARNING, Sys::SI>("Ignoring write to PIF RAM @ " HEXFMT32, addr);
             }
             break;
         default:
-            throw Util::Error("SI: Write to unknown address {:#08x}", addr);
+            throw Util::Error("SI: Write to unknown address " HEXFMT32, addr);
     }
 }
 
@@ -183,7 +183,7 @@ auto SerialInterface::dmaMemcpy(uint32_t dst, uint32_t src) -> void {
     m_status.interrupt   = 1; // todo mirror in MIPS interrupt
 
     IF_LOG_ENABLED(m_logger) {
-        m_logger->log<Level::HIGH, Sev::INFO, Sys::SI>("DMA {} bytes from {:#010x} to {:#010x}", len, src, dst);
+        m_logger->log<Level::HIGH, Sev::INFO, Sys::SI>("DMA {} bytes from " HEXFMT32 " to " HEXFMT32, len, src, dst);
     }
 }
 

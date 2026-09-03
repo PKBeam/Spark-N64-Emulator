@@ -1,7 +1,5 @@
 module;
-
 #include <util/defines.hpp>
-
 export module Rom:Types;
 
 import std;

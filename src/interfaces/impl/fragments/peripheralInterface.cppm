@@ -140,7 +140,7 @@ auto PeripheralInterface::read(uint32_t addr) -> uint32_t {
             case PI_REG_ADDR::PI_BSD_DOM2_RLS:
                 return std::bit_cast<uint32_t>(PI_BSD_DOM2_RLS{});
             default:
-                throw Util::Error("No PI register found for addr {:#08x}", addr);
+                throw Util::Error("No PI register found for addr " HEXFMT32, addr);
         };
     };
     auto data = readReg(addr);
@@ -197,7 +197,7 @@ auto PeripheralInterface::write(uint32_t addr, uint32_t data) -> void {
             logWarnOnIgnoredRegister<Sys::PI, PI_REG_ADDR>(m_logger, addr);
             break;
         default:
-            throw Util::Error("No PI register found for addr {:#08x}", addr);
+            throw Util::Error("No PI register found for addr " HEXFMT32, addr);
     };
 }
 
@@ -219,7 +219,7 @@ auto PeripheralInterface::dmaMemcpy(uint32_t dst, uint32_t src, std::size_t len)
     m_status.interrupt = 1;
 
     IF_LOG_ENABLED(m_logger) {
-        m_logger->log<Level::HIGH, Sev::INFO, Sys::PI>("DMA {} bytes from {:#010x} to {:#010x}", len, src, dst);
+        m_logger->log<Level::HIGH, Sev::INFO, Sys::PI>("DMA {} bytes from " HEXFMT32 " to " HEXFMT32, len, src, dst);
     }
 }
 

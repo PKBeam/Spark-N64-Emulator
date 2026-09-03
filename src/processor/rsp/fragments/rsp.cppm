@@ -1,11 +1,8 @@
 module;
-
 #include <util/defines.hpp>
-
 export module RSP:RSP;
 
 import std;
-import CP0;
 import CPU;
 import ISA;
 import Interfaces;
@@ -23,14 +20,23 @@ export namespace RSP {
 
 class RSP {
   public:
-    RSP(std::shared_ptr<Util::Logger> logger, Control* control, Interfaces::MipsInterface* mipsInterface, Memory::Memory* memory)
-        : m_logger(logger), m_control(control), m_mipsInterface(mipsInterface), m_memory(memory), m_gprs(logger), m_vprs(logger), m_exec(m_logger, &m_gprs, &m_vprs, m_memory) {};
-
-    auto runInstruction() -> void;
+    RSP(std::shared_ptr<Util::Logger> logger,
+        Control*                      control,
+        Interfaces::MipsInterface*    mipsInterface,
+        Memory::Memory*               memory)
+        : m_logger(logger),
+          m_control(control),
+          m_mipsInterface(mipsInterface),
+          m_memory(memory),
+          m_gprs(logger),
+          m_vprs(logger),
+          m_exec(m_logger, &m_gprs, &m_vprs, m_memory) {};
 
     auto halt() -> void;
 
-    auto dumpIMem(std::filesystem::path file = "rsp_imem.txt") -> void;
+    auto dumpIMem(std::filesystem::path file = "rsp_imem.txt") const -> void;
+
+    auto runInstruction() -> void;
 
   private:
     std::shared_ptr<Util::Logger> m_logger;
@@ -43,12 +49,28 @@ class RSP {
     std::optional<VirtualAddr>    m_delaySlotPc;
 };
 
+auto RSP::halt() -> void {
+    m_control->setHalt(true);
+    // save PC when halting
+    m_control->writePc(m_gprs.readPc());
+}
+
+auto RSP::dumpIMem(std::filesystem::path file) const -> void {
+    auto romDumper = Util::Logger(file);
+    romDumper.setLevel(Level::MAX);
+    for (auto i = 0uz; i < 0x1000; i += 4) {
+        const auto word = m_memory->readPhysical<uint32_t>(RSP_IMEM_BASE + i);
+        romDumper.print(HEXFMT12 ": {}", i, ISA::Instruction(word));
+    }
+    romDumper.flush();
+}
+
 auto RSP::runInstruction() -> void {
     if (m_control->getHalt()) {
         return;
     }
 
-    if (auto pc = m_control->getPc()) { // starting from halt
+    if (auto pc = m_control->readPc()) { // starting from halt
         m_gprs.writePc(*pc);
         m_control->clearPc();
 
@@ -61,7 +83,7 @@ auto RSP::runInstruction() -> void {
     const auto inst     = ISA::Instruction(instBits);
     IF_LOG_ENABLED(m_logger) {
         m_logger->log<Level::HIGH, Sys::RSP>(
-            std::tuple{"PC", "{:#05x}", static_cast<uint32_t>(m_gprs.readPc())},
+            std::tuple{"PC", HEXFMT12, static_cast<uint32_t>(m_gprs.readPc())},
             std::tuple{"inst", "{}", inst});
     }
 
@@ -355,7 +377,7 @@ auto RSP::runInstruction() -> void {
             break;
         default:
             dumpIMem("rsp_imem.txt");
-            throw Util::Error("RSP unimplemented instruction @ PC {:#05x}: {} ({:#08x})", m_gprs.readPc(), inst, data);
+            throw Util::Error("RSP unimplemented instruction @ PC " HEXFMT12 ": {} (" HEXFMT32 ")", m_gprs.readPc(), inst, data);
     }
 
     m_gprs.advancePc();
@@ -363,22 +385,6 @@ auto RSP::runInstruction() -> void {
     if (m_control->getSingleStep()) {
         halt();
     }
-}
-
-auto RSP::halt() -> void {
-    // save PC when halting
-    m_control->setHalt(true);
-    m_control->setPc(m_gprs.readPc());
-}
-
-auto RSP::dumpIMem(std::filesystem::path file) -> void {
-    auto romDumper = Util::Logger(file);
-    romDumper.setLevel(Level::MAX);
-    for (auto i = 0uz; i < 0x1000; i += 4) {
-        const auto word = m_memory->readPhysical<uint32_t>(RSP_IMEM_BASE + i);
-        romDumper.print("{:#05x}: {}", i, ISA::Instruction(word));
-    }
-    romDumper.flush();
 }
 
 } // namespace RSP

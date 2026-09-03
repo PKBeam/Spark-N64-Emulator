@@ -1,3 +1,5 @@
+module;
+#include <util/defines.hpp>
 export module Memory:Segments;
 
 import std;
@@ -42,3 +44,6 @@ enum class PhysSeg {
 
 export using VirtualAddr  = uint32_t;
 export using PhysicalAddr = uint32_t;
+
+STD_FORMATTER_ENUM_NAME(Memory::VirtSeg);
+STD_FORMATTER_ENUM_NAME(Memory::PhysSeg);

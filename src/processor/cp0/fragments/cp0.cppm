@@ -1,7 +1,5 @@
 module;
-
 #include <util/defines.hpp>
-
 export module CP0:CP0;
 
 import std;
@@ -15,7 +13,7 @@ class CP0 {
     CP0(std::shared_ptr<Util::Logger> logger);
 
     template <std::integral T = int32_t>
-    auto readReg(std::size_t index) -> T;
+    auto readReg(std::size_t index) const -> T;
 
     template <std::integral T = int32_t>
     auto readReg(ISA::CP0_REG index) -> T {
@@ -23,7 +21,7 @@ class CP0 {
     }
 
     template <ISA::CP0_REG R>
-    auto readReg();
+    auto readReg() const;
 
     template <std::integral T>
     auto writeReg(std::size_t index, T value) -> void;
@@ -33,19 +31,20 @@ class CP0 {
     auto writeReg(T value) -> void;
 
     template <ISA::CP0_REG R, std::integral T>
-    auto writeReg(T value) -> void;
+    auto writeReg(T value) -> void {
+        writeReg(static_cast<uint8_t>(R), value);
+    }
 
     auto incrementCount() -> void;
 
+    auto hasInterrupt() const -> bool;
     auto updateInterrupt() -> void;
     auto clearInterrupt() -> void;
 
-    auto hasInterrupt() -> bool;
-
   private:
     std::shared_ptr<Util::Logger> m_logger;
-    bool                          m_hasInterrupt = false;
-    std::array<uint32_t, 32>      m_regs{};
+    bool                          m_hasInterrupt{};
+    std::array<uint32_t, 32>      m_regs;
 };
 
 CP0::CP0(std::shared_ptr<Util::Logger> logger) {
@@ -54,25 +53,22 @@ CP0::CP0(std::shared_ptr<Util::Logger> logger) {
 }
 
 template <std::integral T>
-auto CP0::readReg(std::size_t index) -> T {
-    const auto regName = static_cast<ISA::CP0_REG>(index);
-
+auto CP0::readReg(std::size_t index) const -> T {
     auto value = static_cast<T>(m_regs[index]);
     IF_LOG_ENABLED(m_logger) {
-        const auto enumName = Util::enumName(regName);
         m_logger->log<Level::HIGH, Sys::CPU>(
             std::tuple{"op", "read"},
             std::tuple{"reg", "CP0 {}", static_cast<ISA::CP0_REG>(index)},
-            std::tuple{"data", "0x{:08X}", static_cast<uint32_t>(value)});
+            std::tuple{"data", HEXFMT32, static_cast<uint32_t>(value)});
     }
     return value;
 }
 
 template <ISA::CP0_REG R>
-auto CP0::readReg() {
+auto CP0::readReg() const {
     template for (constexpr auto e : Util::staticEnumeratorsOf(^^ISA::CP0_REG)) {
         if constexpr (std::meta::extract<ISA::CP0_REG>(e) == R) {
-            uint32_t value = readReg(static_cast<uint8_t>(std::meta::extract<ISA::CP0_REG>(e)));
+            const auto value = readReg<uint32_t>(static_cast<uint8_t>(std::meta::extract<ISA::CP0_REG>(e)));
             if constexpr (std::meta::annotations_of(e).size() == 0) { // ICE if using Util::staticAnnotationsOf
                 return value;
             } else {
@@ -110,11 +106,10 @@ auto CP0::writeReg(std::size_t index, T value) -> void {
     }
     m_regs[index] = Util::signExt32(value);
     IF_LOG_ENABLED(m_logger) {
-        const auto enumName = Util::enumName(regName);
         m_logger->log<Level::HIGH, Sys::CPU>(
             std::tuple{"op", "write"},
             std::tuple{"reg", "CP0 {}", static_cast<ISA::CP0_REG>(index)},
-            std::tuple{"data", "0x{:08X}", static_cast<uint32_t>(value)});
+            std::tuple{"data", HEXFMT32, static_cast<uint32_t>(value)});
     }
     if (index == static_cast<uint8_t>(ISA::CP0_REG::STATUS) || index == static_cast<uint8_t>(ISA::CP0_REG::CAUSE)) {
         updateInterrupt();
@@ -131,11 +126,6 @@ auto CP0::writeReg(T value) -> void {
             writeReg(static_cast<uint8_t>(std::meta::extract<ISA::CP0_REG>(e)), std::bit_cast<uint32_t>(value));
         }
     }
-}
-
-template <ISA::CP0_REG R, std::integral T>
-auto CP0::writeReg(T value) -> void {
-    writeReg(static_cast<uint8_t>(R), value);
 }
 
 auto CP0::incrementCount() -> void {
@@ -157,18 +147,18 @@ auto CP0::incrementCount() -> void {
     }
 }
 
+auto CP0::hasInterrupt() const -> bool {
+    return m_hasInterrupt;
+}
+
 auto CP0::updateInterrupt() -> void {
-    auto status    = WITH_LOG_DISABLED(m_logger, readReg<ISA::CP0_REG::STATUS>());
-    auto cause     = WITH_LOG_DISABLED(m_logger, readReg<ISA::CP0_REG::CAUSE>());
-    m_hasInterrupt = status.im & cause.ip && status.ie && !status.exl && !status.erl;
+    const auto status = WITH_LOG_DISABLED(m_logger, readReg<ISA::CP0_REG::STATUS>());
+    const auto cause  = WITH_LOG_DISABLED(m_logger, readReg<ISA::CP0_REG::CAUSE>());
+    m_hasInterrupt    = status.im & cause.ip && status.ie && !status.exl && !status.erl;
 }
 
 auto CP0::clearInterrupt() -> void {
     m_hasInterrupt = false;
-}
-
-auto CP0::hasInterrupt() -> bool {
-    return m_hasInterrupt;
 }
 
 } // namespace CP0
