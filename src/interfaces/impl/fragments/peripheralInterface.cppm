@@ -3,6 +3,7 @@ module;
 export module Interfaces:PeripheralInterface;
 
 import std;
+import MemoryTypes;
 import Rom;
 import Util;
 
@@ -16,7 +17,7 @@ export class PeripheralInterface : public Interface {
   public:
     PeripheralInterface(
         std::shared_ptr<Util::Logger> logger,
-        std::byte*                    memory,
+        Memory::Memory*               memory,
         MipsInterface*                mipsInterface)
         : m_logger(logger), m_memory(memory), m_mipsInterface(mipsInterface) {}
 
@@ -36,7 +37,7 @@ export class PeripheralInterface : public Interface {
   private:
     std::shared_ptr<Util::Logger> m_logger;
     const RomFile*                m_romFile{};
-    std::byte*                    m_memory{};
+    Memory::Memory*               m_memory{};
     PI_STATUS                     m_status{};
     uint32_t                      m_dramAddr = 0;
     uint32_t                      m_cartAddr = 0;
@@ -60,9 +61,7 @@ auto PeripheralInterface::readBus(uint32_t addr) -> T {
     const auto [e, range] = Util::getRange<PiDmaRanges>(addr);
     switch (e) {
         case PiDmaRanges::RDRAM: {
-            T data{};
-            std::memcpy(&data, m_memory + addr, sizeof(T));
-            return data;
+            return m_memory->read<T>(addr);
         }
         case PiDmaRanges::PI_REG:
             throw Util::Error("PI regs must not be accessed via the bus");
@@ -90,7 +89,7 @@ auto PeripheralInterface::writeBus(uint32_t addr, T data) -> void {
     const auto [e, _] = Util::getRange<PiDmaRanges>(addr);
     switch (e) {
         case PiDmaRanges::RDRAM:
-            std::memcpy(m_memory + addr, &data, sizeof(T));
+            m_memory->write<T>(addr, data);
             return;
         case PiDmaRanges::PI_REG:
             throw Util::Error("PI regs must not be accessed via the bus");

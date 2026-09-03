@@ -1,20 +1,20 @@
 module;
-
 #include <util/defines.hpp>
-
-export module Memory:Memory;
+export module Memory:MemoryBus;
 
 import std;
 import Interfaces;
+import MemoryTypes;
 import Rom;
 import Util;
 
-import :Segments;
-
 namespace Memory {
-export class Memory {
+export class MemoryBus {
   public:
-    Memory(std::shared_ptr<Util::Logger> logger, std::byte* memory) : m_logger(logger), m_hostMemory(memory) {}
+    MemoryBus(std::shared_ptr<Util::Logger> logger, ::Memory::Memory* memory) : m_logger(logger), m_memory(memory) {}
+
+    template <std::integral T = std::byte>
+    auto translate(VirtualAddr vaddr) const -> PhysicalAddr;
 
     template <std::integral T>
     auto readPhysical(PhysicalAddr addr) const -> T;
@@ -23,19 +23,10 @@ export class Memory {
     auto writePhysical(PhysicalAddr addr, T data) const -> void;
 
     template <std::integral T>
-    auto read(VirtualAddr addr) const -> T {
-        return readPhysical<T>(translate<T>(addr));
-    }
+    auto read(VirtualAddr addr) const -> T;
 
     template <std::integral T>
-    auto write(VirtualAddr addr, T data) const -> void {
-        writePhysical<T>(translate<T>(addr), data);
-    }
-
-    auto data() const -> void*;
-
-    template <std::integral T = std::byte>
-    auto translate(VirtualAddr vaddr) const -> PhysicalAddr;
+    auto write(VirtualAddr addr, T data) const -> void;
 
     auto registerAudioInterface(Interfaces::Interface* interface) -> void //
         pre(interface != nullptr);
@@ -60,7 +51,7 @@ export class Memory {
 
   private:
     std::shared_ptr<Util::Logger> m_logger;
-    std::byte*                    m_hostMemory{};
+    ::Memory::Memory*             m_memory{};
 
     Interfaces::Interface* m_audioInterface{};
     Interfaces::Interface* m_mipsInterface{};
@@ -82,23 +73,56 @@ auto getPhysicalSegment(PhysicalAddr paddr) -> PhysSeg {
     }
     throw Util::Error("Translation failed on N64 physical address " HEXFMT32, paddr);
 }
+
+template <std::integral T>
+auto translate(VirtualAddr vaddr, std::shared_ptr<Util::Logger> logger) -> PhysicalAddr {
+    IF_LOG_ENABLED(logger) {
+        if (vaddr % sizeof(T) != 0) {
+            logger->log<Level::HIGH, Sev::WARNING, Sys::RDRAM>("Unaligned virtual address access " HEXFMT32 ", size {}", vaddr, sizeof(T));
+        }
+    }
+
+    template for (constexpr auto e : Util::staticEnumeratorsOf(^^VirtSeg)) {
+        constexpr auto a     = std::meta::annotations_of_with_type(e, ^^Util::Range)[0];
+        constexpr auto range = std::meta::extract<Util::Range>(a);
+        if (range.contains(vaddr)) {
+            if constexpr (e != (^^VirtSeg::KSEG0) && e != ^^VirtSeg::KSEG1) {
+                throw Util::Error(
+                    "Unimplemented virtual memory range {}", std::meta::identifier_of(e));
+            }
+            if (!range.contains(vaddr + sizeof(T) - 1)) {
+                throw Util::Error("Out of bounds N64 virtual address access " HEXFMT32 ", size {}", vaddr, sizeof(T));
+            }
+            return vaddr - range.lower;
+        }
+    }
+    throw Util::Error("Translation failed on N64 virtual address " HEXFMT32, vaddr);
+}
 } // namespace Impl
 
 template <std::integral T>
-auto Memory::readPhysical(PhysicalAddr paddr) const -> T { // TODO improve performance
-    const auto hostAddr = m_hostMemory + paddr;
+auto MemoryBus::read(VirtualAddr addr) const -> T {
+    return readPhysical<T>(Impl::translate<T>(addr, m_logger));
+}
 
-    T data{};
+template <std::integral T>
+auto MemoryBus::write(VirtualAddr addr, T data) const -> void {
+    writePhysical<T>(Impl::translate<T>(addr, m_logger), data);
+}
 
+template <std::integral T>
+auto MemoryBus::readPhysical(PhysicalAddr paddr) const -> T {
+    auto data = T{};
     switch (Impl::getPhysicalSegment(paddr)) {
         // these are all typical "memory" spaces
         case PhysSeg::RDRAM: [[fallthrough]];
         case PhysSeg::RSP_DMEM: [[fallthrough]];
         case PhysSeg::RSP_IMEM:
-            std::memcpy(&data, hostAddr, sizeof(T));
-            data = Util::byteswapIfLittleEndian(data);
+            data = m_memory->read<T>(paddr);
             break;
-        case PhysSeg::RDRAM_UNUSED: data = 0; break;
+        case PhysSeg::RDRAM_UNUSED:
+            data = 0;
+            break;
         case PhysSeg::RDRAM_REG: {
             IF_LOG_ENABLED(m_logger) {
                 m_logger->log<Level::HIGH, Sev::WARNING, Sys::RDRAM>("Ignoring RDRAM register read");
@@ -128,8 +152,7 @@ auto Memory::readPhysical(PhysicalAddr paddr) const -> T { // TODO improve perfo
             data = dynamic_cast<Interfaces::SerialInterface*>(m_serialInterface)->readBus<T>(paddr);
             break;
         default:
-            throw Util::Error(
-                "Unimplemented physical memory range {}", Util::enumName(Impl::getPhysicalSegment(paddr)).value_or("Unknown"));
+            throw Util::Error("Unimplemented physical memory range {}", Impl::getPhysicalSegment(paddr));
     }
 
     IF_LOG_ENABLED(m_logger) {
@@ -143,15 +166,19 @@ auto Memory::readPhysical(PhysicalAddr paddr) const -> T { // TODO improve perfo
 }
 
 template <std::integral T>
-auto Memory::writePhysical(PhysicalAddr paddr, T data) const -> void {
-    const auto hostAddr = m_hostMemory + paddr;
-
+auto MemoryBus::writePhysical(PhysicalAddr paddr, T data) const -> void {
+    IF_LOG_ENABLED(m_logger) {
+        m_logger->log<Level::HIGH, Sys::RDRAM>(
+            std::tuple{"op", "write"},
+            std::tuple{"size", sizeof(T)},
+            std::tuple{"addr", HEXFMT32, paddr},
+            std::tuple{"data", HEXFMT32, static_cast<std::make_unsigned_t<T>>(data)});
+    }
     switch (Impl::getPhysicalSegment(paddr)) {
         case PhysSeg::RDRAM: [[fallthrough]];
         case PhysSeg::RSP_DMEM: [[fallthrough]];
         case PhysSeg::RSP_IMEM:
-            data = Util::byteswapIfLittleEndian(data);
-            std::memcpy(hostAddr, &data, sizeof(T));
+            m_memory->write<T>(paddr, data);
             break;
         case PhysSeg::RDRAM_UNUSED: break;
         case PhysSeg::MIPS_INTERFACE: m_mipsInterface->sizedWrite(paddr, sizeof(T), data); break;
@@ -174,77 +201,35 @@ auto Memory::writePhysical(PhysicalAddr paddr, T data) const -> void {
             dynamic_cast<Interfaces::SerialInterface*>(m_serialInterface)->writeBus<T>(paddr, data);
             break;
         default:
-            throw Util::Error(
-                "Unimplemented physical memory range {}", Util::enumName(Impl::getPhysicalSegment(paddr)).value_or("Unknown"));
-    }
-
-    IF_LOG_ENABLED(m_logger) {
-        auto printData = data;
-        switch (Impl::getPhysicalSegment(paddr)) {
-            case PhysSeg::RDRAM: [[fallthrough]];
-            case PhysSeg::RSP_DMEM: [[fallthrough]];
-            case PhysSeg::RSP_IMEM:
-                printData = Util::byteswapIfLittleEndian(printData);
-            default: break;
-        }
-        m_logger->log<Level::HIGH, Sys::RDRAM>(
-            std::tuple{"op", "write"},
-            std::tuple{"size", sizeof(T)},
-            std::tuple{"addr", HEXFMT32, paddr},
-            std::tuple{"data", HEXFMT32, static_cast<std::make_unsigned_t<T>>(printData)});
+            throw Util::Error("Unimplemented physical memory range {}", Impl::getPhysicalSegment(paddr));
     }
 }
 
-template <std::integral T>
-auto Memory::translate(VirtualAddr vaddr) const -> PhysicalAddr {
-    IF_LOG_ENABLED(m_logger) {
-        if (vaddr % sizeof(T) != 0) {
-            m_logger->log<Level::HIGH, Sev::WARNING, Sys::RDRAM>("Unaligned virtual address access " HEXFMT32 ", size {}", vaddr, sizeof(T));
-        }
-    }
-
-    template for (constexpr auto e : Util::staticEnumeratorsOf(^^VirtSeg)) {
-        constexpr auto a     = std::meta::annotations_of_with_type(e, ^^Util::Range)[0];
-        constexpr auto range = std::meta::extract<Util::Range>(a);
-        if (range.contains(vaddr)) {
-            if constexpr (e != (^^VirtSeg::KSEG0) && e != ^^VirtSeg::KSEG1) {
-                throw Util::Error(
-                    "Unimplemented virtual memory range {}", std::meta::identifier_of(e));
-            }
-            if (!range.contains(vaddr + sizeof(T) - 1)) {
-                throw Util::Error("Out of bounds N64 virtual address access " HEXFMT32 ", size {}", vaddr, sizeof(T));
-            }
-            return vaddr - range.lower;
-        }
-    }
-    throw Util::Error("Translation failed on N64 virtual address " HEXFMT32, vaddr);
-}
-
-auto Memory::registerAudioInterface(Interfaces::Interface* interface) -> void {
+auto MemoryBus::registerAudioInterface(Interfaces::Interface* interface) -> void {
     m_audioInterface = interface;
 }
 
-auto Memory::registerMipsInterface(Interfaces::Interface* interface) -> void {
+auto MemoryBus::registerMipsInterface(Interfaces::Interface* interface) -> void {
     m_mipsInterface = interface;
 }
 
-auto Memory::registerRdramInterface(Interfaces::Interface* interface) -> void {
+auto MemoryBus::registerRdramInterface(Interfaces::Interface* interface) -> void {
     m_rdramInterface = interface;
 }
 
-auto Memory::registerRspRegisters(Interfaces::Interface* interface) -> void {
+auto MemoryBus::registerRspRegisters(Interfaces::Interface* interface) -> void {
     m_rspRegisters = interface;
 }
 
-auto Memory::registerPeripheralInterface(Interfaces::Interface* interface) -> void {
+auto MemoryBus::registerPeripheralInterface(Interfaces::Interface* interface) -> void {
     m_peripheralInterface = interface;
 }
 
-auto Memory::registerSerialInterface(Interfaces::Interface* interface) -> void {
+auto MemoryBus::registerSerialInterface(Interfaces::Interface* interface) -> void {
     m_serialInterface = interface;
 }
 
-auto Memory::registerVideoInterface(Interfaces::Interface* interface) -> void {
+auto MemoryBus::registerVideoInterface(Interfaces::Interface* interface) -> void {
     m_videoInterface = interface;
 }
 

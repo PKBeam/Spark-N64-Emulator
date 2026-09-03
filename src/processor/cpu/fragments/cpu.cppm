@@ -19,15 +19,15 @@ class CPU {
     static constexpr auto INITIAL_PC = 0xBFC00000;
 
     CPU(std::shared_ptr<Util::Logger> logger,
-        Memory::Memory*               memory,
+        Memory::MemoryBus*            memoryBus,
         CP0::CP0*                     cp0,
         CP1::CP1*                     cp1)
         : m_regs(logger),
           m_logger(logger),
-          m_memory(memory),
+          m_memoryBus(memoryBus),
           m_cp0(cp0),
           m_cp1(cp1),
-          m_exec(logger, &m_regs, m_memory) {
+          m_exec(logger, &m_regs, m_memoryBus) {
         m_regs.writePc(INITIAL_PC);
     }
 
@@ -44,7 +44,7 @@ class CPU {
   private:
     Registers<Sys::CPU>                  m_regs;
     std::shared_ptr<Util::Logger>        m_logger;
-    Memory::Memory*                      m_memory{};
+    Memory::MemoryBus*                   m_memoryBus{};
     CP0::CP0*                            m_cp0{};
     CP1::CP1*                            m_cp1{};
     ::CPU::InstructionExecutor<Sys::CPU> m_exec;
@@ -58,7 +58,7 @@ auto CPU::dumpIMem(std::filesystem::path file) const -> void {
     auto romDumper = Util::Logger(file);
     romDumper.setLevel(Level::MAX);
     for (auto addr = 0u; addr < Util::rangeOf(Memory::PhysSeg::RDRAM).upper; addr += 4) {
-        const auto word = m_memory->readPhysical<uint32_t>(addr);
+        const auto word = m_memoryBus->readPhysical<uint32_t>(addr);
         romDumper.print(HEXFMT32 ": {}", Util::rangeOf(Memory::VirtSeg::KSEG0).lower + addr, ISA::Instruction(word));
     }
     romDumper.flush();
@@ -73,8 +73,8 @@ auto CPU::emulateInitialBoot() -> void {
     // DMA 1 MiB of ROM code into RSP DMEM
     // these need to be done in 32-bit chunks to ensure correct endianness
     for (auto i = 0uz; i < 0x1000; i += 4) {
-        const auto word = m_memory->read<uint32_t>(0xB0000000 + i);
-        m_memory->write<uint32_t>(0xA4000000 + i, word);
+        const auto word = m_memoryBus->read<uint32_t>(0xB0000000 + i);
+        m_memoryBus->write<uint32_t>(0xA4000000 + i, word);
     }
     m_regs.writePc(static_cast<uint32_t>(0xA4000040));
 
@@ -126,7 +126,7 @@ auto CPU::runInstruction() -> void {
         m_bootCallback();
     }
 
-    const auto instBits = WITH_LOG_DISABLED(m_logger, m_memory->read<uint32_t>(m_regs.readPc()));
+    const auto instBits = WITH_LOG_DISABLED(m_logger, m_memoryBus->read<uint32_t>(m_regs.readPc()));
     const auto inst     = ISA::Instruction(instBits);
 
     IF_LOG_ENABLED(m_logger) {

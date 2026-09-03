@@ -3,6 +3,7 @@ module;
 export module Interfaces:SerialInterface;
 
 import std;
+import MemoryTypes;
 import Rom;
 import Util;
 
@@ -18,7 +19,7 @@ export class SerialInterface : public Interface {
   public:
     SerialInterface(
         std::shared_ptr<Util::Logger> logger,
-        std::byte*                    memory,
+        Memory::Memory*               memory,
         MipsInterface*                mipsInterface)
         : m_logger(logger), m_memory(memory), m_mipsInterface(mipsInterface) {}
 
@@ -38,7 +39,7 @@ export class SerialInterface : public Interface {
 
     std::shared_ptr<Util::Logger> m_logger;
     const RomFile*                m_pifRom{};
-    std::byte*                    m_memory{};
+    Memory::Memory*               m_memory{};
     MipsInterface*                m_mipsInterface{};
     uint32_t                      m_dramAddr{};
     uint32_t                      m_pifAddr{};
@@ -117,9 +118,7 @@ auto SerialInterface::readBus(uint32_t addr) -> T {
     const auto [e, range] = Util::getRange<SiDmaRanges>(addr);
     switch (e) {
         case SiDmaRanges::RDRAM: {
-            T data{};
-            std::memcpy(&data, m_memory + addr, sizeof(T));
-            return data;
+            return m_memory->read<T>(addr);
         }
         case SiDmaRanges::PIF_ROM:
             IF_LOG_ENABLED(m_logger) {
@@ -150,7 +149,7 @@ auto SerialInterface::writeBus(uint32_t addr, T data) -> void {
     const auto [e, range] = Util::getRange<SiDmaRanges>(addr);
     switch (e) {
         case SiDmaRanges::RDRAM:
-            std::memcpy(m_memory + addr, &data, sizeof(T));
+            m_memory->write<T>(addr, data);
             return;
         case SiDmaRanges::PIF_ROM:
             throw Util::Error("SI: Attempt to write to read-only memory (PIF_ROM)");

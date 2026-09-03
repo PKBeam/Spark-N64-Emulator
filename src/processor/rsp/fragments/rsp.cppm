@@ -16,6 +16,8 @@ import :Registers;
 
 using Control = RSP::Control;
 
+constexpr auto RSP_IMEM_BASE = Util::rangeOf(Memory::PhysSeg::RSP_IMEM).lower;
+
 export namespace RSP {
 
 class RSP {
@@ -23,14 +25,14 @@ class RSP {
     RSP(std::shared_ptr<Util::Logger> logger,
         Control*                      control,
         Interfaces::MipsInterface*    mipsInterface,
-        Memory::Memory*               memory)
+        Memory::MemoryBus*            memoryBus)
         : m_logger(logger),
           m_control(control),
           m_mipsInterface(mipsInterface),
-          m_memory(memory),
+          m_memoryBus(memoryBus),
           m_gprs(logger),
           m_vprs(logger),
-          m_exec(m_logger, &m_gprs, &m_vprs, m_memory) {};
+          m_exec(m_logger, &m_gprs, &m_vprs, m_memoryBus) {};
 
     auto halt() -> void;
 
@@ -42,7 +44,7 @@ class RSP {
     std::shared_ptr<Util::Logger> m_logger;
     Control*                      m_control{};
     Interfaces::MipsInterface*    m_mipsInterface{};
-    Memory::Memory*               m_memory{};
+    Memory::MemoryBus*            m_memoryBus{};
     CPU::Registers<Sys::RSP>      m_gprs;
     ::RSP::Registers              m_vprs;
     ::RSP::InstructionExecutor    m_exec;
@@ -59,7 +61,7 @@ auto RSP::dumpIMem(std::filesystem::path file) const -> void {
     auto romDumper = Util::Logger(file);
     romDumper.setLevel(Level::MAX);
     for (auto i = 0uz; i < 0x1000; i += 4) {
-        const auto word = m_memory->readPhysical<uint32_t>(RSP_IMEM_BASE + i);
+        const auto word = m_memoryBus->readPhysical<uint32_t>(RSP_IMEM_BASE + i);
         romDumper.print(HEXFMT12 ": {}", i, ISA::Instruction(word));
     }
     romDumper.flush();
@@ -79,7 +81,7 @@ auto RSP::runInstruction() -> void {
         // std::println("RSP IMEM dumped to rsp_imem_{}.txt", imems - 1);
     }
 
-    const auto instBits = WITH_LOG_DISABLED(m_logger, m_memory->readPhysical<uint32_t>(m_gprs.readPc() + RSP_IMEM_BASE));
+    const auto instBits = WITH_LOG_DISABLED(m_logger, m_memoryBus->readPhysical<uint32_t>(m_gprs.readPc() + RSP_IMEM_BASE));
     const auto inst     = ISA::Instruction(instBits);
     IF_LOG_ENABLED(m_logger) {
         m_logger->log<Level::HIGH, Sys::RSP>(

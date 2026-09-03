@@ -3,6 +3,7 @@ module;
 export module RspControl:RspControl;
 
 import std;
+import MemoryTypes;
 import InterfaceTypes;
 import RdpControl;
 import Util;
@@ -36,7 +37,7 @@ enum class RSP_CP0_REGS : uint8_t {
 };
 STD_FORMATTER_ENUM_NAME(RSP_CP0_REGS);
 
-constexpr auto RSP_MEM_BASE = 0x04000000u;
+constexpr auto RSP_MEM_BASE = Util::rangeOf(Memory::PhysSeg::RSP_DMEM).lower;
 
 export namespace RSP {
 
@@ -44,7 +45,7 @@ class Control {
   public:
     using SignalSet = std::bitset<8>;
 
-    Control(std::shared_ptr<Util::Logger> logger, std::byte* memory, RDP::Control* rdpControl) : m_logger(logger), m_memory(memory), m_rdpControl(rdpControl) {};
+    Control(std::shared_ptr<Util::Logger> logger, Memory::Memory* memory, RDP::Control* rdpControl) : m_logger(logger), m_memory(memory), m_rdpControl(rdpControl) {};
 
     auto getSignal(std::size_t signal) const -> bool //
         pre(signal < SignalSet{}.size());
@@ -92,7 +93,7 @@ class Control {
 
     std::shared_ptr<Util::Logger> m_logger;
     std::optional<uint32_t>       m_pc = 0;
-    std::byte*                    m_memory{};
+    Memory::Memory*               m_memory{};
     RDP::Control*                 m_rdpControl{};
     SignalSet                     m_signals          = {};
     bool                          m_broke            = false;
@@ -111,16 +112,10 @@ auto Control::dmaMemcpy(uint32_t dst, uint32_t src, std::size_t len, uint8_t cou
     if (len % 8 > 0) {
         len += 8 - (len % 8); // round up to next multiple of 8
     }
-    auto dstPtr = m_memory + dst;
-    auto srcPtr = m_memory + src;
     for (auto row = 0; row < count + 1; ++row) {
         for (auto i = 0uz; i < len; i += 8) {
-            std::memcpy(dstPtr + i, srcPtr + i, 8);
+            m_memory->memcpy<8>(dst + i, src + i);
         }
-
-        srcPtr += len;
-        dstPtr += len;
-
         if constexpr (Dir == RSP_DMA_DIRECTION::TO_RDRAM) {
             dst += skip;
         } else {
@@ -137,6 +132,9 @@ auto Control::dmaMemcpy(uint32_t dst, uint32_t src, std::size_t len, uint8_t cou
         };
         m_logger->log<Level::HIGH, Sev::INFO, Sys::RSP_REG>(
             "DMA {} {} bytes from " HEXFMT32 " to " HEXFMT32 " ({} rows, skip {})", dirStr(), len, src, dst, count + 1, skip);
+        if (src + len >= dst) {
+            m_logger->log<Level::MAX, Sev::WARNING, Sys::RSP_REG>("DMA address overlapped");
+        }
     }
 }
 
@@ -349,12 +347,8 @@ auto Control::setIntBreak(bool value) -> void {
 auto Control::patchRspBootAntiPiracyCheck() -> void {
     // Patch CIC-6105 RSP boot anti piracy check
     if (m_rspAddr == 0x1000) {
-        auto firstInst = *reinterpret_cast<uint32_t*>(m_memory + m_ramAddr);
-        firstInst      = Util::byteswapIfLittleEndian(firstInst);
-        if (firstInst == 0x08000411 /* J  0x411 */) {
-            auto patchInst = Util::byteswapIfLittleEndian(0x08000025); // J  0x25
-
-            *reinterpret_cast<uint32_t*>(m_memory + RSP_MEM_BASE + m_rspAddr) = patchInst;
+        if (m_memory->read<uint32_t>(m_ramAddr) == 0x08000411 /* J  0x411 */) {
+            m_memory->write<uint32_t>(RSP_MEM_BASE + m_rspAddr, 0x08000025 /* J  0x25 */);
             IF_LOG_ENABLED(m_logger) {
                 m_logger->log<Level::MAX, Sev::WARNING, Sys::RSP_REG>("Patched out the CIC-6105 anti-piracy check in RSP boot code");
             }

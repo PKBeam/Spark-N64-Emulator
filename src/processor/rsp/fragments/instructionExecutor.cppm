@@ -8,11 +8,11 @@ import std;
 import CPU;
 import ISA;
 import Memory;
+import MemoryTypes;
 import Util;
 
 import :Registers;
 
-constexpr auto RSP_IMEM_BASE = Util::rangeOf(Memory::PhysSeg::RSP_IMEM).lower;
 constexpr auto RSP_DMEM_BASE = Util::rangeOf(Memory::PhysSeg::RSP_DMEM).lower;
 
 export namespace Param {
@@ -37,12 +37,12 @@ class InstructionExecutor {
     InstructionExecutor(std::shared_ptr<Util::Logger> logger,
                         CPU::Registers<Sys::RSP>*     gprs,
                         RSP::Registers*               vprs,
-                        Memory::Memory*               memory)
+                        Memory::MemoryBus*            memoryBus)
         : m_logger(logger),
-          m_cpuExec(logger, gprs, memory),
+          m_cpuExec(logger, gprs, memoryBus),
           m_gprs(gprs),
           m_vprs(vprs),
-          m_memory(memory) {}
+          m_memoryBus(memoryBus) {}
 
     auto cpuExec() {
         return &m_cpuExec;
@@ -108,7 +108,7 @@ class InstructionExecutor {
     CPU::InstructionExecutor<Sys::RSP> m_cpuExec;
     CPU::Registers<Sys::RSP>*          m_gprs{};
     RSP::Registers*                    m_vprs{};
-    Memory::Memory*                    m_memory{};
+    Memory::MemoryBus*                 m_memoryBus{};
 };
 
 template <Param::Accumulator Accum, Param::ResultClamp VdClamp, typename VcoLoFunc, typename VcoHiFunc, Param::CarryIn Carry, typename Function>
@@ -601,7 +601,7 @@ template <std::integral T>
 auto InstructionExecutor::readDMem(uint32_t addr) const -> T {
     addr = (addr & 0xFFF) + RSP_DMEM_BASE;
 
-    const auto value = m_memory->readPhysical<T>(addr);
+    const auto value = m_memoryBus->readPhysical<T>(addr);
     IF_LOG_ENABLED(m_logger) {
         m_logger->log<Level::HIGH, Sys::RSP>(
             std::tuple{"op", "read"},
@@ -615,7 +615,7 @@ auto InstructionExecutor::readDMem(uint32_t addr) const -> T {
 template <std::integral T>
 auto InstructionExecutor::writeDMem(uint32_t addr, T value) -> void {
     addr = (addr & 0xFFF) + RSP_DMEM_BASE;
-    m_memory->writePhysical<T>(addr, value);
+    m_memoryBus->writePhysical<T>(addr, value);
     IF_LOG_ENABLED(m_logger) {
         m_logger->log<Level::HIGH, Sys::RSP>(
             std::tuple{"op", "write"},

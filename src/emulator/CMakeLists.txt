@@ -8,5 +8,5 @@ target_sources(emulator PUBLIC
 )
 target_compile_options(emulator PUBLIC ${CXX_COMPILE_OPTIONS})
 target_include_directories(emulator PUBLIC ${CMAKE_SOURCE_DIR}/src)
-target_link_libraries(emulator PUBLIC util cpu rdp rsp isa memory rom interfaces interface_types)
+target_link_libraries(emulator PUBLIC util cpu rdp rsp isa memory memory_types rom interfaces interface_types)
 

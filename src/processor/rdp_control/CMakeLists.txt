@@ -8,4 +8,4 @@ target_sources(rdp_control PUBLIC
 )
 target_compile_options(rdp_control PUBLIC ${CXX_COMPILE_OPTIONS})
 target_include_directories(rdp_control PUBLIC ${CMAKE_SOURCE_DIR}/src)
-target_link_libraries(rdp_control PUBLIC interface_types isa util)
+target_link_libraries(rdp_control PUBLIC interface_types isa memory_types util)

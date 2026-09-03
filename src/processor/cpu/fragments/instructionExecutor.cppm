@@ -7,6 +7,7 @@ export module CPU:InstructionExecutor;
 import std;
 import ISA;
 import Memory;
+import MemoryTypes;
 import Util;
 
 import :Registers;
@@ -35,10 +36,10 @@ class InstructionExecutor {
   public:
     InstructionExecutor(std::shared_ptr<Util::Logger> logger,
                         CPU::Registers<System>*       regs,
-                        Memory::Memory*               memory)
+                        Memory::MemoryBus*            memoryBus)
         : m_logger(logger),
           m_regs(regs),
-          m_memory(memory) {}
+          m_memoryBus(memoryBus) {}
 
     template <Param::BranchLink Link, Param::BranchSource Source>
     auto executeJump(uint32_t inst) -> void;
@@ -84,7 +85,7 @@ class InstructionExecutor {
   private:
     std::shared_ptr<Util::Logger> m_logger;
     CPU::Registers<System>*       m_regs{};
-    Memory::Memory*               m_memory{};
+    Memory::MemoryBus*            m_memoryBus{};
 };
 
 template <Sys System>
@@ -247,9 +248,9 @@ auto InstructionExecutor<System>::executeMemoryOperation(uint32_t inst) -> void 
     T data{};
     if constexpr (Type == Param::MemoryType::LOAD) {
         if constexpr (System == Sys::RSP) {
-            data = m_memory->readPhysical<T>(addr);
+            data = m_memoryBus->readPhysical<T>(addr);
         } else {
-            data = m_memory->read<T>(addr);
+            data = m_memoryBus->read<T>(addr);
         }
         if constexpr (sizeof(T) == 8) {
             m_regs->writeGpr(ops.rt, data);
@@ -262,9 +263,9 @@ auto InstructionExecutor<System>::executeMemoryOperation(uint32_t inst) -> void 
     } else {
         data = m_regs->template readGpr<T>(ops.rt);
         if constexpr (System == Sys::RSP) {
-            m_memory->writePhysical<T>(addr, data);
+            m_memoryBus->writePhysical<T>(addr, data);
         } else {
-            m_memory->write<T>(addr, data);
+            m_memoryBus->write<T>(addr, data);
         }
     }
 }
@@ -300,7 +301,7 @@ auto InstructionExecutor<System>::executeMemoryOperationUnaligned(uint32_t inst)
     auto data = m_regs->template readGpr<T>(ops.rt);
     if constexpr (Type == Param::MemoryType::LOAD) {
         for (auto [byte, addr] : std::views::zip(byteRange, addrRange)) {
-            const auto thisByte = m_memory->read<uint8_t>(addr);
+            const auto thisByte = m_memoryBus->read<uint8_t>(addr);
             data &= ~(static_cast<T>(0xFF) << (8 * byte));
             data |= (static_cast<T>(thisByte) << (8 * byte));
         }
@@ -308,7 +309,7 @@ auto InstructionExecutor<System>::executeMemoryOperationUnaligned(uint32_t inst)
     } else {
         for (auto [byte, addr] : std::views::zip(byteRange, addrRange)) {
             const auto thisByte = (data >> (8 * byte)) & 0xFF;
-            m_memory->write<uint8_t>(addr, thisByte);
+            m_memoryBus->write<uint8_t>(addr, thisByte);
         }
     }
 }

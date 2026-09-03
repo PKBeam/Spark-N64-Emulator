@@ -59,8 +59,8 @@ static_assert(std::same_as<ISA::CP1_EXCEPTION, std::invoke_result_t<decltype(NEG
 
 class InstructionExecutor {
   public:
-    InstructionExecutor(std::shared_ptr<Util::Logger> logger, CP1::Registers* fprs, Memory::Memory* memory)
-        : m_logger(logger), m_fprs(fprs), m_memory(memory) {}
+    InstructionExecutor(std::shared_ptr<Util::Logger> logger, CP1::Registers* fprs, Memory::MemoryBus* memoryBus)
+        : m_logger(logger), m_fprs(fprs), m_memoryBus(memoryBus) {}
 
     template <typename To>
         requires(FloatType_c<To>)
@@ -87,7 +87,7 @@ class InstructionExecutor {
   private:
     std::shared_ptr<Util::Logger> m_logger;
     CP1::Registers*               m_fprs{};
-    Memory::Memory*               m_memory{};
+    Memory::MemoryBus*            m_memoryBus{};
 };
 
 template <typename To>
@@ -163,11 +163,11 @@ auto InstructionExecutor::executeMemoryOperation(uint32_t inst, U gprValue) -> v
 
     auto data = T{};
     if constexpr (Type == Param::MemoryTypeFloat::LOAD_F) {
-        data = m_memory->read<T>(addr);
+        data = m_memoryBus->read<T>(addr);
         m_fprs->writeFgr<T>(ops.ft, data);
     } else {
         data = m_fprs->readFgr<T>(ops.ft);
-        m_memory->write<T>(addr, data);
+        m_memoryBus->write<T>(addr, data);
     }
 }
 

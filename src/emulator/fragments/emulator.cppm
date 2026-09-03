@@ -16,6 +16,7 @@ import Interfaces;
 import InterfaceTypes;
 import ISA;
 import Memory;
+import MemoryTypes;
 import Util;
 
 using namespace std::string_view_literals;
@@ -42,7 +43,7 @@ export class Emulator {
     const Config                  m_config;
     std::shared_ptr<Util::Logger> m_logger;
 
-    void*                  m_memory{};
+    Memory::Memory*        m_memory{};
     CPU::CPU*              m_cpu{};
     CP0::CP0*              m_cp0{};
     CP1::CP1*              m_cp1{};
@@ -52,7 +53,7 @@ export class Emulator {
     RSP::Control*          m_rspControl{};
     std::optional<RomFile> m_rom;
     std::optional<RomFile> m_pifRom;
-    Memory::Memory*        m_memoryManager{};
+    Memory::MemoryBus*     m_memoryBus{};
 
     Interfaces::AudioInterface*      m_audioInterface{};
     Interfaces::MipsInterface*       m_mipsInterface{};
@@ -85,41 +86,41 @@ constexpr Emulator::Emulator(Config config) : m_config(config) {
         }
     }
 
-    m_logger        = config.logger;
-    m_memory        = std::malloc(m_config.memorySize);
-    m_memoryManager = new Memory::Memory(m_logger, reinterpret_cast<std::byte*>(m_memory));
+    m_logger    = config.logger;
+    m_memory    = new Memory::Memory(m_logger, m_config.memorySize);
+    m_memoryBus = new Memory::MemoryBus(m_logger, m_memory);
 
     m_cp0           = new CP0::CP0(m_logger);
-    m_cp1           = new CP1::CP1(m_logger, m_memoryManager);
+    m_cp1           = new CP1::CP1(m_logger, m_memoryBus);
     m_mipsInterface = new Interfaces::MipsInterface(m_logger, m_cp0);
 
-    m_cpu = new CPU::CPU(m_logger, m_memoryManager, m_cp0, m_cp1);
+    m_cpu = new CPU::CPU(m_logger, m_memoryBus, m_cp0, m_cp1);
 
-    m_rdpControl = new RDP::Control(m_logger, reinterpret_cast<std::byte*>(m_memory));
+    m_rdpControl = new RDP::Control(m_logger, m_memory);
     m_rdp        = new RDP::RDP(m_logger, m_rdpControl, m_mipsInterface);
-    m_rspControl = new RSP::Control(m_logger, reinterpret_cast<std::byte*>(m_memory), m_rdpControl);
-    m_rsp        = new RSP::RSP(m_logger, m_rspControl, m_mipsInterface, m_memoryManager);
+    m_rspControl = new RSP::Control(m_logger, m_memory, m_rdpControl);
+    m_rsp        = new RSP::RSP(m_logger, m_rspControl, m_mipsInterface, m_memoryBus);
 
     m_rdramInterface      = new Interfaces::RdramInterface(m_logger);
     m_videoInterface      = new Interfaces::VideoInterface(m_logger, m_mipsInterface);
     m_audioInterface      = new Interfaces::AudioInterface(m_logger, m_mipsInterface);
     m_rdpRegisters        = new Interfaces::RdpRegisters(m_logger, m_rdpControl);
     m_rspRegisters        = new Interfaces::RspRegisters(m_logger, m_mipsInterface, m_rspControl);
-    m_peripheralInterface = new Interfaces::PeripheralInterface(m_logger, reinterpret_cast<std::byte*>(m_memory), m_mipsInterface);
-    m_serialInterface     = new Interfaces::SerialInterface(m_logger, reinterpret_cast<std::byte*>(m_memory), m_mipsInterface);
+    m_peripheralInterface = new Interfaces::PeripheralInterface(m_logger, m_memory, m_mipsInterface);
+    m_serialInterface     = new Interfaces::SerialInterface(m_logger, m_memory, m_mipsInterface);
     m_serialInterface->loadPifRom(m_pifRom ? &(*(m_pifRom)) : nullptr);
 
-    m_memoryManager->registerAudioInterface(m_audioInterface);
-    m_memoryManager->registerMipsInterface(m_mipsInterface);
-    m_memoryManager->registerRdramInterface(m_rdramInterface);
-    m_memoryManager->registerRspRegisters(m_rspRegisters);
-    m_memoryManager->registerPeripheralInterface(m_peripheralInterface);
-    m_memoryManager->registerSerialInterface(m_serialInterface);
-    m_memoryManager->registerVideoInterface(m_videoInterface);
+    m_memoryBus->registerAudioInterface(m_audioInterface);
+    m_memoryBus->registerMipsInterface(m_mipsInterface);
+    m_memoryBus->registerRdramInterface(m_rdramInterface);
+    m_memoryBus->registerRspRegisters(m_rspRegisters);
+    m_memoryBus->registerPeripheralInterface(m_peripheralInterface);
+    m_memoryBus->registerSerialInterface(m_serialInterface);
+    m_memoryBus->registerVideoInterface(m_videoInterface);
 }
 
 Emulator::~Emulator() {
-    std::free(m_memory);
+    delete m_memory;
     delete m_cp0;
     delete m_cp1;
     delete m_rdpControl;
@@ -127,7 +128,7 @@ Emulator::~Emulator() {
     delete m_cpu;
     delete m_rdp;
     delete m_rsp;
-    delete m_memoryManager;
+    delete m_memoryBus;
     delete m_audioInterface;
     delete m_mipsInterface;
     delete m_rdramInterface;

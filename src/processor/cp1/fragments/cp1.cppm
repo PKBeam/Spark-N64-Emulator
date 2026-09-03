@@ -13,7 +13,7 @@ export namespace CP1 {
 
 class CP1 {
   public:
-    CP1(std::shared_ptr<Util::Logger> logger, Memory::Memory* memory) : m_logger(logger), m_regs(logger), m_exec(logger, &m_regs, memory) {}
+    CP1(std::shared_ptr<Util::Logger> logger, Memory::MemoryBus* memoryBus) : m_logger(logger), m_regs(logger), m_exec(logger, &m_regs, memoryBus) {}
 
     constexpr auto setFgrMode(::CP1::Registers::Mode mode) -> void {
         m_regs.setMode(mode);

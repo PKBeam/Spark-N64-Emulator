@@ -1,6 +1,6 @@
 module;
 #include <util/defines.hpp>
-export module Memory:Segments;
+export module MemoryTypes:Segments;
 
 import std;
 import Util;

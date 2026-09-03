@@ -4,9 +4,12 @@ export module RdpControl:RdpControl;
 
 import std;
 import InterfaceTypes;
+import MemoryTypes;
 import Util;
 
 using namespace Interfaces;
+
+constexpr auto RSP_DMEM_BASE = Util::rangeOf(Memory::PhysSeg::RSP_DMEM).lower;
 
 export namespace RDP {
 enum class CMD_REGS : uint8_t {
@@ -29,7 +32,7 @@ STD_FORMATTER_ENUM_NAME(RDP::CMD_REGS);
 export namespace RDP {
 class Control {
   public:
-    Control(std::shared_ptr<Util::Logger> logger, std::byte* memory) : m_logger(logger), m_memory(memory) {};
+    Control(std::shared_ptr<Util::Logger> logger, Memory::Memory* memory) : m_logger(logger), m_memory(memory) {};
 
     auto readRegister(CMD_REGS index) const -> uint32_t;
     auto writeRegister(CMD_REGS index, uint32_t data) -> void;
@@ -42,7 +45,7 @@ class Control {
     auto fetchCommands() -> void; // fetch commands from RDRAM/DMEM
 
     std::shared_ptr<Util::Logger> m_logger;
-    std::byte*                    m_memory{};
+    Memory::Memory*               m_memory{};
 
     std::vector<uint64_t> m_cmdBufferIn;  // From Memory
     std::vector<uint64_t> m_cmdBufferOut; // To RDP
@@ -87,15 +90,14 @@ auto Control::fetchCommands() -> void {
     } else if (numCommands == 0) {
         return;
     }
-    const auto baseAddr = m_startAddr + (m_status.xbus == 0 ? 0 : 0x04000000) /* RSP DMEM base */;
+    const auto baseAddr = m_startAddr + (m_status.xbus == 0 ? 0 : RSP_DMEM_BASE);
     if (m_logger) {
         m_logger->flush();
     }
     { // lock commands
         auto _ = std::scoped_lock(m_mutex);
         for (auto offset : std::views::iota(0, numCommands)) {
-            const auto addr = reinterpret_cast<const uint64_t*>(m_memory + baseAddr) + offset;
-            const auto cmd  = Util::byteswapIfLittleEndian(*addr);
+            const auto cmd = m_memory->read<uint64_t>(baseAddr + offset * 8);
             m_cmdBufferIn.push_back(cmd);
         }
     } // release commands

@@ -28,7 +28,8 @@ class Logger {
         RSP,
 
         // memory
-        RDRAM,
+        RDRAM,    // memory bus
+        PHYS_MEM, // physical memory
 
         // interfaces
         AI,
