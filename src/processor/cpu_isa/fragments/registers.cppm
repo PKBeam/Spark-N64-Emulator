@@ -251,7 +251,7 @@ struct std::formatter<ISA::VEC_ELEM> {
         if (elem == ISA::VEC_ELEM::NONE_0 || elem == ISA::VEC_ELEM::NONE_1 || !enumName.has_value()) {
             return std::format_to(ctx.out(), "");
         }
-        return std::format_to(ctx.out(), "[{}]", enumName->substr(1)); // remove the leading 'e' from the enum name
+        return std::format_to(ctx.out(), "[{}]", enumName); // remove the leading 'e' from the enum name
     }
 };
 

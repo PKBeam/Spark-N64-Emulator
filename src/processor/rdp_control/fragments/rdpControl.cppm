@@ -81,8 +81,10 @@ auto Control::getCommands() -> std::vector<uint64_t> {
 }
 
 auto Control::fetchCommands() -> void {
-    const auto numCommands = (m_endAddr - m_startAddr) / 8;
-    if (numCommands == 0) {
+    const auto numCommands = (static_cast<int32_t>(m_endAddr) - static_cast<int32_t>(m_startAddr)) / 8;
+    if (numCommands < 0) {
+        throw Util::Error("RDP command endAddr ({:#010x}) was before startAddr ({:#010x})", m_endAddr, m_startAddr);
+    } else if (numCommands == 0) {
         return;
     }
     const auto baseAddr = m_startAddr + (m_status.xbus == 0 ? 0 : 0x04000000) /* RSP DMEM base */;
@@ -91,7 +93,7 @@ auto Control::fetchCommands() -> void {
     }
     { // lock commands
         auto _ = std::scoped_lock(m_mutex);
-        for (auto offset : std::views::iota(0uz, numCommands)) {
+        for (auto offset : std::views::iota(0, numCommands)) {
             const auto addr = reinterpret_cast<const uint64_t*>(m_memory + baseAddr) + offset;
             const auto cmd  = Util::byteswapIfLittleEndian(*addr);
             m_cmdBufferIn.push_back(cmd);

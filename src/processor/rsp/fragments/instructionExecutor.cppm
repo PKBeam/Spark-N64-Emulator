@@ -24,6 +24,7 @@ enum ResultClamp  : uint8_t { CLAMP_NONE, CLAMP_UNSIGNED, CLAMP_SIGNED };
 enum ProductAccum : uint8_t { ACCUM_SET, ACCUM_ADD };
 enum ProductRound : uint8_t { ROUND_NONE, ROUND };
 enum MemoryTypeV  : uint8_t { LOADV, STOREV };
+enum Mem128bDir   : uint8_t { QUAD, REST };
 enum RecipFunc    : uint8_t { RECIP, RECIP_SQRT };
 struct Shift { int8_t value; constexpr operator int8_t() const { return value; } };
 // clang-format on
@@ -63,7 +64,7 @@ class InstructionExecutor {
     template <Param::MemoryTypeV Type, Param::OperandSign Sign>
     auto executeLoadStorePacked(uint32_t inst) -> void;
 
-    template <Param::MemoryTypeV Type>
+    template <Param::MemoryTypeV Type, Param::Mem128bDir Dir>
     auto executeLoadStoreQuad(uint32_t inst) -> void;
 
     template <Param::Accumulator Accum, typename Function>
@@ -91,32 +92,11 @@ class InstructionExecutor {
 
   private:
     template <std::integral T>
-    auto readDMem(uint32_t addr) -> T {
-        addr = (addr & 0xFFF) + RSP_DMEM_BASE;
-
-        const auto value = m_memory->readPhysical<T>(addr);
-        IF_LOG_ENABLED(m_logger) {
-            m_logger->log<Level::HIGH, Sys::RSP>(
-                std::tuple{"op", "read"},
-                std::tuple{"size", sizeof(T)},
-                std::tuple{"addr", "0x{:08x}", addr},
-                std::tuple{"data", "0x{:08x}", static_cast<std::make_unsigned_t<T>>(value)});
-        }
-        return value;
-    }
+    auto readDMem(uint32_t addr) -> T;
 
     template <std::integral T>
-    auto writeDMem(uint32_t addr, T value) -> void {
-        addr = (addr & 0xFFF) + RSP_DMEM_BASE;
-        m_memory->writePhysical<T>(addr, value);
-        IF_LOG_ENABLED(m_logger) {
-            m_logger->log<Level::HIGH, Sys::RSP>(
-                std::tuple{"op", "write"},
-                std::tuple{"size", sizeof(T)},
-                std::tuple{"addr", "0x{:08x}", addr},
-                std::tuple{"data", "0x{:08x}", static_cast<std::make_unsigned_t<T>>(value)});
-        }
-    }
+    auto writeDMem(uint32_t addr, T value) -> void;
+
     std::shared_ptr<Util::Logger> m_logger;
     CPU::Registers<Sys::RSP>*     m_gprs{};
     RSP::Registers*               m_vprs{};
@@ -124,6 +104,34 @@ class InstructionExecutor {
 
     CPU::InstructionExecutor<Sys::RSP> m_cpuExec;
 };
+
+template <std::integral T>
+auto InstructionExecutor::readDMem(uint32_t addr) -> T {
+    addr = (addr & 0xFFF) + RSP_DMEM_BASE;
+
+    const auto value = m_memory->readPhysical<T>(addr);
+    IF_LOG_ENABLED(m_logger) {
+        m_logger->log<Level::HIGH, Sys::RSP>(
+            std::tuple{"op", "read"},
+            std::tuple{"size", sizeof(T)},
+            std::tuple{"addr", "0x{:05x}", addr - RSP_DMEM_BASE},
+            std::tuple{"data", "0x{:08x}", static_cast<std::make_unsigned_t<T>>(value)});
+    }
+    return value;
+}
+
+template <std::integral T>
+auto InstructionExecutor::writeDMem(uint32_t addr, T value) -> void {
+    addr = (addr & 0xFFF) + RSP_DMEM_BASE;
+    m_memory->writePhysical<T>(addr, value);
+    IF_LOG_ENABLED(m_logger) {
+        m_logger->log<Level::HIGH, Sys::RSP>(
+            std::tuple{"op", "write"},
+            std::tuple{"size", sizeof(T)},
+            std::tuple{"addr", "{:#05x}", addr - RSP_DMEM_BASE},
+            std::tuple{"data", "{:#010x}", static_cast<std::make_unsigned_t<T>>(value)});
+    }
+}
 
 template <Param::Accumulator Accum, Param::ResultClamp VdClamp, typename VcoLoFunc, typename VcoHiFunc, Param::CarryIn Carry, typename Function>
     requires(std::integral<std::invoke_result_t<Function, uint16_t, uint16_t>> &&
@@ -150,7 +158,7 @@ auto InstructionExecutor::executeBivariate(uint32_t inst, Function&& func, VcoLo
         accums = m_vprs->readAccumulators();
     }
 
-    auto result = Registers::VPR<VprType>{};
+    auto result = VPR<VprType>{};
     for (auto i = 0uz; i < 8; ++i) {
         auto value = func(vsVpr[i], vtVpr[i]);
         if constexpr (Carry == Param::CarryIn::CARRY_IN) {
@@ -200,7 +208,7 @@ auto InstructionExecutor::executeMultiply(uint32_t inst) -> void {
         accums = m_vprs->readAccumulators();
     }
 
-    auto result = Registers::VPR<uint16_t>{};
+    auto result = VPR<uint16_t>{};
     for (auto i = 0uz; i < 8; ++i) {
         using VsExtType = std::conditional_t<VsSign == Param::SIGNED, int32_t, uint32_t>;
         using VtExtType = std::conditional_t<VtSign == Param::SIGNED, int32_t, uint32_t>;
@@ -231,21 +239,23 @@ template <Param::MemoryTypeV Type, std::size_t Log2Size>
 auto InstructionExecutor::executeLoadStore(uint32_t inst) -> void {
     const auto ops        = std::bit_cast<ISA::RSP::TypeVI>(inst);
     const auto signExtImm = static_cast<int32_t>(static_cast<int8_t>(ops.imm << 1) >> 1);
-    const auto vaddr      = static_cast<uint32_t>((signExtImm << Log2Size) + m_gprs->readGpr(ops.rs));
+    const auto addr       = static_cast<uint32_t>((signExtImm << Log2Size) + m_gprs->readGpr(ops.rs));
     const auto byteRange  = std::views::iota(ops.vtElem, std::min(16uz, ops.vtElem + (1uz << Log2Size)));
 
-    auto vt      = m_vprs->readVpr(ops.vt);
-    auto vtBytes = reinterpret_cast<std::byte*>(vt.data());
-    for (const auto i : byteRange) {
-        if constexpr (Type == Param::LOADV) {
-            const auto data = readDMem<uint8_t>(vaddr + i);
-            vtBytes[i]      = static_cast<std::byte>(data);
-        } else if constexpr (Type == Param::STOREV) {
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
-            const auto data = static_cast<uint8_t>(vtBytes[i]);
-#pragma GCC diagnostic pop
-            writeDMem<uint8_t>(vaddr + i, data);
+    auto vt = m_vprs->readVpr(ops.vt);
+    if constexpr (Type == Param::LOADV) {
+        const auto numBytes = std::min(16uz - ops.vtElem, 1uz << Log2Size);
+        for (const auto i : std::views::iota(0uz, numBytes)) {
+            const auto data    = readDMem<uint8_t>(addr + i);
+            const auto byteIdx = ops.vtElem + i;
+            vt.setByte(byteIdx, static_cast<uint8_t>(data));
+        }
+    } else if constexpr (Type == Param::STOREV) {
+        constexpr auto numBytes = 1uz << Log2Size;
+        for (const auto i : std::views::iota(0uz, numBytes)) {
+            const auto byteIdx = (ops.vtElem + i) % 16;
+            const auto data    = vt.getByte(byteIdx);
+            writeDMem<uint8_t>(addr + i, data);
         }
     }
     if constexpr (Type == Param::LOADV) {
@@ -257,33 +267,29 @@ template <Param::MemoryTypeV Type, Param::OperandSign Sign>
 auto InstructionExecutor::executeLoadStorePacked(uint32_t inst) -> void {
     const auto ops        = std::bit_cast<ISA::RSP::TypeVI>(inst);
     const auto signExtImm = static_cast<int32_t>(static_cast<int8_t>(ops.imm << 1) >> 1);
-    const auto vaddr      = static_cast<uint32_t>((signExtImm << 3) + m_gprs->readGpr(ops.rs));
-    const auto byteRange  = std::views::iota(0, 8);
+    const auto addr       = static_cast<uint32_t>((signExtImm << 3) + m_gprs->readGpr(ops.rs));
 
     auto vt = m_vprs->readVpr(ops.vt);
 
-    const auto vaddrBase   = vaddr & ~0x7;
-    const auto vaddrOffset = vaddr & 0x7;
-    for (const auto i : byteRange) {
-        const auto vtIdx     = ops.vtElem + i;
-        const auto vaddrWrap = vaddrBase + ((vaddrOffset + i) % 8);
+    for (const auto i : std::views::iota(0uz, 8uz)) {
+        const auto vtIdx    = ops.vtElem + i;
+        const auto addrWrap = (addr & ~0b111) + ((addr + i) % 8); // wrap around the current 8-byte block
+        auto&      vtElem   = vt[vtIdx % 8];
         if constexpr (Type == Param::LOADV) {
-            const auto byte   = readDMem<uint8_t>(vaddrWrap);
-            auto&      vtElem = vt[(ops.vtElem + i) % 8];
+            const auto byte = readDMem<uint8_t>(addrWrap);
             if constexpr (Sign == Param::SIGNED) {
                 vtElem = (byte << 8) | (vtElem & 0xFF);
             } else {
                 vtElem = byte;
             }
         } else {
-            auto& vtElem = vt[vtIdx % 8];
-            auto  byte   = uint8_t();
+            auto byte = uint8_t();
             if ((Sign == Param::SIGNED && vtIdx < 8) || (Sign == Param::UNSIGNED && vtIdx >= 8)) {
                 byte = static_cast<uint8_t>(vtElem >> 8);
             } else {
                 byte = static_cast<uint8_t>(vtElem);
             }
-            writeDMem<uint8_t>(vaddrWrap, byte);
+            writeDMem<uint8_t>(addrWrap, byte);
         }
     }
     if constexpr (Type == Param::LOADV) {
@@ -291,20 +297,35 @@ auto InstructionExecutor::executeLoadStorePacked(uint32_t inst) -> void {
     }
 }
 
-template <Param::MemoryTypeV Type>
+template <Param::MemoryTypeV Type, Param::Mem128bDir Dir>
 auto InstructionExecutor::executeLoadStoreQuad(uint32_t inst) -> void {
     const auto ops        = std::bit_cast<ISA::RSP::TypeVI>(inst);
     const auto signExtImm = static_cast<int32_t>(static_cast<int8_t>(ops.imm << 1) >> 1);
-    const auto vaddr      = static_cast<uint32_t>((signExtImm << 4) + m_gprs->readGpr(ops.rs));
+    const auto addr       = static_cast<uint32_t>((signExtImm << 4) + m_gprs->readGpr(ops.rs));
     auto       vt         = m_vprs->readVpr(ops.vt);
-    const auto vtData     = reinterpret_cast<std::byte*>(vt.data()) + ops.vtElem;
-    for (auto byte = 16u; byte > (vaddr % 16) + ops.vtElem; --byte) {
-        if constexpr (Type == Param::LOADV) {
-            vtData[16 - byte] = static_cast<std::byte>(readDMem<uint8_t>(vaddr + (16 - byte)));
+
+    const auto addrBytes = [addr] {
+        const auto base = static_cast<std::size_t>(addr);
+        if constexpr (Dir == Param::QUAD) {
+            // addr, addr + 1 ... next aligned address
+            return std::views::iota(base, base + 16 - (base % 16));
         } else {
-            // std::println("{} {} {} {}", (int)ops.vtElem, (void*)vtData, byte, static_cast<uint8_t>(vtData[16 - byte]));
-            const auto data = static_cast<uint8_t>(vtData[16 - byte]);
-            writeDMem<uint8_t>(vaddr + (16 - byte), data);
+            // addr, addr - 1 ... previous aligned address
+            return std::views::iota(base - (base % 16), base + 1) | std::views::reverse;
+        }
+    }();
+
+    for (auto [i, addrByte] : std::views::enumerate(addrBytes)) {
+        const auto vprByte = i + ops.vtElem * 2;
+        if constexpr (Type == Param::LOADV) {
+            if (vprByte >= 16) {
+                break;
+            }
+            const auto data = readDMem<uint8_t>(addrByte);
+            vt.setByte(vprByte, data);
+        } else {
+            const auto data = vt.getByte(vprByte % 16);
+            writeDMem<uint8_t>(addrByte, data);
         }
     }
     if constexpr (Type == Param::LOADV) {
@@ -344,7 +365,7 @@ auto InstructionExecutor::executeSelectCompare(uint32_t inst, Function&& func) -
     const auto vco = m_vprs->readVco();
     const auto vce = m_vprs->readVce();
 
-    auto vd   = ::RSP::Registers::VPR<int16_t>{};
+    auto vd   = ::RSP::VPR<int16_t>{};
     auto vcc  = std::bitset<16>();
     auto accs = m_vprs->readAccumulators();
     for (auto i : std::views::iota(0, 8)) {
@@ -367,7 +388,7 @@ auto InstructionExecutor::executeSelectMerge(uint32_t inst) -> void {
     const auto vs  = m_vprs->readVpr<uint16_t>(ops.vs);
     const auto vt  = m_vprs->readVpr<uint16_t>(ops.vt);
 
-    auto vd   = ::RSP::Registers::VPR<uint16_t>();
+    auto vd   = ::RSP::VPR<uint16_t>();
     auto accs = m_vprs->readAccumulators();
     for (auto i : std::views::iota(0, 8)) {
         vd[i] = vcc[i] ? vs[i] : vt[i];
@@ -380,7 +401,7 @@ auto InstructionExecutor::executeReadAccumulators(uint32_t inst) -> void {
     const auto ops = std::bit_cast<ISA::RSP::TypeVR>(inst);
     const auto vs  = m_vprs->readVpr<uint16_t>(ops.vs);
 
-    auto vd     = ::RSP::Registers::VPR<uint16_t>();
+    auto vd     = ::RSP::VPR<uint16_t>();
     auto accums = m_vprs->readAccumulators();
 
     for (auto i : std::views::iota(0, 8)) {
@@ -466,7 +487,7 @@ auto InstructionExecutor::executeSelectClipHigh(uint32_t inst) -> void {
     const auto vs  = m_vprs->readVpr<int16_t>(ops.vs);
     const auto vt  = m_vprs->readVpr<int16_t>(ops.vt, static_cast<ISA::VEC_ELEM>(ops.vtElem));
 
-    auto vd     = ::RSP::Registers::VPR<int16_t>();
+    auto vd     = ::RSP::VPR<int16_t>();
     auto accums = m_vprs->readAccumulators();
 
     m_vprs->clearVcc();
@@ -521,7 +542,7 @@ auto InstructionExecutor::executeSelectClipLow(uint32_t inst) -> void {
     const auto vco = m_vprs->readVco();
     const auto vce = m_vprs->readVce();
 
-    auto vd     = ::RSP::Registers::VPR<uint16_t>();
+    auto vd     = ::RSP::VPR<uint16_t>();
     auto accums = m_vprs->readAccumulators();
 
     for (auto i : std::views::iota(0, 8)) {
@@ -568,7 +589,7 @@ auto InstructionExecutor::executeSelectCrimpLow(uint32_t inst) -> void {
     const auto vco = m_vprs->readVco();
     const auto vce = m_vprs->readVce();
 
-    auto vd     = ::RSP::Registers::VPR<uint16_t>();
+    auto vd     = ::RSP::VPR<uint16_t>();
     auto accums = m_vprs->readAccumulators();
 
     for (auto i : std::views::iota(0, 8)) {

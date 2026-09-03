@@ -64,67 +64,113 @@ struct std::formatter<std::array<RSP::Accumulator, 8>> {
 
     auto format(const std::array<RSP::Accumulator, 8>& accums, std::format_context& ctx) const {
         auto out = ctx.out();
-        for (const auto& accum : accums) {
-            out = std::format_to(out, "{:#014x} ", static_cast<uint64_t>(accum));
+        for (const auto& [i, accum] : std::views::enumerate(accums)) {
+            if (i > 0) {
+                out = std::format_to(out, " ");
+            }
+            out = std::format_to(out, "{:#014x}", static_cast<uint64_t>(accum));
         }
         return out;
     }
 };
 
 export namespace RSP {
-struct Registers {
-    template <std::integral T>
-        requires(sizeof(T) == 2)
-    using VPR = std::array<T, 8>;
 
-    Registers(std::shared_ptr<Util::Logger> logger) : m_logger(logger) {}
+template <std::integral T>
+    requires(sizeof(T) == 2)
+struct VPR {
+    static constexpr auto Size = 8uz;
 
-    auto getVprData(std::size_t index) -> std::byte*;
+    template <typename Self>
+    constexpr auto operator[](this Self&& self, std::size_t index) -> decltype(auto) {
+        return std::forward<Self>(self).m_data[Size - 1 - index];
+    }
 
-    template <std::integral T = uint16_t>
-        requires(sizeof(T) == 2)
-    auto readVpr(std::size_t index, ISA::VEC_ELEM elem = ISA::VEC_ELEM::NONE_0) -> VPR<T>;
+    constexpr auto getIndices(std::size_t byte) -> std::pair<std::size_t, std::size_t> {
+        if (byte >= Size * sizeof(T)) {
+            throw Util::Error("VPR byte index {} out of range (max {})", byte, Size * sizeof(T));
+        }
+        const auto index     = byte / sizeof(T);
+        const auto indexByte = Util::isLittleEndian() ? (sizeof(T) - 1) - (byte % sizeof(T)) : byte % sizeof(T);
+        return {index, indexByte};
+    }
 
-    template <std::integral T = uint16_t>
-        requires(sizeof(T) == 2)
-    auto writeVpr(std::size_t index, VPR<T> value, ISA::VEC_ELEM elem = ISA::VEC_ELEM::NONE_0) -> void;
+    constexpr auto getByte(std::size_t index) -> uint8_t {
+        const auto [i, byte] = getIndices(index);
+        return static_cast<uint8_t>((*this)[i] >> (byte * 8));
+    }
 
-    template <std::integral T>
-        requires(sizeof(T) == 2)
-    auto writeVpr(std::size_t index, T value, ISA::VEC_ELEM elem) -> void;
+    constexpr auto setByte(std::size_t index, uint8_t value) -> void {
+        const auto [i, byte] = getIndices(index);
+        (*this)[i] &= ~(0xFF << (byte * 8));
+        (*this)[i] |= static_cast<T>(value) << (byte * 8);
+    }
 
-    auto readVcc() -> std::bitset<16>;
-    auto writeVcc(std::bitset<16> value) -> void;
-    auto clearVcc() -> void;
+    constexpr auto size() const {
+        return Size;
+    }
 
-    auto readVco() -> std::bitset<16>;
-    auto writeVco(std::bitset<16> value) -> void;
-    auto clearVco() -> void;
+    template <typename Self>
+    constexpr auto begin(this Self&& self) {
+        return self.m_data.rbegin();
+    }
 
-    auto readVce() -> std::bitset<8>;
-    auto writeVce(std::bitset<8> value) -> void;
-    auto clearVce() -> void;
-
-    auto readDivIn() -> std::optional<uint32_t>;
-    auto writeDivIn(std::optional<uint32_t> value) -> void;
-
-    auto readDivOut() -> uint32_t;
-    auto writeDivOut(uint32_t value) -> void;
-
-    auto readAccumulators() -> std::array<Accumulator, 8>;
-    auto writeAccumulators(std::array<Accumulator, 8> value) -> void;
-
-    template <std::integral T>
-    auto setAccumulators(VPR<T> vpr) -> void;
-
-    template <std::integral T>
-    auto addToAccumulators(VPR<T> vpr) -> void;
+    template <typename Self>
+    constexpr auto end(this Self&& self) {
+        return self.m_data.rend();
+    }
 
   private:
-    auto readAccumulator(std::size_t index) -> uint64_t;
+    std::array<T, Size> m_data{};
+};
+
+struct Registers {
+    constexpr Registers(std::shared_ptr<Util::Logger> logger) : m_logger(logger) {}
+
+    template <std::integral T = uint16_t>
+        requires(sizeof(T) == 2)
+    constexpr auto readVpr(std::size_t index, ISA::VEC_ELEM elem = ISA::VEC_ELEM::NONE_0) const -> VPR<T>;
+
+    template <std::integral T = uint16_t>
+        requires(sizeof(T) == 2)
+    constexpr auto writeVpr(std::size_t index, VPR<T> value, ISA::VEC_ELEM elem = ISA::VEC_ELEM::NONE_0) -> void;
 
     template <std::integral T>
-    auto writeAccumulator(std::size_t index, T value) -> void;
+        requires(sizeof(T) == 2)
+    constexpr auto writeVpr(std::size_t index, T value, ISA::VEC_ELEM elem) -> void;
+
+    constexpr auto readVcc() const -> std::bitset<16>;
+    constexpr auto writeVcc(std::bitset<16> value) -> void;
+    constexpr auto clearVcc() -> void;
+
+    constexpr auto readVco() const -> std::bitset<16>;
+    constexpr auto writeVco(std::bitset<16> value) -> void;
+    constexpr auto clearVco() -> void;
+
+    constexpr auto readVce() const -> std::bitset<8>;
+    constexpr auto writeVce(std::bitset<8> value) -> void;
+    constexpr auto clearVce() -> void;
+
+    constexpr auto readDivIn() const -> std::optional<uint32_t>;
+    constexpr auto writeDivIn(std::optional<uint32_t> value) -> void;
+
+    constexpr auto readDivOut() const -> uint32_t;
+    constexpr auto writeDivOut(uint32_t value) -> void;
+
+    constexpr auto readAccumulators() const -> std::array<Accumulator, 8>;
+    constexpr auto writeAccumulators(std::array<Accumulator, 8> value) -> void;
+
+    template <std::integral T>
+    constexpr auto setAccumulators(VPR<T> vpr) -> void;
+
+    template <std::integral T>
+    constexpr auto addToAccumulators(VPR<T> vpr) -> void;
+
+  private:
+    constexpr auto readAccumulator(std::size_t index) const -> uint64_t;
+
+    template <std::integral T>
+    constexpr auto writeAccumulator(std::size_t index, T value) -> void;
 
     std::shared_ptr<Util::Logger> m_logger;
 
@@ -137,7 +183,7 @@ struct Registers {
     uint32_t                      m_divOut{};
 
     template <std::meta::info vecElem>
-    consteval auto getLanesForElement() {
+    consteval auto getLanesForElement() const {
         auto result = std::array<int, 8>{};
         template for (auto i = 0; constexpr auto a : Util::staticAnnotationsOf(vecElem)) {
             result[i++] = std::meta::extract<int>(a);
@@ -146,13 +192,9 @@ struct Registers {
     }
 };
 
-auto Registers::getVprData(std::size_t index) -> std::byte* {
-    return reinterpret_cast<std::byte*>(m_vprs[index].data());
-}
-
 template <std::integral T>
     requires(sizeof(T) == 2)
-auto Registers::readVpr(std::size_t index, ISA::VEC_ELEM elem) -> VPR<T> {
+constexpr auto Registers::readVpr(std::size_t index, ISA::VEC_ELEM elem) const -> VPR<T> {
     VPR<T> result{};
     template for (constexpr auto e : Util::staticEnumeratorsOf(^^ISA::VEC_ELEM)) {
         if (elem == std::meta::extract<ISA::VEC_ELEM>(e)) {
@@ -175,7 +217,7 @@ auto Registers::readVpr(std::size_t index, ISA::VEC_ELEM elem) -> VPR<T> {
 
 template <std::integral T>
     requires(sizeof(T) == 2)
-auto Registers::writeVpr(std::size_t index, VPR<T> value, ISA::VEC_ELEM elem) -> void {
+constexpr auto Registers::writeVpr(std::size_t index, VPR<T> value, ISA::VEC_ELEM elem) -> void {
     template for (constexpr auto e : Util::staticEnumeratorsOf(^^ISA::VEC_ELEM)) {
         if (elem == std::meta::extract<ISA::VEC_ELEM>(e)) {
             constexpr auto lanes = getLanesForElement<e>();
@@ -195,13 +237,13 @@ auto Registers::writeVpr(std::size_t index, VPR<T> value, ISA::VEC_ELEM elem) ->
 
 template <std::integral T>
     requires(sizeof(T) == 2)
-auto Registers::writeVpr(std::size_t index, T value, ISA::VEC_ELEM elem) -> void {
+constexpr auto Registers::writeVpr(std::size_t index, T value, ISA::VEC_ELEM elem) -> void {
     auto values = VPR<T>{};
     std::fill_n(values.begin(), values.size(), value);
     writeVpr(index, values, elem);
 }
 
-auto Registers::readVcc() -> std::bitset<16> {
+constexpr auto Registers::readVcc() const -> std::bitset<16> {
     IF_LOG_ENABLED(m_logger) {
         m_logger->log<Level::MED, Sys::RSP>(
             std::tuple{"op", "read"},
@@ -211,7 +253,7 @@ auto Registers::readVcc() -> std::bitset<16> {
     return m_vcc;
 }
 
-auto Registers::writeVcc(std::bitset<16> value) -> void {
+constexpr auto Registers::writeVcc(std::bitset<16> value) -> void {
     IF_LOG_ENABLED(m_logger) {
         m_logger->log<Level::MED, Sys::RSP>(
             std::tuple{"op", "write"},
@@ -221,11 +263,11 @@ auto Registers::writeVcc(std::bitset<16> value) -> void {
     m_vcc = value;
 }
 
-auto Registers::clearVcc() -> void {
+constexpr auto Registers::clearVcc() -> void {
     writeVcc(std::bitset<16>{});
 }
 
-auto Registers::readVco() -> std::bitset<16> {
+constexpr auto Registers::readVco() const -> std::bitset<16> {
     IF_LOG_ENABLED(m_logger) {
         m_logger->log<Level::MED, Sys::RSP>(
             std::tuple{"op", "read"},
@@ -235,7 +277,7 @@ auto Registers::readVco() -> std::bitset<16> {
     return m_vco;
 }
 
-auto Registers::writeVco(std::bitset<16> value) -> void {
+constexpr auto Registers::writeVco(std::bitset<16> value) -> void {
     IF_LOG_ENABLED(m_logger) {
         m_logger->log<Level::MED, Sys::RSP>(
             std::tuple{"op", "write"},
@@ -245,11 +287,11 @@ auto Registers::writeVco(std::bitset<16> value) -> void {
     m_vco = value;
 }
 
-auto Registers::clearVco() -> void {
+constexpr auto Registers::clearVco() -> void {
     writeVco(std::bitset<16>{});
 }
 
-auto Registers::readVce() -> std::bitset<8> {
+constexpr auto Registers::readVce() const -> std::bitset<8> {
     IF_LOG_ENABLED(m_logger) {
         m_logger->log<Level::MED, Sys::RSP>(
             std::tuple{"op", "read"},
@@ -259,7 +301,7 @@ auto Registers::readVce() -> std::bitset<8> {
     return m_vce;
 }
 
-auto Registers::writeVce(std::bitset<8> value) -> void {
+constexpr auto Registers::writeVce(std::bitset<8> value) -> void {
     IF_LOG_ENABLED(m_logger) {
         m_logger->log<Level::MED, Sys::RSP>(
             std::tuple{"op", "write"},
@@ -269,11 +311,11 @@ auto Registers::writeVce(std::bitset<8> value) -> void {
     m_vce = value;
 }
 
-auto Registers::clearVce() -> void {
+constexpr auto Registers::clearVce() -> void {
     writeVce(std::bitset<8>{});
 }
 
-auto Registers::readDivIn() -> std::optional<uint32_t> {
+constexpr auto Registers::readDivIn() const -> std::optional<uint32_t> {
     IF_LOG_ENABLED(m_logger) {
         if (m_divIn) {
             m_logger->log<Level::MED, Sys::RSP>(
@@ -290,7 +332,7 @@ auto Registers::readDivIn() -> std::optional<uint32_t> {
     return m_divIn;
 }
 
-auto Registers::writeDivIn(std::optional<uint32_t> value) -> void {
+constexpr auto Registers::writeDivIn(std::optional<uint32_t> value) -> void {
     IF_LOG_ENABLED(m_logger) {
         if (value) {
             m_logger->log<Level::MED, Sys::RSP>(
@@ -307,7 +349,7 @@ auto Registers::writeDivIn(std::optional<uint32_t> value) -> void {
     m_divIn = value;
 }
 
-auto Registers::readDivOut() -> uint32_t {
+constexpr auto Registers::readDivOut() const -> uint32_t {
     IF_LOG_ENABLED(m_logger) {
         m_logger->log<Level::MED, Sys::RSP>(
             std::tuple{"op", "read"},
@@ -317,7 +359,7 @@ auto Registers::readDivOut() -> uint32_t {
     return m_divOut;
 }
 
-auto Registers::writeDivOut(uint32_t value) -> void {
+constexpr auto Registers::writeDivOut(uint32_t value) -> void {
     IF_LOG_ENABLED(m_logger) {
         m_logger->log<Level::MED, Sys::RSP>(
             std::tuple{"op", "write"},
@@ -327,16 +369,16 @@ auto Registers::writeDivOut(uint32_t value) -> void {
     m_divOut = value;
 }
 
-auto Registers::readAccumulator(std::size_t index) -> uint64_t {
+constexpr auto Registers::readAccumulator(std::size_t index) const -> uint64_t {
     return std::bit_cast<uint64_t>(static_cast<int64_t>(m_accums[index]));
 }
 
 template <std::integral T>
-auto Registers::writeAccumulator(std::size_t index, T value) -> void {
+constexpr auto Registers::writeAccumulator(std::size_t index, T value) -> void {
     m_accums[index] = Accumulator(static_cast<int64_t>(value));
 }
 
-auto Registers::readAccumulators() -> std::array<Accumulator, 8> {
+constexpr auto Registers::readAccumulators() const -> std::array<Accumulator, 8> {
     const auto value = m_accums;
     IF_LOG_ENABLED(m_logger) {
         m_logger->log<Level::MED, Sys::RSP>(
@@ -347,7 +389,7 @@ auto Registers::readAccumulators() -> std::array<Accumulator, 8> {
     return value;
 }
 
-auto Registers::writeAccumulators(std::array<Accumulator, 8> value) -> void {
+constexpr auto Registers::writeAccumulators(std::array<Accumulator, 8> value) -> void {
     m_accums = value;
     IF_LOG_ENABLED(m_logger) {
         m_logger->log<Level::MED, Sys::RSP>(
@@ -358,7 +400,7 @@ auto Registers::writeAccumulators(std::array<Accumulator, 8> value) -> void {
 }
 
 template <std::integral T>
-auto Registers::setAccumulators(VPR<T> vpr) -> void {
+constexpr auto Registers::setAccumulators(VPR<T> vpr) -> void {
     using Int64_Type = std::conditional_t<std::is_signed_v<T>, int64_t, uint64_t>;
 
     auto result = std::array<Accumulator, 8>{};
@@ -369,7 +411,7 @@ auto Registers::setAccumulators(VPR<T> vpr) -> void {
 }
 
 template <std::integral T>
-auto Registers::addToAccumulators(VPR<T> vpr) -> void {
+constexpr auto Registers::addToAccumulators(VPR<T> vpr) -> void {
     using Int64_Type = std::conditional_t<std::is_signed_v<T>, int64_t, uint64_t>;
 
     const auto accums = readAccumulators();

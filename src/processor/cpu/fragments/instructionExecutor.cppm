@@ -274,30 +274,6 @@ auto InstructionExecutor<System>::executeMemoryOperation(uint32_t inst) -> void 
     }
 }
 
-/*
-
-        case UnifiedOpcode::OP_SWL: {
-            const auto ops   = std::bit_cast<TypeI>(data);
-            const auto vaddr = Util::signExt32<int16_t>(ops.imm) + m_regs.readGpr(ops.rs);
-            const auto data  = m_regs.readGpr<uint32_t>(ops.rt);
-            for (auto byte = 4z; byte > vaddr % 4; --byte) {
-                auto thisByte = (data >> (8 * byte)) & 0xFF;
-                m_memory->write<uint8_t>(vaddr + (4 - byte), thisByte);
-            }
-            break;
-        }
-        case UnifiedOpcode::OP_SWR: {
-            const auto ops   = std::bit_cast<TypeI>(data);
-            const auto vaddr = Util::signExt32<int16_t>(ops.imm) + m_regs.readGpr(ops.rs);
-            const auto data  = m_regs.readGpr<uint32_t>(ops.rt);
-            for (auto byte = 0z; byte < 1 + (vaddr % 4); ++byte) {
-                auto thisByte = (data >> (8 * byte)) & 0xFF;
-                m_memory->write<uint8_t>(vaddr - byte, thisByte);
-            }
-            break;
-        }
-
-*/
 template <Sys System>
 template <Param::MemoryType Type, Param::Direction Dir, std::integral T>
 auto InstructionExecutor<System>::executeMemoryOperationUnaligned(uint32_t inst) -> void {

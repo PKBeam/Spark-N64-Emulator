@@ -94,31 +94,62 @@ constexpr auto formatOperands(Instruction inst) -> std::vector<std::string> {
 
                     const auto instData = std::bit_cast<typename[:operandType:] ::InstType>(inst.data);
 
+                    const uint32_t opValue = instData.[:[:op:]:];
+
                     // CPz registers have different names
                     constexpr auto opName = std::meta::identifier_of([:op:]);
                     if constexpr (std::meta::display_string_of(aliasedOperandType).contains("CPU_CPMove")) {
-                        const uint32_t opValue = instData.[:[:op:]:];
                         if (opName == "rd") {
                             if (inst.getCoprocessor() == 1) {
-                                const auto opStr = std::format("$f{}", opValue);
-                                result.push_back(opStr);
+                                result.push_back(std::format("$f{}", opValue));
                             } else {
-                                const auto opStr = std::format("${}", opValue);
-                                result.push_back(opStr);
+                                result.push_back(std::format("${}", opValue));
                             }
                             continue;
                         }
                     }
                     if constexpr (std::meta::display_string_of(aliasedOperandType).contains("CP1_LoadStore")) {
-                        const uint32_t opValue = instData.[:[:op:]:];
                         if (opName == "rt") {
                             if (inst.getCoprocessor() == 1) {
-                                const auto opStr = std::format("$f{}", opValue);
-                                result.push_back(opStr);
+                                result.push_back(std::format("$f{}", opValue));
                             } else {
-                                const auto opStr = std::format("${}", opValue);
-                                result.push_back(opStr);
+                                result.push_back(std::format("${}", opValue));
                             }
+                            continue;
+                        }
+                    }
+
+                    // RSP Load/Store elements are byte indices
+                    if constexpr (std::meta::display_string_of(aliasedOperandType).contains("RSP_LoadStore")) {
+                        if (opName == "vtElem") {
+                            result.push_back(std::format("[{}]", opValue));
+                            continue;
+                        }
+                        if (opName == "imm") { // offsets must be shifted
+                            const auto shift = [inst.opcode] {
+                                switch (inst.opcode) {
+                                    case UnifiedOpcode::OP_LBV: [[fallthrough]];
+                                    case UnifiedOpcode::OP_SBV: return 0;
+                                    case UnifiedOpcode::OP_LSV: [[fallthrough]];
+                                    case UnifiedOpcode::OP_SSV: return 1;
+                                    case UnifiedOpcode::OP_LLV: [[fallthrough]];
+                                    case UnifiedOpcode::OP_SLV: return 2;
+                                    case UnifiedOpcode::OP_LPV: [[fallthrough]];
+                                    case UnifiedOpcode::OP_SPV: [[fallthrough]];
+                                    case UnifiedOpcode::OP_LUV: [[fallthrough]];
+                                    case UnifiedOpcode::OP_SUV: [[fallthrough]];
+                                    case UnifiedOpcode::OP_LDV: [[fallthrough]];
+                                    case UnifiedOpcode::OP_SDV: return 3;
+                                    case UnifiedOpcode::OP_LQV: [[fallthrough]];
+                                    case UnifiedOpcode::OP_SQV: [[fallthrough]];
+                                    case UnifiedOpcode::OP_LRV: [[fallthrough]];
+                                    case UnifiedOpcode::OP_SRV: [[fallthrough]];
+                                    case UnifiedOpcode::OP_LHV: [[fallthrough]];
+                                    case UnifiedOpcode::OP_SHV: return 4;
+                                    default: throw Util::Error("Unexpected RSP Load/Store opcode {}", inst.opcode);
+                                }
+                            }();
+                            result.push_back(std::format("{:#x}", opValue << shift));
                             continue;
                         }
                     }

@@ -6,6 +6,7 @@ export module RDP:RDP;
 
 import std;
 import Interfaces;
+import InterfaceTypes;
 import ISA;
 import RdpControl;
 import Util;
@@ -25,8 +26,8 @@ class RDP {
 
   private:
     std::shared_ptr<Util::Logger> m_logger;
-    ::RDP::Control*               m_rdpControl;
-    Interfaces::MipsInterface*    m_mipsInterface;
+    ::RDP::Control*               m_rdpControl{};
+    Interfaces::MipsInterface*    m_mipsInterface{};
 };
 
 auto RDP::runCommand() -> void {
@@ -34,15 +35,29 @@ auto RDP::runCommand() -> void {
     if (cmds.empty()) {
         return;
     }
+    IF_LOG_ENABLED(m_logger) {
+        m_logger->log<Level::HIGH, Sev::INFO, Sys::RDP>("Received {} commands", cmds.size());
+    }
     for (const auto cmd : cmds) {
-        const auto cmdType = (cmd >> 56) & 0x3F;
-        std::println("Command: {}",
-                     Util::enumName(static_cast<Command>(cmdType)).value_or(std::format("Unknown Command {:#018x}", cmd)));
+        const auto cmdType = getCommand(cmd);
+        IF_LOG_ENABLED(m_logger) {
+            m_logger->log<Level::HIGH, Sys::RDP>(
+                std::tuple{"command", "{}", cmdType});
+        }
+        switch (cmdType) {
+            case Command::SYNC_FULL: {
+                m_mipsInterface->setInterrupt<^^Interfaces::MI_INTERRUPT::dp>(true);
+                break;
+            }
+            default: break;
+        }
     }
-    std::println("Received {} commands from RDP", cmds.size());
-    if (m_logger) {
-        m_logger->flush();
+    static int numFrames = 0;
+    if (numFrames++ == 10) { // terminate after 10 frames
+        IF_LOG_ENABLED(m_logger) {
+            m_logger->flush();
+        }
+        std::terminate();
     }
-    std::terminate();
 }
 } // namespace RDP

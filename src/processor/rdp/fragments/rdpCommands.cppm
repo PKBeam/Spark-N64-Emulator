@@ -52,6 +52,10 @@ enum class Command : uint8_t {
     SET_COLOR_IMAGE,
 };
 
+constexpr auto getCommand(uint64_t data) -> Command {
+    return static_cast<Command>((data >> 56) & 0x3F);
+}
+
 namespace Commands {
 struct FillTriangle {
     uint64_t yh      : 14;
@@ -72,3 +76,15 @@ struct FillTriangle {
 };
 } // namespace Commands
 }; // namespace RDP
+
+template <>
+struct std::formatter<RDP::Command> {
+    constexpr auto parse(std::format_parse_context& ctx) -> std::format_parse_context::iterator {
+        return ctx.begin();
+    }
+
+    auto format(const RDP::Command& command, std::format_context& ctx) const {
+        const auto str = Util::enumName(command).value_or("NOP");
+        return std::format_to(ctx.out(), "{}", str);
+    }
+};

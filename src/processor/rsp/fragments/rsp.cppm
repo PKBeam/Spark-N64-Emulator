@@ -61,7 +61,7 @@ auto RSP::runInstruction() -> void {
     const auto inst     = ISA::Instruction(instBits);
     IF_LOG_ENABLED(m_logger) {
         m_logger->log<Level::HIGH, Sys::RSP>(
-            std::tuple{"PC", "0x{:04x}", static_cast<uint32_t>(m_gprs.readPc())},
+            std::tuple{"PC", "{:#05x}", static_cast<uint32_t>(m_gprs.readPc())},
             std::tuple{"inst", "{}", inst});
     }
 
@@ -181,8 +181,8 @@ auto RSP::runInstruction() -> void {
         case UnifiedOpcode::OP_LUV: m_exec.executeLoadStorePacked<P::LOADV, P::UNSIGNED>(data); break;
         case UnifiedOpcode::OP_SPV: m_exec.executeLoadStorePacked<P::STOREV, P::SIGNED>(data); break;
         case UnifiedOpcode::OP_SUV: m_exec.executeLoadStorePacked<P::STOREV, P::UNSIGNED>(data); break;
-        case UnifiedOpcode::OP_LQV: m_exec.executeLoadStoreQuad<P::LOADV>(data); break;
-        case UnifiedOpcode::OP_SQV: m_exec.executeLoadStoreQuad<P::STOREV>(data); break;
+        case UnifiedOpcode::OP_LQV: m_exec.executeLoadStoreQuad<P::LOADV, P::QUAD>(data); break;
+        case UnifiedOpcode::OP_SQV: m_exec.executeLoadStoreQuad<P::STOREV, P::QUAD>(data); break;
 
         case UnifiedOpcode::OP_VADD: m_exec.executeBivariateWithCarryIn<P::ACCUM_ZERO_EXT, P::CLAMP_SIGNED>(data, Func::ADD); break;
         case UnifiedOpcode::OP_VSUB: m_exec.executeBivariateWithCarryIn<P::ACCUM_ZERO_EXT, P::CLAMP_SIGNED>(data, Func::SUB); break;

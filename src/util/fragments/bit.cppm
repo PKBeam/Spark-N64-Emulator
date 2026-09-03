@@ -38,6 +38,15 @@ constexpr auto byteswapIfLittleEndian(T data) -> T {
 }
 
 template <std::integral T>
+constexpr auto endianNormalisedMemoryRanges(T start, T end) {
+    auto range = std::views::iota(start, end);
+    if (Util::isLittleEndian()) {
+        return std::views::zip(range |= std::views::reverse, range);
+    }
+    return std::views::zip(range, range);
+}
+
+template <std::integral T>
 constexpr auto bytesFromKiB(T KiB) -> T {
     return 1024 * KiB;
 }

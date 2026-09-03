@@ -160,10 +160,10 @@ constexpr auto Emulator::loadRom(std::filesystem::path path) -> void {
     });
     try {
         while (true) {
-            // if (m_videoInterface->hasTimerFired()) {
-            //     m_mipsInterface->setInterrupt<^^Interfaces::MI_INTERRUPT::vi>(true);
-            //     m_videoInterface->clearTimerFired();
-            // }
+            if (m_videoInterface->hasTimerFired()) {
+                m_mipsInterface->setInterrupt<^^Interfaces::MI_INTERRUPT::vi>(true);
+                m_videoInterface->clearTimerFired();
+            }
             m_cpu->checkInterrupts();
             m_cpu->runInstruction();
             m_cp0->incrementCount();
