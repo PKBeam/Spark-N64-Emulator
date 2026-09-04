@@ -52,14 +52,14 @@ struct Registers {
   private:
     std::shared_ptr<Util::Logger> m_logger;
 
-    std::array<uint64_t, 32> m_gprs;
+    std::array<uint64_t, 32> m_gprs{};
     uint64_t                 m_hi{};
     uint64_t                 m_lo{};
 
     // program counter state management
     uint64_t                m_pc{};
-    std::optional<uint64_t> m_delaySlotPc;
-    std::optional<uint64_t> m_pendingJumpPc;
+    std::optional<uint64_t> m_delaySlotPc{};
+    std::optional<uint64_t> m_pendingJumpPc{};
 };
 
 template <Sys System>

@@ -208,14 +208,14 @@ auto RSP::runInstruction() -> void {
         case UnifiedOpcode::OP_LQV: m_exec.executeLoadStoreQuad<P::LOADV, P::QUAD>(data); break;
         case UnifiedOpcode::OP_SQV: m_exec.executeLoadStoreQuad<P::STOREV, P::QUAD>(data); break;
 
-        case UnifiedOpcode::OP_VADD: m_exec.executeBivariateWithCarryIn<P::ACCUM_ZERO_EXT, P::CLAMP_SIGNED>(data, Func::ADD); break;
-        case UnifiedOpcode::OP_VSUB: m_exec.executeBivariateWithCarryIn<P::ACCUM_ZERO_EXT, P::CLAMP_SIGNED>(data, Func::SUB); break;
-        case UnifiedOpcode::OP_VADDC: m_exec.executeBivariate(data, Func::ADD, [](uint32_t sum) { return sum >> 16; }, [](auto _) { return 0; }); break;
-        case UnifiedOpcode::OP_VSUBC: m_exec.executeBivariate(data, Func::SUB, [](uint32_t sum) { return sum >> 16; }, [](uint32_t sum) { return (sum & 0x1FFFF) != 0; }); break;
-        case UnifiedOpcode::OP_VABS: m_exec.executeBivariate(data, [](auto vs, auto vt) { return Util::sign(static_cast<int16_t>(vs)) * vt; }); break;
+        case UnifiedOpcode::OP_VADD: m_exec.executeBivariateWithCarryIn<P::SIGNED, P::ACCUM_ZERO_EXT, P::CLAMP_SIGNED>(data, Func::ADD); break;
+        case UnifiedOpcode::OP_VSUB: m_exec.executeBivariateWithCarryIn<P::SIGNED, P::ACCUM_ZERO_EXT, P::CLAMP_SIGNED>(data, Func::SUB); break;
+        case UnifiedOpcode::OP_VADDC: m_exec.executeBivariate<P::UNSIGNED>(data, Func::ADD, [](uint32_t sum) { return sum >> 16; }, [](auto _) { return 0; }); break;
+        case UnifiedOpcode::OP_VSUBC: m_exec.executeBivariate<P::UNSIGNED>(data, Func::SUB, [](uint32_t sum) { return sum >> 16; }, [](uint32_t sum) { return (sum & 0x1FFFF) != 0; }); break;
+        case UnifiedOpcode::OP_VABS: m_exec.executeBivariate<P::SIGNED, P::ACCUM_ZERO_EXT, P::CLAMP_SIGNED>(data, [](auto vs, auto vt) { return Util::sign(static_cast<int16_t>(vs)) * vt; }); break;
 
-        case UnifiedOpcode::OP_VMADL: m_exec.executeMultiply<P::CLAMP_SIGNED, P::UNSIGNED, P::UNSIGNED, P::ACCUM_ADD, P::ACCUM_LO_32, P::Shift(-16)>(data); break;
-        case UnifiedOpcode::OP_VMUDL: m_exec.executeMultiply<P::CLAMP_SIGNED, P::UNSIGNED, P::UNSIGNED, P::ACCUM_SET, P::ACCUM_LO_32, P::Shift(-16)>(data); break;
+        case UnifiedOpcode::OP_VMADL: m_exec.executeMultiply<P::CLAMP_UNSIGNED, P::UNSIGNED, P::UNSIGNED, P::ACCUM_ADD, P::ACCUM_LO_32, P::Shift(-16)>(data); break;
+        case UnifiedOpcode::OP_VMUDL: m_exec.executeMultiply<P::CLAMP_UNSIGNED, P::UNSIGNED, P::UNSIGNED, P::ACCUM_SET, P::ACCUM_LO_32, P::Shift(-16)>(data); break;
         case UnifiedOpcode::OP_VMADN: m_exec.executeMultiply<P::CLAMP_UNSIGNED, P::UNSIGNED, P::SIGNED, P::ACCUM_ADD, P::ACCUM_LO_32>(data); break;
         case UnifiedOpcode::OP_VMUDN: m_exec.executeMultiply<P::CLAMP_UNSIGNED, P::UNSIGNED, P::SIGNED, P::ACCUM_SET, P::ACCUM_LO_32>(data); break;
         case UnifiedOpcode::OP_VMADM: m_exec.executeMultiply<P::CLAMP_SIGNED, P::SIGNED, P::UNSIGNED, P::ACCUM_ADD, P::ACCUM_HI_32>(data); break;
@@ -228,38 +228,38 @@ auto RSP::runInstruction() -> void {
         case UnifiedOpcode::OP_VMACF: m_exec.executeMultiply<P::CLAMP_SIGNED, P::SIGNED, P::SIGNED, P::ACCUM_ADD, P::ACCUM_HI_32, P::Shift(1)>(data); break;
         case UnifiedOpcode::OP_VMACU: m_exec.executeMultiply<P::CLAMP_UNSIGNED, P::SIGNED, P::SIGNED, P::ACCUM_ADD, P::ACCUM_HI_32, P::Shift(1)>(data); break;
 
-        case UnifiedOpcode::OP_VAND: m_exec.executeBivariate(data, Func::AND); break;
-        case UnifiedOpcode::OP_VNAND: m_exec.executeBivariate(data, Func::NAND); break;
-        case UnifiedOpcode::OP_VOR: m_exec.executeBivariate(data, Func::OR); break;
-        case UnifiedOpcode::OP_VNOR: m_exec.executeBivariate(data, Func::NOR); break;
-        case UnifiedOpcode::OP_VXOR: m_exec.executeBivariate(data, Func::XOR); break;
-        case UnifiedOpcode::OP_VNXOR: m_exec.executeBivariate(data, Func::NXOR); break;
+        case UnifiedOpcode::OP_VAND: m_exec.executeBivariate<P::UNSIGNED>(data, Func::AND); break;
+        case UnifiedOpcode::OP_VNAND: m_exec.executeBivariate<P::UNSIGNED>(data, Func::NAND); break;
+        case UnifiedOpcode::OP_VOR: m_exec.executeBivariate<P::UNSIGNED>(data, Func::OR); break;
+        case UnifiedOpcode::OP_VNOR: m_exec.executeBivariate<P::UNSIGNED>(data, Func::NOR); break;
+        case UnifiedOpcode::OP_VXOR: m_exec.executeBivariate<P::UNSIGNED>(data, Func::XOR); break;
+        case UnifiedOpcode::OP_VNXOR: m_exec.executeBivariate<P::UNSIGNED>(data, Func::NXOR); break;
 
-        case UnifiedOpcode::OP_VMOV: m_exec.executeSingleLane<P::ACCUM_ZERO_EXT>(data, Func::NOP); break;
+        case UnifiedOpcode::OP_VMOV: m_exec.executeSingleLaneMove(data); break;
 
         case UnifiedOpcode::OP_VLT:
-            m_exec.executeSelectCompare(data, [](int16_t vs, int16_t vt, bool vco, bool vce) {
-                return (vs < vt) | (vs == vt && vco && !vce);
+            m_exec.executeSelectCompare(data, [](int16_t vs, int16_t vt, bool vcoLo, bool vcoHi) {
+                return (vs < vt) || (vs == vt && vcoLo && vcoHi);
             });
             break;
         case UnifiedOpcode::OP_VNE:
-            m_exec.executeSelectCompare(data, [](int16_t vs, int16_t vt, bool _, bool vce) {
-                return (vs < vt) | (vs > vt) | (vs == vt && !vce);
+            m_exec.executeSelectCompare(data, [](int16_t vs, int16_t vt, bool, bool vcoHi) {
+                return vs != vt || vcoHi;
             });
             break;
         case UnifiedOpcode::OP_VEQ:
-            m_exec.executeSelectCompare(data, [](int16_t vs, int16_t vt, bool _, bool vce) {
-                return vs == vt && vce;
+            m_exec.executeSelectCompare(data, [](int16_t vs, int16_t vt, bool, bool vcoHi) {
+                return vs == vt && !vcoHi;
             });
             break;
         case UnifiedOpcode::OP_VGE:
-            m_exec.executeSelectCompare(data, [](int16_t vs, int16_t vt, bool vco, bool vce) {
-                return (vs > vt) | (vs == vt && ((!vco) | vce));
+            m_exec.executeSelectCompare(data, [](int16_t vs, int16_t vt, bool vcoLo, bool vcoHi) {
+                return (vs > vt) || (vs == vt && (!vcoLo || !vcoHi));
             });
             break;
         case UnifiedOpcode::OP_VCH: m_exec.executeSelectClipHigh(data); break;
         case UnifiedOpcode::OP_VCL: m_exec.executeSelectClipLow(data); break;
-        case UnifiedOpcode::OP_VCR: m_exec.executeSelectCrimpLow(data); break;
+        case UnifiedOpcode::OP_VCR: m_exec.executeSelectCrimp(data); break;
         case UnifiedOpcode::OP_VMRG: m_exec.executeSelectMerge(data); break;
         case UnifiedOpcode::OP_VSAR: m_exec.executeReadAccumulators(data); break;
         case UnifiedOpcode::OP_VRCPH: [[fallthrough]];

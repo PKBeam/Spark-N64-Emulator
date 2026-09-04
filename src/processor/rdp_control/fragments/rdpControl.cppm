@@ -39,7 +39,7 @@ class Control {
 
     auto hasCommands() const -> bool;
 
-    auto getCommands() -> std::vector<uint64_t>; // may be called on a different thread
+    auto getCommands() -> std::deque<uint64_t>; // may be called on a different thread
 
   private:
     auto fetchCommands() -> void; // fetch commands from RDRAM/DMEM
@@ -47,11 +47,11 @@ class Control {
     std::shared_ptr<Util::Logger> m_logger;
     Memory::Memory*               m_memory{};
 
-    std::vector<uint64_t> m_cmdBufferIn;  // From Memory
-    std::vector<uint64_t> m_cmdBufferOut; // To RDP
-    std::mutex            m_mutex;
+    std::deque<uint64_t> m_cmdBufferIn;  // From Memory
+    std::deque<uint64_t> m_cmdBufferOut; // To RDP
+    std::mutex           m_mutex;
 
-    DPC_STATUS m_status;
+    DPC_STATUS m_status{};
     uint32_t   m_startAddr{};
     uint32_t   m_endAddr{};
     uint32_t   m_clock{};
@@ -62,7 +62,7 @@ auto Control::hasCommands() const -> bool {
     return !m_cmdBufferIn.empty();
 }
 
-auto Control::getCommands() -> std::vector<uint64_t> {
+auto Control::getCommands() -> std::deque<uint64_t> {
     if (!hasCommands()) {
         return {};
     }

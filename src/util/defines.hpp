@@ -52,17 +52,17 @@ struct info {};
 #define HEXFMT48 "{:#014x}"
 #define HEXFMT64 "{:#018x}"
 
-#define STD_FORMATTER_ENUM(ENUM, FMT_FUNC)                               \
-    template <>                                                          \
-    struct std::formatter<ENUM> {                                        \
-        constexpr auto parse(std::format_parse_context& ctx)             \
-            -> std::format_parse_context::iterator {                     \
-            return ctx.begin();                                          \
-        }                                                                \
-                                                                         \
-        auto format(const ENUM& value, std::format_context& ctx) const { \
-            return std::format_to(ctx.out(), "{}", FMT_FUNC(value));     \
-        }                                                                \
+#define STD_FORMATTER_ENUM(ENUM, FMT_FUNC)                                         \
+    template <>                                                                    \
+    struct std::formatter<ENUM> {                                                  \
+        constexpr auto parse(std::format_parse_context& ctx)                       \
+            -> std::format_parse_context::iterator {                               \
+            return ctx.begin();                                                    \
+        }                                                                          \
+                                                                                   \
+        constexpr auto format(const ENUM& value, std::format_context& ctx) const { \
+            return std::format_to(ctx.out(), "{}", FMT_FUNC(value));               \
+        }                                                                          \
     }
 
 #define STD_FORMATTER_ENUM_NAME(ENUM)                                   \

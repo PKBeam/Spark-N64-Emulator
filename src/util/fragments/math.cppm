@@ -62,11 +62,82 @@ template <std::integral T>
 constexpr auto sign(T value) -> int {
     if (value > 0) {
         return 1;
-    } else if (value < 0) {
-        return -1;
-    } else {
-        return 0;
     }
+    if (value < 0) {
+        return -1;
+    }
+    return 0;
 }
 
+template <bool Signed, std::size_t IntBits, std::size_t FracBits, std::integral T>
+    requires(FracBits < 8 * sizeof(T) && std::is_unsigned_v<T>)
+constexpr auto toFloat(T fixedPoint) -> float {
+    constexpr auto scale = static_cast<float>(static_cast<T>(1) << FracBits);
+    if constexpr (Signed) { // sign extension
+        if ((fixedPoint >> (IntBits + FracBits - 1)) & 1) {
+            fixedPoint |= ~((static_cast<T>(1) << (IntBits + FracBits)) - 1);
+        }
+        return static_cast<std::make_signed_t<T>>(fixedPoint) / scale;
+    }
+    return fixedPoint / scale;
+}
+
+template <typename T = float>
+    requires(std::is_arithmetic_v<T>)
+struct Point {
+    T x;
+    T y;
+    constexpr Point(T a, T b) : x(a), y(b) {}
+};
+
+template <typename T = float>
+    requires(std::is_arithmetic_v<T>)
+struct Triangle {
+    Point<T> v0;
+    Point<T> v1;
+    Point<T> v2;
+    constexpr Triangle(Point<T> a, Point<T> b, Point<T> c) : v0(a), v1(b), v2(c) {}
+};
+
+template <typename T = float>
+    requires(std::is_arithmetic_v<T>)
+struct Rectangle {
+    Point<T> v0; // upper left
+    Point<T> v1; // lower right
+    constexpr Rectangle(Point<T> a, Point<T> b) : v0(a), v1(b) {}
+};
+
 } // namespace Util
+
+template <typename T>
+struct std::formatter<Util::Point<T>> {
+    constexpr auto parse(std::format_parse_context& ctx) -> std::format_parse_context::iterator {
+        return ctx.begin();
+    }
+
+    constexpr auto format(const Util::Point<T>& point, std::format_context& ctx) const {
+        return std::format_to(ctx.out(), "({:8.2f}, {:8.2f})", point.x, point.y);
+    }
+};
+
+template <typename T>
+struct std::formatter<Util::Triangle<T>> {
+    constexpr auto parse(std::format_parse_context& ctx) -> std::format_parse_context::iterator {
+        return ctx.begin();
+    }
+
+    constexpr auto format(const Util::Triangle<T>& triangle, std::format_context& ctx) const {
+        return std::format_to(ctx.out(), "{}, {}, {}", triangle.v0, triangle.v1, triangle.v2);
+    }
+};
+
+template <typename T>
+struct std::formatter<Util::Rectangle<T>> {
+    constexpr auto parse(std::format_parse_context& ctx) -> std::format_parse_context::iterator {
+        return ctx.begin();
+    }
+
+    constexpr auto format(const Util::Rectangle<T>& rectangle, std::format_context& ctx) const {
+        return std::format_to(ctx.out(), "{}, {}", rectangle.v0, rectangle.v1);
+    }
+};

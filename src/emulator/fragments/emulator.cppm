@@ -160,11 +160,16 @@ constexpr auto Emulator::loadRom(std::filesystem::path path) -> void {
         }
     });
     try {
+        static std::size_t viTimer = 0;
         while (true) {
-            if (m_videoInterface->hasTimerFired()) {
+            if (viTimer++ == std::numeric_limits<std::size_t>::max()) {
+                viTimer = 0;
                 m_mipsInterface->setInterrupt<^^Interfaces::MI_INTERRUPT::vi>(true);
-                m_videoInterface->clearTimerFired();
             }
+            // if (m_videoInterface->hasTimerFired()) {
+            //     m_mipsInterface->setInterrupt<^^Interfaces::MI_INTERRUPT::vi>(true);
+            //     m_videoInterface->clearTimerFired();
+            // }
             m_cpu->checkInterrupts();
             m_cpu->runInstruction();
             m_cp0->incrementCount();
