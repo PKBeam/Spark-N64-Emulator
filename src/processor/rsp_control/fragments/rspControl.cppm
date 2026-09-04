@@ -123,16 +123,9 @@ auto Control::dmaMemcpy(uint32_t dst, uint32_t src, std::size_t len, uint8_t cou
         }
     }
     IF_LOG_ENABLED(m_logger) {
-        constexpr auto dirStr = [] consteval {
-            if constexpr (Dir == RSP_DMA_DIRECTION::TO_RDRAM) {
-                return "to RDRAM"sv;
-            } else {
-                return "from RDRAM"sv;
-            }
-        };
         m_logger->log<Level::HIGH, Sev::INFO, Sys::RSP_REG>(
-            "DMA {} {} bytes from " HEXFMT32 " to " HEXFMT32 " ({} rows, skip {})", dirStr(), len, src, dst, count + 1, skip);
-        if (src + len >= dst) {
+            "DMA {} {} bytes from " HEXFMT32 " to " HEXFMT32 " ({} rows, skip {})", Dir, len, src, dst, count + 1, skip);
+        if (src <= dst && src + len >= dst) {
             m_logger->log<Level::MAX, Sev::WARNING, Sys::RSP_REG>("DMA address overlapped");
         }
     }

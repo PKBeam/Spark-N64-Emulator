@@ -18,6 +18,7 @@ constexpr auto RSP_DMEM_BASE = Util::rangeOf(Memory::PhysSeg::RSP_DMEM).lower;
 export namespace Param {
 // clang-format off
 enum Accumulator  : uint8_t { ACCUM_NONE, ACCUM_ZERO_EXT, ACCUM_SIGN_EXT };
+enum AccumOut     : uint8_t { ACCUM_HI_32, ACCUM_LO_32 };
 enum CarryIn      : uint8_t { CARRY_IN_NONE, CARRY_IN };
 enum OperandSign  : uint8_t { UNSIGNED, SIGNED };
 enum ResultClamp  : uint8_t { CLAMP_NONE, CLAMP_UNSIGNED, CLAMP_SIGNED };
@@ -60,7 +61,7 @@ class InstructionExecutor {
         executeBivariate<Accum, VdClamp, std::nullptr_t, std::nullptr_t, Param::CARRY_IN, Function>(inst, std::forward<Function>(func));
     }
 
-    template <Param::ResultClamp VdClamp, Param::OperandSign VsSign, Param::OperandSign VtSign, Param::ProductAccum Accum, Param::Shift ShiftValue = Param::Shift(0), Param::ProductRound Round = Param::ROUND_NONE>
+    template <Param::ResultClamp VdClamp, Param::OperandSign VsSign, Param::OperandSign VtSign, Param::ProductAccum Accum, Param::AccumOut AccumOut, Param::Shift ShiftValue = Param::Shift(0), Param::ProductRound Round = Param::ROUND_NONE>
         requires(VdClamp != Param::ResultClamp::CLAMP_NONE)
     auto executeMultiply(uint32_t inst) -> void;
 
@@ -170,12 +171,12 @@ auto InstructionExecutor::executeBivariate(uint32_t inst, Function&& func, VcoLo
     m_vprs->writeVpr(op.vd, result);
 }
 
-template <Param::ResultClamp VdClamp, Param::OperandSign VsSign, Param::OperandSign VtSign, Param::ProductAccum Accum, Param::Shift ShiftValue, Param::ProductRound Round>
+template <Param::ResultClamp VdClamp, Param::OperandSign VsSign, Param::OperandSign VtSign, Param::ProductAccum Accum, Param::AccumOut AccumOut, Param::Shift ShiftValue, Param::ProductRound Round>
     requires(VdClamp != Param::ResultClamp::CLAMP_NONE)
 auto InstructionExecutor::executeMultiply(uint32_t inst) -> void {
     using VsRegType   = std::conditional_t<VsSign == Param::SIGNED, int16_t, uint16_t>;
     using VtRegType   = std::conditional_t<VtSign == Param::SIGNED, int16_t, uint16_t>;
-    using VdClampType = std::conditional_t<VdClamp == Param::CLAMP_SIGNED, int16_t, uint16_t>;
+    using VdClampType = std::conditional_t<VdClamp == Param::CLAMP_SIGNED, int32_t, uint32_t>;
 
     const auto op    = std::bit_cast<ISA::RSP::TypeVR>(inst);
     const auto vsVpr = m_vprs->readVpr<VsRegType>(op.vs);
@@ -188,9 +189,10 @@ auto InstructionExecutor::executeMultiply(uint32_t inst) -> void {
 
     auto result = VPR<uint16_t>{};
     for (auto i = 0uz; i < 8; ++i) {
-        using VsExtType = std::conditional_t<VsSign == Param::SIGNED, int32_t, uint32_t>;
-        using VtExtType = std::conditional_t<VtSign == Param::SIGNED, int32_t, uint32_t>;
-        auto product    = static_cast<int32_t>(static_cast<VsExtType>(vsVpr[i]) * static_cast<VtExtType>(vtVpr[i]));
+        // to preserve sign, the signed type must be larger than the unsigned
+        using VsExtType = std::conditional_t<VsSign == Param::SIGNED, int64_t, uint32_t>;
+        using VtExtType = std::conditional_t<VtSign == Param::SIGNED, int64_t, uint32_t>;
+        auto product    = static_cast<int64_t>(static_cast<VsExtType>(vsVpr[i]) * static_cast<VtExtType>(vtVpr[i]));
 
         if constexpr (ShiftValue < 0) {
             product >>= -ShiftValue;
@@ -205,7 +207,13 @@ auto InstructionExecutor::executeMultiply(uint32_t inst) -> void {
         } else { // ACCUM_ADD
             accums[i] = static_cast<int64_t>(accums[i]) + product;
         }
-        result[i] = std::bit_cast<uint16_t>(Util::clamp<VdClampType>(static_cast<int64_t>(accums[i])));
+
+        auto accumOut = static_cast<int64_t>(accums[i]);
+        if constexpr (AccumOut == Param::ACCUM_HI_32) {
+            accumOut = accumOut >> 16;
+        }
+        // clamp accumulator to 32-bit value and return the bottom 16
+        result[i] = Util::clamp<VdClampType>(accumOut) & 0xFFFF;
     }
 
     m_vprs->writeAccumulators(accums);
@@ -332,6 +340,7 @@ auto InstructionExecutor::executeSingleLane(uint32_t inst, Function&& func) -> v
         }
         m_vprs->writeAccumulators(accs);
     }
+    m_vprs->writeVpr(ops.vd, vd);
 }
 
 template <typename Function>

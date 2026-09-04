@@ -214,19 +214,19 @@ auto RSP::runInstruction() -> void {
         case UnifiedOpcode::OP_VSUBC: m_exec.executeBivariate(data, Func::SUB, [](uint32_t sum) { return sum >> 16; }, [](uint32_t sum) { return (sum & 0x1FFFF) != 0; }); break;
         case UnifiedOpcode::OP_VABS: m_exec.executeBivariate(data, [](auto vs, auto vt) { return Util::sign(static_cast<int16_t>(vs)) * vt; }); break;
 
-        case UnifiedOpcode::OP_VMADL: m_exec.executeMultiply<P::CLAMP_SIGNED, P::UNSIGNED, P::UNSIGNED, P::ACCUM_ADD, P::Shift(-16)>(data); break;
-        case UnifiedOpcode::OP_VMUDL: m_exec.executeMultiply<P::CLAMP_SIGNED, P::UNSIGNED, P::UNSIGNED, P::ACCUM_SET, P::Shift(-16)>(data); break;
-        case UnifiedOpcode::OP_VMADN: m_exec.executeMultiply<P::CLAMP_SIGNED, P::UNSIGNED, P::SIGNED, P::ACCUM_ADD>(data); break;
-        case UnifiedOpcode::OP_VMUDN: m_exec.executeMultiply<P::CLAMP_SIGNED, P::UNSIGNED, P::SIGNED, P::ACCUM_SET>(data); break;
-        case UnifiedOpcode::OP_VMADM: m_exec.executeMultiply<P::CLAMP_SIGNED, P::SIGNED, P::UNSIGNED, P::ACCUM_ADD>(data); break;
-        case UnifiedOpcode::OP_VMUDM: m_exec.executeMultiply<P::CLAMP_SIGNED, P::SIGNED, P::UNSIGNED, P::ACCUM_SET>(data); break;
-        case UnifiedOpcode::OP_VMADH: m_exec.executeMultiply<P::CLAMP_SIGNED, P::SIGNED, P::SIGNED, P::ACCUM_ADD, P::Shift(16)>(data); break;
-        case UnifiedOpcode::OP_VMUDH: m_exec.executeMultiply<P::CLAMP_SIGNED, P::SIGNED, P::SIGNED, P::ACCUM_SET, P::Shift(16)>(data); break;
+        case UnifiedOpcode::OP_VMADL: m_exec.executeMultiply<P::CLAMP_SIGNED, P::UNSIGNED, P::UNSIGNED, P::ACCUM_ADD, P::ACCUM_LO_32, P::Shift(-16)>(data); break;
+        case UnifiedOpcode::OP_VMUDL: m_exec.executeMultiply<P::CLAMP_SIGNED, P::UNSIGNED, P::UNSIGNED, P::ACCUM_SET, P::ACCUM_LO_32, P::Shift(-16)>(data); break;
+        case UnifiedOpcode::OP_VMADN: m_exec.executeMultiply<P::CLAMP_UNSIGNED, P::UNSIGNED, P::SIGNED, P::ACCUM_ADD, P::ACCUM_LO_32>(data); break;
+        case UnifiedOpcode::OP_VMUDN: m_exec.executeMultiply<P::CLAMP_UNSIGNED, P::UNSIGNED, P::SIGNED, P::ACCUM_SET, P::ACCUM_LO_32>(data); break;
+        case UnifiedOpcode::OP_VMADM: m_exec.executeMultiply<P::CLAMP_SIGNED, P::SIGNED, P::UNSIGNED, P::ACCUM_ADD, P::ACCUM_HI_32>(data); break;
+        case UnifiedOpcode::OP_VMUDM: m_exec.executeMultiply<P::CLAMP_SIGNED, P::SIGNED, P::UNSIGNED, P::ACCUM_SET, P::ACCUM_HI_32>(data); break;
+        case UnifiedOpcode::OP_VMADH: m_exec.executeMultiply<P::CLAMP_SIGNED, P::SIGNED, P::SIGNED, P::ACCUM_ADD, P::ACCUM_HI_32, P::Shift(16)>(data); break;
+        case UnifiedOpcode::OP_VMUDH: m_exec.executeMultiply<P::CLAMP_SIGNED, P::SIGNED, P::SIGNED, P::ACCUM_SET, P::ACCUM_HI_32, P::Shift(16)>(data); break;
 
-        case UnifiedOpcode::OP_VMULF: m_exec.executeMultiply<P::CLAMP_SIGNED, P::SIGNED, P::SIGNED, P::ACCUM_SET, P::Shift(1), P::ROUND>(data); break;
-        case UnifiedOpcode::OP_VMULU: m_exec.executeMultiply<P::CLAMP_UNSIGNED, P::SIGNED, P::SIGNED, P::ACCUM_SET, P::Shift(1), P::ROUND>(data); break;
-        case UnifiedOpcode::OP_VMACF: m_exec.executeMultiply<P::CLAMP_SIGNED, P::SIGNED, P::SIGNED, P::ACCUM_ADD, P::Shift(1)>(data); break;
-        case UnifiedOpcode::OP_VMACU: m_exec.executeMultiply<P::CLAMP_UNSIGNED, P::SIGNED, P::SIGNED, P::ACCUM_ADD, P::Shift(1)>(data); break;
+        case UnifiedOpcode::OP_VMULF: m_exec.executeMultiply<P::CLAMP_SIGNED, P::SIGNED, P::SIGNED, P::ACCUM_SET, P::ACCUM_HI_32, P::Shift(1), P::ROUND>(data); break;
+        case UnifiedOpcode::OP_VMULU: m_exec.executeMultiply<P::CLAMP_UNSIGNED, P::SIGNED, P::SIGNED, P::ACCUM_SET, P::ACCUM_HI_32, P::Shift(1), P::ROUND>(data); break;
+        case UnifiedOpcode::OP_VMACF: m_exec.executeMultiply<P::CLAMP_SIGNED, P::SIGNED, P::SIGNED, P::ACCUM_ADD, P::ACCUM_HI_32, P::Shift(1)>(data); break;
+        case UnifiedOpcode::OP_VMACU: m_exec.executeMultiply<P::CLAMP_UNSIGNED, P::SIGNED, P::SIGNED, P::ACCUM_ADD, P::ACCUM_HI_32, P::Shift(1)>(data); break;
 
         case UnifiedOpcode::OP_VAND: m_exec.executeBivariate(data, Func::AND); break;
         case UnifiedOpcode::OP_VNAND: m_exec.executeBivariate(data, Func::NAND); break;
