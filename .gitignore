@@ -8,6 +8,7 @@ Makefile
 log.json
 rom_initial_1mib.txt
 **/__pycache__
+**/*.bin
 *.o
 *.obj
 *.a

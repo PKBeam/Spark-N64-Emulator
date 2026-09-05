@@ -8,6 +8,8 @@ This is an educational project. The goal is to implement a high-performance (not
 
 Able to boot into the beginning of a game.
 
+[](data/image.png)
+
 ## Building
 
 Requirements:
