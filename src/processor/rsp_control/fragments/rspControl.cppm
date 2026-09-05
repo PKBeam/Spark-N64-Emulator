@@ -341,7 +341,11 @@ auto Control::patchRspBootAntiPiracyCheck() -> void {
     // Patch CIC-6105 RSP boot anti piracy check
     if (m_rspAddr == 0x1000) {
         if (m_memory->read<uint32_t>(m_ramAddr) == 0x08000411 /* J  0x411 */) {
-            m_memory->write<uint32_t>(RSP_MEM_BASE + m_rspAddr, 0x08000025 /* J  0x25 */);
+            // patch out branch checks
+            constexpr auto BranchOffsets = std::array<uint32_t, 5>{0x04c, 0x05c, 0x068, 0x074, 0x07c};
+            for (const auto offset : BranchOffsets) {
+                m_memory->write<uint32_t>(RSP_MEM_BASE + m_rspAddr + offset, 0x00000000 /* NOP */);
+            }
             IF_LOG_ENABLED(m_logger) {
                 m_logger->log<Level::MAX, Sev::WARNING, Sys::RSP_REG>("Patched out the CIC-6105 anti-piracy check in RSP boot code");
             }

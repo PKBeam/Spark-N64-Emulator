@@ -280,8 +280,9 @@ auto RSP::runInstruction() -> void {
                 }
                 case 2: {
                     const auto ops = std::bit_cast<ISA::RSP::TypeVM>(data);
-                    const auto vpr = m_vprs.readVpr<int16_t>(ops.vs, static_cast<ISA::VEC_ELEM>(ops.vsElem));
-                    m_gprs.writeGpr<int32_t>(ops.rt, vpr[0]);
+                    const auto vpr = m_vprs.readVpr<int16_t>(ops.vs);
+                    const auto gpr = (vpr.getByte(ops.vsElem) << 8) | vpr.getByte((ops.vsElem + 1) % 16);
+                    m_gprs.writeGpr<int32_t>(ops.rt, static_cast<int16_t>(gpr));
                     break;
                 }
                 default: throw Util::Error("Unsupported instruction on coprocessor {}", cp);
@@ -297,21 +298,11 @@ auto RSP::runInstruction() -> void {
                     break;
                 }
                 case 2: {
-                    const auto ops  = std::bit_cast<ISA::RSP::TypeVM>(data);
-                    const auto gpr  = m_gprs.readGpr<uint16_t>(ops.rt);
-                    const auto elem = static_cast<ISA::VEC_ELEM>(ops.vsElem);
-                    auto       vpr  = WITH_LOG_DISABLED(m_logger, m_vprs.readVpr<uint16_t>(ops.vs));
-                    switch (elem) {
-                        case ISA::VEC_ELEM::e0: vpr[0] = gpr; break;
-                        case ISA::VEC_ELEM::e1: vpr[1] = gpr; break;
-                        case ISA::VEC_ELEM::e2: vpr[2] = gpr; break;
-                        case ISA::VEC_ELEM::e3: vpr[3] = gpr; break;
-                        case ISA::VEC_ELEM::e4: vpr[4] = gpr; break;
-                        case ISA::VEC_ELEM::e5: vpr[5] = gpr; break;
-                        case ISA::VEC_ELEM::e6: vpr[6] = gpr; break;
-                        case ISA::VEC_ELEM::e7: vpr[7] = gpr; break;
-                        default: throw Util::Error("Unsupported vector element {}", static_cast<int>(elem));
-                    }
+                    const auto ops = std::bit_cast<ISA::RSP::TypeVM>(data);
+                    const auto gpr = m_gprs.readGpr<uint16_t>(ops.rt);
+                    auto       vpr = WITH_LOG_DISABLED(m_logger, m_vprs.readVpr<uint16_t>(ops.vs));
+                    vpr.setByte(ops.vsElem, gpr >> 8);
+                    vpr.setByte((ops.vsElem + 1) % 16, gpr & 0xFF);
                     m_vprs.writeVpr(ops.vs, vpr);
                     break;
                 }
