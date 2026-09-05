@@ -39,7 +39,7 @@ class CPU {
 
     auto checkInterrupts() -> void;
 
-    auto runInstruction() -> void;
+    auto runCpuInstruction() -> void;
 
   private:
     Registers<Sys::CPU>                  m_regs;
@@ -112,7 +112,7 @@ auto CPU::checkInterrupts() -> void {
     }
 }
 
-auto CPU::runInstruction() -> void {
+auto CPU::runCpuInstruction() -> void {
     using namespace Opcodes;
     namespace P        = Param;
     namespace Func     = Util::Function;

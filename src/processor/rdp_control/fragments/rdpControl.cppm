@@ -39,7 +39,7 @@ class Control {
 
     auto hasCommands() const -> bool;
 
-    auto getCommands() -> std::deque<uint64_t>; // may be called on a different thread
+    auto getCommands() -> std::deque<uint64_t>&; // may be called on a different thread but only by one caller
 
   private:
     auto fetchCommands() -> void; // fetch commands from RDRAM/DMEM
@@ -62,9 +62,9 @@ auto Control::hasCommands() const -> bool {
     return !m_cmdBufferIn.empty();
 }
 
-auto Control::getCommands() -> std::deque<uint64_t> {
+auto Control::getCommands() -> std::deque<uint64_t>& {
     if (!hasCommands()) {
-        return {};
+        return m_cmdBufferOut;
     }
 
     { // lock commands

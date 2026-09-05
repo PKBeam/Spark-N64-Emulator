@@ -129,12 +129,10 @@ auto CP0::writeReg(T value) -> void {
 }
 
 auto CP0::incrementCount() -> void {
-    auto count = WITH_LOG_DISABLED(m_logger, readReg<ISA::CP0_REG::COUNT>());
-    count += 1;
-    WITH_LOG_DISABLED(m_logger, writeReg<ISA::CP0_REG::COUNT>(count));
-
-    const auto compare = WITH_LOG_DISABLED(m_logger, readReg<ISA::CP0_REG::COMPARE>());
-    if (count == compare) {
+    // direct accesses because this will be called a LOT
+    auto&      count   = m_regs[static_cast<uint8_t>(ISA::CP0_REG::COUNT)];
+    const auto compare = m_regs[static_cast<uint8_t>(ISA::CP0_REG::COMPARE)];
+    if (++count == compare) {
         auto cause = readReg<ISA::CP0_REG::CAUSE>();
         cause.ip |= 0x80; // set IP7
         writeReg(cause);

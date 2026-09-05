@@ -38,7 +38,7 @@ class RSP {
 
     auto dumpIMem(std::filesystem::path file = "rsp_imem.txt") const -> void;
 
-    auto runInstruction() -> void;
+    auto runRspInstruction() -> void;
 
   private:
     std::shared_ptr<Util::Logger> m_logger;
@@ -67,7 +67,7 @@ auto RSP::dumpIMem(std::filesystem::path file) const -> void {
     romDumper.flush();
 }
 
-auto RSP::runInstruction() -> void {
+auto RSP::runRspInstruction() -> void {
     if (m_control->getHalt()) {
         return;
     }

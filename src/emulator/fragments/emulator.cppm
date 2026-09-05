@@ -171,10 +171,10 @@ constexpr auto Emulator::loadRom(std::filesystem::path path) -> void {
             //     m_videoInterface->clearTimerFired();
             // }
             m_cpu->checkInterrupts();
-            m_cpu->runInstruction();
+            m_cpu->runCpuInstruction();
             m_cp0->incrementCount();
             try {
-                m_rsp->runInstruction();
+                m_rsp->runRspInstruction();
             } catch (const Util::Error& e) {
                 m_rsp->dumpIMem("rsp_imem.txt");
                 throw;

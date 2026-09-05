@@ -45,7 +45,7 @@ auto makeCommand(std::deque<uint64_t>& cmds, uint64_t firstWord) -> CommandT {
 }
 
 auto RDP::runCommand() -> void {
-    auto cmds = m_rdpControl->getCommands();
+    auto& cmds = m_rdpControl->getCommands();
     if (cmds.empty()) {
         return;
     }
