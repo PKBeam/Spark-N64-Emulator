@@ -2,41 +2,133 @@
 import sys
 import json
 import matplotlib.pyplot as plt
+from matplotlib.widgets import Button
 from matplotlib.patches import Polygon, Rectangle
+
+class PlotNavigator:
+    def __init__(self, fileName: str):
+        self.file = open(fileName, "rb")
+        self.frames = self.loadFrames()
+        self.frame = 0
+        self.isPlaying = False
+        self.fig, self.ax = plt.subplots()
+
+        plt.subplots_adjust(bottom=0.2)
+        self.fig.set_size_inches(15, 10)
+
+        EXTENT_X = 400
+        EXTENT_Y = 300
+        self.ax.set_xlim(-EXTENT_X + 160, EXTENT_X + 160)
+        self.ax.set_ylim(-EXTENT_Y + 120, EXTENT_Y + 120)
+
+        self.animation = self.fig.canvas.new_timer(interval=50)
+        self.animation.add_callback(self.animate)
+        self.update()
+
+        buttons = [
+            (0.35, 'Reset', self.resetFrame),
+            (0.45, 'Previous', self.previousFrame),
+            (0.55, 'Play', self.toggleAnimation),
+            (0.65, 'Next', self.nextFrame),
+        ]
+        self.buttons = {}
+        for position, label, callback in buttons:
+            axis = self.fig.add_axes([position, 0.05, 0.075, 0.075])
+            button = Button(axis, label)
+            button.on_clicked(callback)
+            self.buttons[label] = button
+
+    def loadFrames(self):
+        frames = [[]]
+        for textLine in self.file:
+            try:
+                log = json.loads(textLine)
+            except json.JSONDecodeError:
+                print("Malformed JSON:", textLine)
+                break
+
+            if log.get("command") == "SYNC_FULL":
+                frames.append([])
+                continue
+            if log.get("op") != "draw":
+                continue
+
+            coords = log.get("coords")[1:-1].split("), (")
+            if log.get("type") == "rectangle":
+                x0, y0 = map(float, coords[0].split(", "))
+                x1, y1 = map(float, coords[1].split(", "))
+                patch = Rectangle((x0, y0), x1 - x0, y1 - y0, facecolor=(0, 0, 0, 0.25))
+            elif log.get("type") == "triangle":
+                points = [list(map(float, coord.split(", "))) for coord in coords]
+                patch = Polygon(points, facecolor=(0, 0, 0, 0.25))
+            else:
+                continue
+
+            frames[-1].append(patch)
+
+        self.file.close()
+        return frames
+
+    def update(self):
+        xlim = self.ax.get_xlim()
+        ylim = self.ax.get_ylim()
+        self.ax.clear()
+        self.ax.set_xlim(xlim)
+        self.ax.set_ylim(ylim)
+        
+        self.ax.set_aspect("equal")
+        self.ax.add_patch(Rectangle((0, 0), 320, 240, fill=False, linewidth=2, edgecolor="red"))
+        for patch in self.frames[self.frame]:
+            self.ax.add_patch(patch)
+
+        self.fig.canvas.draw()
+
+    def previousFrame(self, event):
+        self.frame = max(0, self.frame - 1)
+        self.update()
+        plt.draw()
+
+    def nextFrame(self, event):
+        self.frame = min(len(self.frames) - 1, self.frame + 1)
+        self.update()
+        plt.draw()
+
+    def resetFrame(self, event):
+        self.frame = 0
+        self.update()
+        plt.draw()
+
+    def endFrame(self, event):
+        self.frame = len(self.frames) - 1
+        self.update()
+        plt.draw()
+
+    def toggleAnimation(self, event):
+        self.isPlaying = not self.isPlaying
+        if self.isPlaying:
+            self.buttons['Play'].label.set_text('Stop')
+            self.animation.start()
+        else:
+            self.buttons['Play'].label.set_text('Play')
+            self.animation.stop()
+        self.fig.canvas.draw_idle()
+
+    def animate(self):
+        if self.frame >= len(self.frames) - 1:
+            self.isPlaying = False
+            self.buttons['Play'].label.set_text('Play')
+            self.animation.stop()
+            self.fig.canvas.draw_idle()
+            return
+
+        self.frame += 1
+        self.update()
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
         print("Usage: renderRdpFrame.py <file>")
         sys.exit(1)
-
-    fig, ax = plt.subplots()
-    EXTENT = 512
-    ax.set_xlim(-EXTENT + 160, EXTENT + 160)
-    ax.set_ylim(-EXTENT + 120, EXTENT + 120)
-    ax.set_aspect("equal")
-
-    ax.add_patch(Rectangle((0, 0), 320, 240, fill=False, linewidth=2, edgecolor="red"))
     
     file = sys.argv[1]
-    with open(file, "rb") as f:
-        for textLine in f.readlines():
-            log = json.loads(textLine)
-            if log.get("command") == "SYNC_FULL":
-                break
-            if log.get("op") != "draw":
-                continue
-
-            coords = log.get("coords")[1:-1].split("), (")
-
-            if log.get("type") == "rectangle":
-                x0, y0 = map(float, coords[0].split(", "))
-                x1, y1 = map(float, coords[1].split(", "))
-                ax.add_patch(Rectangle((x0, y0), x1 - x0, y1 - y0, facecolor=(0, 0, 0, 0.25)))
-                pass
-            elif log.get("type") == "triangle":
-                x0, y0 = map(float, coords[0].split(", "))
-                x1, y1 = map(float, coords[1].split(", "))
-                x2, y2 = map(float, coords[2].split(", "))
-                ax.add_patch(Polygon([[x0, y0], [x1, y1], [x2, y2]], facecolor=(0, 0, 0, 0.25)))
-
-        plt.show()
+    plotNav = PlotNavigator(file)
+    plt.show()

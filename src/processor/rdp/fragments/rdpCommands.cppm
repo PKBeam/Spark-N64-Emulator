@@ -98,12 +98,22 @@ struct FillTriangle {
         constexpr auto ConvertS11_16 = [](uint64_t value) {
             return Util::toFloat<true, 12, 16>(value);
         };
+        constexpr auto ConvertS14_16 = [](uint64_t value) {
+            return Util::toFloat<true, 14, 16>(value);
+        };
         constexpr auto ConvertS11_2 = [](uint64_t value) {
             return Util::toFloat<true, 12, 2>(value);
         };
-        const auto v0 = Util::Point(ConvertS11_16((xlI << 16) + xlF), ConvertS11_2(yl));
-        const auto v1 = Util::Point(ConvertS11_16((xhI << 16) + xhF), ConvertS11_2(yh));
-        const auto v2 = Util::Point(ConvertS11_16((xmI << 16) + xmF), ConvertS11_2(ym));
+        const auto dxdy = ConvertS14_16((dxHdyI << 16) + dxHdyF);
+        const auto y0   = ConvertS11_2(yh);
+        const auto y1   = ConvertS11_2(ym);
+        const auto y2   = ConvertS11_2(yl);
+        const auto x0   = ConvertS11_16((xhI << 16) + xhF);
+        const auto x1   = ConvertS11_16((xlI << 16) + xlF);
+        const auto x2   = x0 + (y2 - y0) * dxdy;
+        const auto v0   = Util::Point(x0, y0);
+        const auto v1   = Util::Point(x1, y1);
+        const auto v2   = Util::Point(x2, y2);
         return Util::Triangle(v0, v1, v2);
     }
 

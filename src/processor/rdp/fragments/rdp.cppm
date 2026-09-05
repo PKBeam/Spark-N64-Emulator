@@ -133,6 +133,8 @@ auto RDP::runCommand() -> void {
             case Command::SET_TILE_SIZE: [[fallthrough]];
             case Command::SET_PRIMITIVE_COLOR: [[fallthrough]];
             case Command::SET_ENVIRONMENT_COLOR: [[fallthrough]];
+            case Command::LOAD_TLUT: [[fallthrough]];
+            case Command::LOAD_TILE: [[fallthrough]];
             case Command::SET_SCISSOR:
                 IF_LOG_ENABLED(m_logger) {
                     m_logger->log<Level::HIGH, Sev::WARNING, Sys::RDP>("Ignoring command {}", cmdType);

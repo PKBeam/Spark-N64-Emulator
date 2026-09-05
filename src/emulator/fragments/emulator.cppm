@@ -162,7 +162,7 @@ constexpr auto Emulator::loadRom(std::filesystem::path path) -> void {
     try {
         static std::size_t viTimer = 0;
         while (true) {
-            if (viTimer++ == std::numeric_limits<std::size_t>::max()) {
+            if (viTimer++ == std::numeric_limits<std::uint16_t>::max()) {
                 viTimer = 0;
                 m_mipsInterface->setInterrupt<^^Interfaces::MI_INTERRUPT::vi>(true);
             }
