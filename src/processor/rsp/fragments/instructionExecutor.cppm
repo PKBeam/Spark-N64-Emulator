@@ -430,7 +430,8 @@ auto InstructionExecutor::executeSingleLane(uint32_t inst, Function&& func) -> v
 auto InstructionExecutor::executeSingleLaneMove(uint32_t inst) -> void {
     const auto ops    = std::bit_cast<ISA::RSP::TypeVS>(inst);
     const auto vdLane = ISA::singleLaneFor(static_cast<ISA::VEC_ELEM>(ops.vdElem));
-    const auto vt     = m_vprs->readVpr<uint16_t>(ops.vt);
+    const auto vtElem = static_cast<ISA::VEC_ELEM>(ops.vtElem);
+    const auto vt     = m_vprs->readVpr<uint16_t>(ops.vt, vtElem);
 
     // write vd
     auto vd    = m_vprs->readVpr<uint16_t>(ops.vd);
@@ -438,11 +439,9 @@ auto InstructionExecutor::executeSingleLaneMove(uint32_t inst) -> void {
     m_vprs->writeVpr(ops.vd, vd);
 
     // load accumulators
-    const auto vtElem  = static_cast<ISA::VEC_ELEM>(ops.vtElem);
-    const auto vtBcast = m_vprs->readVpr<uint16_t>(ops.vt, vtElem);
-    auto       accs    = m_vprs->readAccumulators();
+    auto accs = m_vprs->readAccumulators();
     for (auto i : std::views::iota(0, 8)) {
-        accs[i].low = vtBcast[i];
+        accs[i].low = vt[i];
     }
     m_vprs->writeAccumulators(accs);
 }
