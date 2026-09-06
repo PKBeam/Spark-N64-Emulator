@@ -43,11 +43,14 @@ class Logger {
         VI,
     };
     enum class Level : uint8_t {
-        MAX  = 255,
-        HIGH = 3,
-        MED  = 2,
-        LOW  = 1,
-        NONE = 0
+        MAX       = 255,
+        HIGH      = 128,
+        MED       = 64,
+        LOW       = 32,
+        INST_HIGH = 16,
+        INST_MED  = 15,
+        INST_LOW  = 14,
+        NONE      = 0
     };
     enum class Severity {
         INFO,

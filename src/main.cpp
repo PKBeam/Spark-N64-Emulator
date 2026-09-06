@@ -43,6 +43,10 @@ int main(int argc, char* argv[]) {
         if (arg == "--log-after-boot"sv) {
             emulatorConfig.logAfterBoot = true;
         }
+        if (arg.starts_with("--log-after-rdp-sync="sv)) {
+            auto sync                      = std::string(arg.substr(21));
+            emulatorConfig.logAfterRdpSync = std::stoi(sync);
+        }
 
         if (arg.starts_with("--log-sys=")) {
             auto systems = std::string_view(arg).substr(10);
@@ -77,6 +81,10 @@ int main(int argc, char* argv[]) {
     if (logLevel) {
         emulatorConfig.logger = std::make_shared<Util::Logger>("log.json"sv);
         emulatorConfig.logger->setLevel(*logLevel);
+    }
+    if (emulatorConfig.logAfterRdpSync) {
+        contract_assert(emulatorConfig.logger != nullptr);
+        emulatorConfig.logger->disable();
     }
     if (emulatorConfig.logAfterBoot) {
         contract_assert(emulatorConfig.logger != nullptr);

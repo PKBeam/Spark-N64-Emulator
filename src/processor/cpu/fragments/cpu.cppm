@@ -241,8 +241,8 @@ auto CPU::runCpuInstruction() -> void {
         // FPU instructions
         case UnifiedOpcode::OP_CVT_S_FMT: m_cp1->getExec()->executeConvert<float>(data); break;
         case UnifiedOpcode::OP_CVT_D_FMT: m_cp1->getExec()->executeConvert<double>(data); break;
-        case UnifiedOpcode::OP_CVT_W_FMT: m_cp1->getExec()->executeConvert<uint32_t>(data); break;
-        case UnifiedOpcode::OP_CVT_L_FMT: m_cp1->getExec()->executeConvert<uint64_t>(data); break;
+        case UnifiedOpcode::OP_CVT_W_FMT: m_cp1->getExec()->executeConvert<int32_t>(data); break;
+        case UnifiedOpcode::OP_CVT_L_FMT: m_cp1->getExec()->executeConvert<int64_t>(data); break;
 
         case UnifiedOpcode::OP_ADD_FMT: m_cp1->getExec()->executeBivariate(data, Func::ADD, FpExcept::ADD); break;
         case UnifiedOpcode::OP_SUB_FMT: m_cp1->getExec()->executeBivariate(data, Func::SUB, FpExcept::ADD); break;
@@ -253,14 +253,14 @@ auto CPU::runCpuInstruction() -> void {
         case UnifiedOpcode::OP_NEG_FMT: m_cp1->getExec()->executeBivariate(data, Func::NEG, FpExcept::NEG); break;
         case UnifiedOpcode::OP_MOV_FMT: m_cp1->getExec()->executeBivariate(data, Func::NOP); break;
 
-        case UnifiedOpcode::OP_ROUND_W_FMT: m_cp1->getExec()->executeConvert<uint32_t>(data, Util::FP_ROUND_MODE::NEAREST); break;
-        case UnifiedOpcode::OP_ROUND_L_FMT: m_cp1->getExec()->executeConvert<uint64_t>(data, Util::FP_ROUND_MODE::NEAREST); break;
-        case UnifiedOpcode::OP_TRUNC_W_FMT: m_cp1->getExec()->executeConvert<uint32_t>(data, Util::FP_ROUND_MODE::TO_ZERO); break;
-        case UnifiedOpcode::OP_TRUNC_L_FMT: m_cp1->getExec()->executeConvert<uint64_t>(data, Util::FP_ROUND_MODE::TO_ZERO); break;
-        case UnifiedOpcode::OP_CEIL_W_FMT: m_cp1->getExec()->executeConvert<uint32_t>(data, Util::FP_ROUND_MODE::UP); break;
-        case UnifiedOpcode::OP_CEIL_L_FMT: m_cp1->getExec()->executeConvert<uint64_t>(data, Util::FP_ROUND_MODE::UP); break;
-        case UnifiedOpcode::OP_FLOOR_W_FMT: m_cp1->getExec()->executeConvert<uint32_t>(data, Util::FP_ROUND_MODE::DOWN); break;
-        case UnifiedOpcode::OP_FLOOR_L_FMT: m_cp1->getExec()->executeConvert<uint64_t>(data, Util::FP_ROUND_MODE::DOWN); break;
+        case UnifiedOpcode::OP_ROUND_W_FMT: m_cp1->getExec()->executeConvert<int32_t>(data, Util::FP_ROUND_MODE::NEAREST); break;
+        case UnifiedOpcode::OP_ROUND_L_FMT: m_cp1->getExec()->executeConvert<int64_t>(data, Util::FP_ROUND_MODE::NEAREST); break;
+        case UnifiedOpcode::OP_TRUNC_W_FMT: m_cp1->getExec()->executeConvert<int32_t>(data, Util::FP_ROUND_MODE::TO_ZERO); break;
+        case UnifiedOpcode::OP_TRUNC_L_FMT: m_cp1->getExec()->executeConvert<int64_t>(data, Util::FP_ROUND_MODE::TO_ZERO); break;
+        case UnifiedOpcode::OP_CEIL_W_FMT: m_cp1->getExec()->executeConvert<int32_t>(data, Util::FP_ROUND_MODE::UP); break;
+        case UnifiedOpcode::OP_CEIL_L_FMT: m_cp1->getExec()->executeConvert<int64_t>(data, Util::FP_ROUND_MODE::UP); break;
+        case UnifiedOpcode::OP_FLOOR_W_FMT: m_cp1->getExec()->executeConvert<int32_t>(data, Util::FP_ROUND_MODE::DOWN); break;
+        case UnifiedOpcode::OP_FLOOR_L_FMT: m_cp1->getExec()->executeConvert<int64_t>(data, Util::FP_ROUND_MODE::DOWN); break;
 
         case UnifiedOpcode::OP_C_F_FMT: m_cp1->getExec()->executeCompare<Param::ORDERED>(data, Func::FALSE); break;
         case UnifiedOpcode::OP_C_UN_FMT: m_cp1->getExec()->executeCompare<Param::UNORDERED>(data, Func::FALSE); break;

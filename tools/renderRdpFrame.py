@@ -5,14 +5,20 @@ import matplotlib.pyplot as plt
 from matplotlib.widgets import Button
 from matplotlib.patches import Polygon, Rectangle
 
+def pointFromLog(logStr: str):
+    point = list(map(float, logStr[1:-1].split(", ")))
+    point[1] = 240 - point[1]
+    return point
+
 class PlotNavigator:
     def __init__(self, fileName: str):
         self.file = open(fileName, "rb")
-        self.frames = self.loadFrames()
         self.frame = 0
+        self.primColour = [0, 0, 0, 1]
         self.isPlaying = False
         self.fig, self.ax = plt.subplots()
 
+        self.frames = self.loadFrames()
         plt.subplots_adjust(bottom=0.2)
         self.fig.set_size_inches(15, 10)
 
@@ -50,21 +56,24 @@ class PlotNavigator:
             if log.get("command") == "SYNC_FULL":
                 frames.append([])
                 continue
-            if log.get("op") != "draw":
+            
+            if log.get("op") == "setColour":
+                self.primColour = list(map(float, log.get("colour")[1:-1].split(", ")))
                 continue
 
-            coords = log.get("coords")[1:-1].split("), (")
-            if log.get("type") == "rectangle":
-                x0, y0 = map(float, coords[0].split(", "))
-                x1, y1 = map(float, coords[1].split(", "))
-                patch = Rectangle((x0, y0), x1 - x0, y1 - y0, facecolor=(0, 0, 0, 0.25))
-            elif log.get("type") == "triangle":
-                points = [list(map(float, coord.split(", "))) for coord in coords]
-                patch = Polygon(points, facecolor=(0, 0, 0, 0.25))
-            else:
+            if log.get("op") == "draw":
+                coords = log.get("coords")[1:-1].split("), (")
+                if log.get("type") == "rectangle":
+                    x0, y0 = pointFromLog(coords[0])
+                    x1, y1 = pointFromLog(coords[1])
+                    patch = Rectangle((x0, y0), x1 - x0, y1 - y0, facecolor=self.primColour)
+                elif log.get("type") == "triangle":
+                    points = [pointFromLog(coord) for coord in coords]
+                    patch = Polygon(points, facecolor=self.primColour)
+                else:
+                    continue
+                frames[-1].append(patch)
                 continue
-
-            frames[-1].append(patch)
 
         self.file.close()
         return frames

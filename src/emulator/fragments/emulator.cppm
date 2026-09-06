@@ -24,11 +24,12 @@ using namespace std::string_view_literals;
 export class Emulator {
   public:
     struct Config {
-        std::shared_ptr<Util::Logger> logger       = nullptr;
-        std::size_t                   memorySize   = 0;
-        bool                          dumpRom      = false;
-        bool                          dumpPifRom   = false;
-        bool                          logAfterBoot = false;
+        std::shared_ptr<Util::Logger> logger          = nullptr;
+        std::size_t                   memorySize      = 0;
+        bool                          dumpRom         = false;
+        bool                          dumpPifRom      = false;
+        bool                          logAfterBoot    = false;
+        std::optional<std::size_t>    logAfterRdpSync = std::nullopt;
     };
 
     constexpr Emulator(Config config);
@@ -159,6 +160,11 @@ constexpr auto Emulator::loadRom(std::filesystem::path path) -> void {
             m_logger->log<Level::HIGH, Sev::INFO>("Game booted");
         }
     });
+    if (m_logger) {
+        m_rdp->registerSyncCallback(*m_config.logAfterRdpSync, [this]() {
+            m_logger->enable();
+        });
+    }
     try {
         static std::size_t viTimer = 0;
         while (true) {

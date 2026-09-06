@@ -10,7 +10,7 @@ import Util;
 export namespace CP1 {
 
 template <typename T>
-concept FloatType_c = std::is_same_v<T, float> || std::is_same_v<T, double> || std::is_same_v<T, uint32_t> || std::is_same_v<T, uint64_t>;
+concept FloatType_c = std::is_same_v<T, float> || std::is_same_v<T, double> || std::is_same_v<T, int32_t> || std::is_same_v<T, int64_t>;
 
 struct Registers {
     enum class Mode : bool {
@@ -27,7 +27,7 @@ struct Registers {
     constexpr auto readFpr(std::size_t index) const -> T; //
                                                           // pre(m_mode == Mode::FPRS_32 || (index % 2 == 0));
 
-    constexpr auto readFpr(std::size_t index, ISA::CP1_FORMAT fmt) const -> std::variant<float, double, uint32_t, uint64_t>;
+    constexpr auto readFpr(std::size_t index, ISA::CP1_FORMAT fmt) const -> std::variant<float, double, int32_t, int64_t>;
 
     template <typename T>
         requires(FloatType_c<T>)
@@ -129,12 +129,12 @@ constexpr auto Registers::readFpr(std::size_t index) const -> T {
     return value;
 }
 
-constexpr auto Registers::readFpr(std::size_t index, ISA::CP1_FORMAT fmt) const -> std::variant<float, double, uint32_t, uint64_t> {
+constexpr auto Registers::readFpr(std::size_t index, ISA::CP1_FORMAT fmt) const -> std::variant<float, double, int32_t, int64_t> {
     switch (fmt) {
         case ISA::CP1_FORMAT::S: return readFpr<float>(index);
         case ISA::CP1_FORMAT::D: return readFpr<double>(index);
-        case ISA::CP1_FORMAT::W: return readFpr<uint32_t>(index);
-        case ISA::CP1_FORMAT::L: return readFpr<uint64_t>(index);
+        case ISA::CP1_FORMAT::W: return readFpr<int32_t>(index);
+        case ISA::CP1_FORMAT::L: return readFpr<int64_t>(index);
         default: throw Util::Error("Invalid CP1 float format {}", static_cast<int>(fmt));
     }
 }

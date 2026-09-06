@@ -68,7 +68,11 @@ constexpr auto RomFile::dump(std::filesystem::path file) const -> void {
     romDumper.setLevel(Level::MAX);
     for (auto i = 0uz; i < m_size; i += 4) {
         const auto word = read<uint32_t>(i);
-        romDumper.print(HEXFMT32 ": {}", i, ISA::Instruction(word));
+        try {
+            romDumper.print(HEXFMT32 ": {}", i, ISA::Instruction(word));
+        } catch (const Util::Error& e) {
+            romDumper.print(HEXFMT32 ": UNKNOWN({})", i, word);
+        }
     }
     romDumper.flush();
 }

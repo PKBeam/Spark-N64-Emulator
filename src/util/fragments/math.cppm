@@ -50,6 +50,16 @@ constexpr auto isQNaN(T value) -> bool {
     }
 }
 
+template <std::floating_point T>
+constexpr auto isPosInf(T value) -> bool {
+    return std::isinf(value) && value > 0;
+}
+
+template <std::floating_point T>
+constexpr auto isNegInf(T value) -> bool {
+    return std::isinf(value) && value < 0;
+}
+
 template <std::integral T, std::integral U>
 constexpr auto clamp(U value_) -> T {
     const auto     value = static_cast<int64_t>(value_);
@@ -82,6 +92,13 @@ constexpr auto toFloat(T fixedPoint) -> float {
     return fixedPoint / scale;
 }
 
+struct Colour {
+    float r;
+    float g;
+    float b;
+    float a;
+};
+
 template <typename T = float>
     requires(std::is_arithmetic_v<T>)
 struct Point {
@@ -108,6 +125,17 @@ struct Rectangle {
 };
 
 } // namespace Util
+
+template <>
+struct std::formatter<Util::Colour> {
+    constexpr auto parse(std::format_parse_context& ctx) -> std::format_parse_context::iterator {
+        return ctx.begin();
+    }
+
+    constexpr auto format(const Util::Colour& c, std::format_context& ctx) const {
+        return std::format_to(ctx.out(), "({:.2f}, {:.2f}, {:.2f}, {:.2f})", c.r, c.g, c.b, c.a);
+    }
+};
 
 template <typename T>
 struct std::formatter<Util::Point<T>> {

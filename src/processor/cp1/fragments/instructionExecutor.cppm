@@ -25,17 +25,26 @@ export namespace CP1 {
 namespace ExceptionFunc { // TODO inexact/overflow/underflow exceptions, denorm/QNaN
 constexpr auto ADD = [](std::floating_point auto a, std::floating_point auto b) -> ISA::CP1_EXCEPTION {
     if (Util::isSNaN(a) || Util::isSNaN(b)) return ISA::CP1_EXCEPTION::INVALID_OP;
-    if (std::isinf(a) && std::isinf(b)) return ISA::CP1_EXCEPTION::INVALID_OP;
+    if (Util::isPosInf(a) && Util::isNegInf(b)) return ISA::CP1_EXCEPTION::INVALID_OP;
+    if (Util::isNegInf(a) && Util::isPosInf(b)) return ISA::CP1_EXCEPTION::INVALID_OP;
+    return ISA::CP1_EXCEPTION::NONE; };
+
+constexpr auto SUB = [](std::floating_point auto a, std::floating_point auto b) -> ISA::CP1_EXCEPTION {
+    if (Util::isSNaN(a) || Util::isSNaN(b)) return ISA::CP1_EXCEPTION::INVALID_OP;
+    if (Util::isPosInf(a) && Util::isPosInf(b)) return ISA::CP1_EXCEPTION::INVALID_OP;
+    if (Util::isNegInf(a) && Util::isNegInf(b)) return ISA::CP1_EXCEPTION::INVALID_OP;
     return ISA::CP1_EXCEPTION::NONE; };
 
 constexpr auto MUL = [](std::floating_point auto a, std::floating_point auto b) -> ISA::CP1_EXCEPTION {
     if (Util::isSNaN(a) || Util::isSNaN(b)) return ISA::CP1_EXCEPTION::INVALID_OP;
     if (a == 0 && std::isinf(b)) return ISA::CP1_EXCEPTION::INVALID_OP;
+    if (std::isinf(a) && b == 0) return ISA::CP1_EXCEPTION::INVALID_OP;
     return ISA::CP1_EXCEPTION::NONE; };
 
 constexpr auto DIV = [](std::floating_point auto a, std::floating_point auto b) -> ISA::CP1_EXCEPTION {
     if (Util::isSNaN(a) || Util::isSNaN(b)) return ISA::CP1_EXCEPTION::INVALID_OP;
-    if ((a == 0 && b == 0) || (std::isinf(a) && std::isinf(b))) return ISA::CP1_EXCEPTION::INVALID_OP;
+    if (a == 0 && b == 0) return ISA::CP1_EXCEPTION::INVALID_OP;
+    if (std::isinf(a) && std::isinf(b)) return ISA::CP1_EXCEPTION::INVALID_OP;
     if (b == 0) return ISA::CP1_EXCEPTION::DIVIDE_BY_ZERO;
     return ISA::CP1_EXCEPTION::NONE;
 };
@@ -148,7 +157,10 @@ auto InstructionExecutor::executeBivariate(uint32_t inst, Function&& func, Excep
         if constexpr (!std::is_same_v<ExceptionFunc, std::nullptr_t> && std::is_floating_point_v<decltype(T)>) {
             const auto exception = exceptFunc(fs, ft);
             if (exception != ISA::CP1_EXCEPTION::NONE) {
-                throw Util::Error("FPU exception {} occurred during instruction execution", static_cast<int>(exception));
+                throw Util::Error("FPU exception {} occurred during instruction execution (fs={}, ft={})",
+                                  static_cast<int>(exception),
+                                  fs,
+                                  ft);
             }
         }
         const auto result = func(fs, ft);
