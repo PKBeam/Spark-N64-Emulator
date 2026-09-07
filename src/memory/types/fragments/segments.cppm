@@ -40,6 +40,20 @@ enum class PhysSeg {
 };
 // clang-format on
 
+template <std::integral T>
+constexpr auto makePrintData(T data) {
+    const auto udata = static_cast<std::make_unsigned_t<T>>(data);
+    if constexpr (sizeof(T) == 1) {
+        return std::tuple{"data", HEXFMT8, udata};
+    } else if constexpr (sizeof(T) == 2) {
+        return std::tuple{"data", HEXFMT16, udata};
+    } else if constexpr (sizeof(T) == 4) {
+        return std::tuple{"data", HEXFMT32, udata};
+    } else {
+        return std::tuple{"data", HEXFMT64, udata};
+    }
+}
+
 } // namespace Memory
 
 export using VirtualAddr  = uint32_t;

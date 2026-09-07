@@ -188,6 +188,7 @@ constexpr auto Emulator::loadRom(std::filesystem::path path) -> void {
             m_rdp->runCommand();
         }
     } catch (const Util::Error& e) {
+        std::println("Exception thrown @ RDP sync {}", m_rdp->getSyncCount());
         if (m_logger) {
             m_logger->flush();
         }

@@ -27,7 +27,7 @@ class PlotNavigator:
         self.ax.set_xlim(-EXTENT_X + 160, EXTENT_X + 160)
         self.ax.set_ylim(-EXTENT_Y + 120, EXTENT_Y + 120)
 
-        self.animation = self.fig.canvas.new_timer(interval=50)
+        self.animation = self.fig.canvas.new_timer(interval=17)
         self.animation.add_callback(self.animate)
         self.update()
 

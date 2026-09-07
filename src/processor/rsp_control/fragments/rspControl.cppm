@@ -114,7 +114,7 @@ auto Control::dmaMemcpy(uint32_t dst, uint32_t src, std::size_t len, uint8_t cou
     }
     for (auto row = 0; row < count + 1; ++row) {
         for (auto i = 0uz; i < len; i += 8) {
-            m_memory->memcpy<8>(dst + i, src + i);
+            m_memory->memcpy<uint64_t>(dst + i, src + i);
         }
         if constexpr (Dir == RSP_DMA_DIRECTION::TO_RDRAM) {
             dst += skip;
@@ -197,9 +197,8 @@ auto Control::readRegister(std::size_t index) -> uint32_t {
     IF_LOG_ENABLED(m_logger) {
         const auto name = Util::enumName(static_cast<RSP_CP0_REGS>(index)).value_or(std::format("CP0 REG {}", index));
         m_logger->log<Level::HIGH, Sys::RSP_REG>(
-            std::tuple{"op", "read"},
-            std::tuple{"reg", "{}", name},
-            std::tuple{"data", HEXFMT32, data});
+            std::tuple{"op", "r"},
+            std::tuple{std::format("{}", name), HEXFMT32, data});
     }
     return data;
 }
@@ -208,9 +207,8 @@ auto Control::writeRegister(std::size_t index, uint32_t data) -> void {
     IF_LOG_ENABLED(m_logger) {
         const auto name = Util::enumName(static_cast<RSP_CP0_REGS>(index)).value_or(std::format("CP0 REG {}", index));
         m_logger->log<Level::HIGH, Sys::RSP_REG>(
-            std::tuple{"op", "write"},
-            std::tuple{"reg", "{}", name},
-            std::tuple{"data", HEXFMT32, data});
+            std::tuple{"op", "w"},
+            std::tuple{std::format("{}", name), HEXFMT32, data});
     }
 
     switch (static_cast<RSP_CP0_REGS>(index)) {
@@ -223,6 +221,9 @@ auto Control::writeRegister(std::size_t index, uint32_t data) -> void {
         case RSP_CP0_REGS::SP_DMA_RDLEN: {
             auto rdlen = std::bit_cast<SP_DMA_RDLEN>(data);
             dmaMemcpy<RSP_DMA_DIRECTION::FROM_RDRAM>(m_rspAddr + RSP_MEM_BASE, m_ramAddr, rdlen.rdlen, rdlen.count, rdlen.skip_11_3 << 3);
+            // if (m_ramAddr == 0x001a1a40) {
+            //     throw Util::Error("Test");
+            // }
             patchRspBootAntiPiracyCheck();
             break;
         }

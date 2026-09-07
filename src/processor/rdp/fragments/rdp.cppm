@@ -153,6 +153,7 @@ auto RDP::runCommand() -> void {
             case Command::SET_COMBINE_MODE: [[fallthrough]];
             case Command::SET_OTHER_MODES: [[fallthrough]];
             case Command::SET_BLEND_COLOR: [[fallthrough]];
+            case Command::SET_FOG_COLOR: [[fallthrough]];
             case Command::SET_COLOR_IMAGE: [[fallthrough]];
             case Command::SET_DEPTH_IMAGE: [[fallthrough]];
             case Command::SET_TEXTURE_IMAGE: [[fallthrough]];

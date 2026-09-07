@@ -57,9 +57,8 @@ auto CP0::readReg(std::size_t index) const -> T {
     auto value = static_cast<T>(m_regs[index]);
     IF_LOG_ENABLED(m_logger) {
         m_logger->log<Level::HIGH, Sys::CPU>(
-            std::tuple{"op", "read"},
-            std::tuple{"reg", "CP0 {}", static_cast<ISA::CP0_REG>(index)},
-            std::tuple{"data", HEXFMT32, static_cast<uint32_t>(value)});
+            std::tuple{"op", "r"},
+            std::tuple{std::format("CP0_{}", static_cast<ISA::CP0_REG>(index)), HEXFMT32, static_cast<uint32_t>(value)});
     }
     return value;
 }
@@ -107,9 +106,8 @@ auto CP0::writeReg(std::size_t index, T value) -> void {
     m_regs[index] = Util::signExt32(value);
     IF_LOG_ENABLED(m_logger) {
         m_logger->log<Level::HIGH, Sys::CPU>(
-            std::tuple{"op", "write"},
-            std::tuple{"reg", "CP0 {}", static_cast<ISA::CP0_REG>(index)},
-            std::tuple{"data", HEXFMT32, static_cast<uint32_t>(value)});
+            std::tuple{"op", "w"},
+            std::tuple{std::format("CP0_{}", static_cast<ISA::CP0_REG>(index)), HEXFMT32, static_cast<uint32_t>(value)});
     }
     if (index == static_cast<uint8_t>(ISA::CP0_REG::STATUS) || index == static_cast<uint8_t>(ISA::CP0_REG::CAUSE)) {
         updateInterrupt();

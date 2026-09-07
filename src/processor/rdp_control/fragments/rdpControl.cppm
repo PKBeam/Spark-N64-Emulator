@@ -137,7 +137,7 @@ auto Control::readRegister(CMD_REGS index) const -> uint32_t {
     IF_LOG_ENABLED(m_logger) {
         const auto name = Util::enumName(static_cast<CMD_REGS>(index)).value_or(std::format("RDP REG {}", static_cast<uint8_t>(index)));
         m_logger->log<Level::HIGH, Sys::RDP_REG>(
-            std::tuple{"op", "read"},
+            std::tuple{"op", "r"},
             std::tuple{"reg", "{}", name},
             std::tuple{"data", HEXFMT32, data});
     }
@@ -148,7 +148,7 @@ auto Control::writeRegister(CMD_REGS index, uint32_t data) -> void {
     IF_LOG_ENABLED(m_logger) {
         const auto name = Util::enumName(static_cast<CMD_REGS>(index)).value_or(std::format("RDP REG {}", static_cast<uint8_t>(index)));
         m_logger->log<Level::HIGH, Sys::RDP_REG>(
-            std::tuple{"op", "write"},
+            std::tuple{"op", "w"},
             std::tuple{"reg", "{}", name},
             std::tuple{"data", HEXFMT32, data});
     }

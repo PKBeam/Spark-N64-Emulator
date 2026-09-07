@@ -78,8 +78,7 @@ auto Interface::logOperation(this Self&& self, std::shared_ptr<Util::Logger> log
         auto name = getRegisterName<RegAddrStruct>(addr);
         logger->log<Level::HIGH, S>(
             std::tuple{"op", operationName},
-            std::tuple{"reg", "{}", name},
-            std::tuple{"data", HEXFMT32, data});
+            std::tuple{std::format("{}", name), HEXFMT32, data});
     }
 }
 

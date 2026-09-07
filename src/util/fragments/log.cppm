@@ -143,28 +143,14 @@ auto Logger::print(const char* fmt, Args... args) -> void {
     std::println(m_file, std::runtime_format(fmt), args...);
 }
 
-// template <Logger::Verbosity v, class T>
-//     requires(!Tuple_c<T>)
-// auto Logger::log(T obj) -> void {
-//     if (!m_enabled || v > m_verbosity) {
-//         return;
-//     }
-//     std::println(m_file,
-//                  "{{\"level\": {}, \"{}\": {}}}",
-//                  static_cast<int>(v),
-//                  std::meta::display_string_of(^^T),
-//                  format(obj));
-// }
-
 template <Logger::Level Level, Logger::Sys Sys, Tuple_c... Args>
 auto Logger::log(Args... args) -> void {
     if (!m_enabled || Level < m_level || (!m_sys.empty() && !std::ranges::contains(m_sys, Sys))) {
         return;
     }
     auto str = std::string{"{"};
-    str += std::format("\"level\": \"{}\"", *Util::enumName(Level));
     if constexpr (Sys != Logger::Sys::NONE) {
-        str += std::format(", \"sys\": \"{}\"", *Util::enumName(Sys));
+        str += std::format("\"sys\": \"{}\"", *Util::enumName(Sys));
     }
     // clang-format off
     (
@@ -202,15 +188,13 @@ auto Logger::log(const char* fmt, Args... args) -> void {
     const auto outStr = [&]() {
         if constexpr (Sys != Logger::Sys::NONE) {
             return std::format(
-                "{{\"level\": \"{}\", \"sys\": \"{}\", \"{}\": \"{}\"}}",
-                *Util::enumName(Level),
+                "{{\"sys\": \"{}\", \"{}\": \"{}\"}}",
                 *Util::enumName(Sys),
                 Util::toLower(*Util::enumName(Sev)),
                 str);
         } else {
             return std::format(
-                "{{\"level\": \"{}\", \"{}\": \"{}\"}}",
-                *Util::enumName(Level),
+                "{{\"{}\": \"{}\"}}",
                 Util::toLower(*Util::enumName(Sev)),
                 str);
         }

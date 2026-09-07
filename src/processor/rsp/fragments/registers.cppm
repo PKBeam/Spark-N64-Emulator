@@ -195,10 +195,8 @@ constexpr auto Registers::readVpr(std::size_t index, ISA::VEC_ELEM elem) const -
             }
             IF_LOG_ENABLED(m_logger) {
                 m_logger->log<Level::MED, Sys::RSP>(
-                    std::tuple{"op", "read"},
-                    std::tuple{"reg", "v{}", index},
-                    std::tuple{"data", "{:n:#06x}", std::bit_cast<VPR<std::make_unsigned_t<T>>>(result)},
-                    std::tuple{"lanes", "[{:n}]", lanes});
+                    std::tuple{"op", "r"},
+                    std::tuple{std::format("$v{}", index), "{:n:#06x}", std::bit_cast<VPR<std::make_unsigned_t<T>>>(result)});
             }
             return result;
         }
@@ -217,10 +215,8 @@ constexpr auto Registers::writeVpr(std::size_t index, VPR<T> value, ISA::VEC_ELE
             }
             IF_LOG_ENABLED(m_logger) {
                 m_logger->log<Level::MED, Sys::RSP>(
-                    std::tuple{"op", "write"},
-                    std::tuple{"reg", "v{}", index},
-                    std::tuple{"data", "{:n:#06x}", std::bit_cast<VPR<std::make_unsigned_t<T>>>(value)},
-                    std::tuple{"lanes", "[{:n}]", lanes});
+                    std::tuple{"op", "w"},
+                    std::tuple{std::format("$v{}", index), "{:n:#06x}", std::bit_cast<VPR<std::make_unsigned_t<T>>>(value)});
             }
         }
     }
@@ -237,9 +233,8 @@ constexpr auto Registers::writeVpr(std::size_t index, T value, ISA::VEC_ELEM ele
 constexpr auto Registers::readVcc() const -> std::bitset<16> {
     IF_LOG_ENABLED(m_logger) {
         m_logger->log<Level::MED, Sys::RSP>(
-            std::tuple{"op", "read"},
-            std::tuple{"reg", "VCC"},
-            std::tuple{"data", HEXFMT16, static_cast<uint16_t>(m_vcc.to_ulong())});
+            std::tuple{"op", "r"},
+            std::tuple{"VCC", HEXFMT16, static_cast<uint16_t>(m_vcc.to_ulong())});
     }
     return m_vcc;
 }
@@ -247,9 +242,8 @@ constexpr auto Registers::readVcc() const -> std::bitset<16> {
 constexpr auto Registers::writeVcc(std::bitset<16> value) -> void {
     IF_LOG_ENABLED(m_logger) {
         m_logger->log<Level::MED, Sys::RSP>(
-            std::tuple{"op", "write"},
-            std::tuple{"reg", "VCC"},
-            std::tuple{"data", HEXFMT16, static_cast<uint16_t>(value.to_ulong())});
+            std::tuple{"op", "w"},
+            std::tuple{"VCC", HEXFMT16, static_cast<uint16_t>(value.to_ulong())});
     }
     m_vcc = value;
 }
@@ -261,9 +255,8 @@ constexpr auto Registers::clearVcc() -> void {
 constexpr auto Registers::readVco() const -> std::bitset<16> {
     IF_LOG_ENABLED(m_logger) {
         m_logger->log<Level::MED, Sys::RSP>(
-            std::tuple{"op", "read"},
-            std::tuple{"reg", "VCO"},
-            std::tuple{"data", HEXFMT16, static_cast<uint16_t>(m_vco.to_ulong())});
+            std::tuple{"op", "r"},
+            std::tuple{"VCO", HEXFMT16, static_cast<uint16_t>(m_vco.to_ulong())});
     }
     return m_vco;
 }
@@ -271,9 +264,8 @@ constexpr auto Registers::readVco() const -> std::bitset<16> {
 constexpr auto Registers::writeVco(std::bitset<16> value) -> void {
     IF_LOG_ENABLED(m_logger) {
         m_logger->log<Level::MED, Sys::RSP>(
-            std::tuple{"op", "write"},
-            std::tuple{"reg", "VCO"},
-            std::tuple{"data", HEXFMT16, static_cast<uint16_t>(value.to_ulong())});
+            std::tuple{"op", "w"},
+            std::tuple{"VCO", HEXFMT16, static_cast<uint16_t>(value.to_ulong())});
     }
     m_vco = value;
 }
@@ -285,9 +277,8 @@ constexpr auto Registers::clearVco() -> void {
 constexpr auto Registers::readVce() const -> std::bitset<8> {
     IF_LOG_ENABLED(m_logger) {
         m_logger->log<Level::MED, Sys::RSP>(
-            std::tuple{"op", "read"},
-            std::tuple{"reg", "VCE"},
-            std::tuple{"data", HEXFMT8, static_cast<uint8_t>(m_vce.to_ulong())});
+            std::tuple{"op", "r"},
+            std::tuple{"VCE", HEXFMT8, static_cast<uint8_t>(m_vce.to_ulong())});
     }
     return m_vce;
 }
@@ -295,9 +286,8 @@ constexpr auto Registers::readVce() const -> std::bitset<8> {
 constexpr auto Registers::writeVce(std::bitset<8> value) -> void {
     IF_LOG_ENABLED(m_logger) {
         m_logger->log<Level::MED, Sys::RSP>(
-            std::tuple{"op", "write"},
-            std::tuple{"reg", "VCE"},
-            std::tuple{"data", HEXFMT8, static_cast<uint8_t>(value.to_ulong())});
+            std::tuple{"op", "w"},
+            std::tuple{"VCE", HEXFMT8, static_cast<uint8_t>(value.to_ulong())});
     }
     m_vce = value;
 }
@@ -310,14 +300,12 @@ constexpr auto Registers::readDivIn() const -> std::optional<uint32_t> {
     IF_LOG_ENABLED(m_logger) {
         if (m_divIn) {
             m_logger->log<Level::MED, Sys::RSP>(
-                std::tuple{"op", "read"},
-                std::tuple{"reg", "DIV_IN"},
-                std::tuple{"data", HEXFMT32, *m_divIn});
+                std::tuple{"op", "r"},
+                std::tuple{"DIV_IN", HEXFMT32, *m_divIn});
         } else {
             m_logger->log<Level::MED, Sys::RSP>(
-                std::tuple{"op", "read"},
-                std::tuple{"reg", "DIV_IN"},
-                std::tuple{"data", "NULL"});
+                std::tuple{"op", "r"},
+                std::tuple{"DIV_IN", "NULL"});
         }
     }
     return m_divIn;
@@ -327,14 +315,12 @@ constexpr auto Registers::writeDivIn(std::optional<uint32_t> value) -> void {
     IF_LOG_ENABLED(m_logger) {
         if (value) {
             m_logger->log<Level::MED, Sys::RSP>(
-                std::tuple{"op", "write"},
-                std::tuple{"reg", "DIV_IN"},
-                std::tuple{"data", HEXFMT32, *value});
+                std::tuple{"op", "w"},
+                std::tuple{"DIV_IN", HEXFMT32, *value});
         } else {
             m_logger->log<Level::MED, Sys::RSP>(
-                std::tuple{"op", "write"},
-                std::tuple{"reg", "DIV_IN"},
-                std::tuple{"data", "NULL"});
+                std::tuple{"op", "w"},
+                std::tuple{"DIV_IN", "NULL"});
         }
     }
     m_divIn = value;
@@ -343,9 +329,8 @@ constexpr auto Registers::writeDivIn(std::optional<uint32_t> value) -> void {
 constexpr auto Registers::readDivOut() const -> uint32_t {
     IF_LOG_ENABLED(m_logger) {
         m_logger->log<Level::MED, Sys::RSP>(
-            std::tuple{"op", "read"},
-            std::tuple{"reg", "DIV_OUT"},
-            std::tuple{"data", HEXFMT32, m_divOut});
+            std::tuple{"op", "r"},
+            std::tuple{"DIV_OUT", HEXFMT32, m_divOut});
     }
     return m_divOut;
 }
@@ -353,9 +338,8 @@ constexpr auto Registers::readDivOut() const -> uint32_t {
 constexpr auto Registers::writeDivOut(uint32_t value) -> void {
     IF_LOG_ENABLED(m_logger) {
         m_logger->log<Level::MED, Sys::RSP>(
-            std::tuple{"op", "write"},
-            std::tuple{"reg", "DIV_OUT"},
-            std::tuple{"data", HEXFMT32, value});
+            std::tuple{"op", "w"},
+            std::tuple{"DIV_OUT", HEXFMT32, value});
     }
     m_divOut = value;
 }
@@ -364,9 +348,8 @@ constexpr auto Registers::readAccumulators() const -> std::array<Accumulator, 8>
     const auto value = m_accums;
     IF_LOG_ENABLED(m_logger) {
         m_logger->log<Level::MED, Sys::RSP>(
-            std::tuple{"op", "read"},
-            std::tuple{"reg", "ACC"},
-            std::tuple{"data", "{}", value});
+            std::tuple{"op", "r"},
+            std::tuple{"ACC", "{}", value});
     }
     return value;
 }
@@ -375,9 +358,8 @@ constexpr auto Registers::writeAccumulators(std::array<Accumulator, 8> value) ->
     m_accums = value;
     IF_LOG_ENABLED(m_logger) {
         m_logger->log<Level::MED, Sys::RSP>(
-            std::tuple{"op", "write"},
-            std::tuple{"reg", "ACC"},
-            std::tuple{"data", "{}", value});
+            std::tuple{"op", "w"},
+            std::tuple{"ACC", "{}", value});
     }
 }
 

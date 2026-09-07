@@ -63,9 +63,8 @@ constexpr auto Registers::setMode(::CP1::Registers::Mode mode) -> void {
 constexpr auto Registers::readStatus() const -> ISA::CP1Status {
     IF_LOG_ENABLED(m_logger) {
         m_logger->log<Level::HIGH, Sys::CP1>(
-            std::tuple{"op", "read"},
-            std::tuple{"reg", "FCR31"},
-            std::tuple{"data", HEXFMT32, std::bit_cast<uint32_t>(m_fcr31)});
+            std::tuple{"op", "r"},
+            std::tuple{"FCR31", HEXFMT32, std::bit_cast<uint32_t>(m_fcr31)});
     }
     return m_fcr31;
 }
@@ -73,9 +72,8 @@ constexpr auto Registers::readStatus() const -> ISA::CP1Status {
 constexpr auto Registers::writeStatus(uint32_t value) -> void {
     IF_LOG_ENABLED(m_logger) {
         m_logger->log<Level::HIGH, Sys::CP1>(
-            std::tuple{"op", "write"},
-            std::tuple{"reg", "FCR31"},
-            std::tuple{"data", HEXFMT32, std::bit_cast<uint32_t>(value)});
+            std::tuple{"op", "w"},
+            std::tuple{"FCR31", HEXFMT32, std::bit_cast<uint32_t>(value)});
     }
     m_fcr31 = std::bit_cast<ISA::CP1Status>(value);
 }
@@ -87,9 +85,8 @@ constexpr auto Registers::writeStatus(ISA::CP1Status value) -> void {
 constexpr auto Registers::readRevision() const -> ISA::CP1Revision {
     IF_LOG_ENABLED(m_logger) {
         m_logger->log<Level::HIGH, Sys::CP1>(
-            std::tuple{"op", "read"},
-            std::tuple{"reg", "FCR0"},
-            std::tuple{"data", HEXFMT32, std::bit_cast<uint32_t>(m_fcr0)});
+            std::tuple{"op", "r"},
+            std::tuple{"FCR0", HEXFMT32, std::bit_cast<uint32_t>(m_fcr0)});
     }
     return m_fcr0;
 }
@@ -116,14 +113,12 @@ constexpr auto Registers::readFpr(std::size_t index) const -> T {
     IF_LOG_ENABLED(m_logger) {
         if constexpr (sizeof(T) == 4) {
             m_logger->log<Level::MED, Sys::CP1>(
-                std::tuple{"op", "read"},
-                std::tuple{"reg", "$f{}", index},
-                std::tuple{"data", HEXFMT32, std::bit_cast<uint32_t>(value)});
+                std::tuple{"op", "r"},
+                std::tuple{std::format("$f{}", index), HEXFMT32, std::bit_cast<uint32_t>(value)});
         } else /* 64 bit */ {
             m_logger->log<Level::MED, Sys::CP1>(
-                std::tuple{"op", "read"},
-                std::tuple{"reg", "$f{}", index},
-                std::tuple{"data", HEXFMT64, std::bit_cast<uint64_t>(value)});
+                std::tuple{"op", "r"},
+                std::tuple{std::format("$f{}", index), HEXFMT64, std::bit_cast<uint64_t>(value)});
         }
     }
     return value;
@@ -162,14 +157,12 @@ constexpr auto Registers::writeFpr(std::size_t index, T value) -> void {
     IF_LOG_ENABLED(m_logger) {
         if constexpr (sizeof(T) == 4) {
             m_logger->log<Level::MED, Sys::CP1>(
-                std::tuple{"op", "write"},
-                std::tuple{"reg", "$f{}", index},
-                std::tuple{"data", HEXFMT32, std::bit_cast<uint32_t>(value)});
+                std::tuple{"op", "w"},
+                std::tuple{std::format("$f{}", index), HEXFMT32, std::bit_cast<uint32_t>(value)});
         } else /* 64 bit */ {
             m_logger->log<Level::MED, Sys::CP1>(
-                std::tuple{"op", "write"},
-                std::tuple{"reg", "$f{}", index},
-                std::tuple{"data", HEXFMT64, std::bit_cast<uint64_t>(value)});
+                std::tuple{"op", "w"},
+                std::tuple{std::format("$f{}", index), HEXFMT64, std::bit_cast<uint64_t>(value)});
         }
     }
 }
@@ -196,14 +189,12 @@ constexpr auto Registers::readFgr(std::size_t index) const -> T {
     IF_LOG_ENABLED(m_logger) {
         if constexpr (sizeof(T) == 4) {
             m_logger->log<Level::MED, Sys::CP1>(
-                std::tuple{"op", "read"},
-                std::tuple{"reg", "$f{}", index},
-                std::tuple{"data", HEXFMT32, std::bit_cast<uint32_t>(value)});
+                std::tuple{"op", "r"},
+                std::tuple{std::format("$f{}", index), HEXFMT32, std::bit_cast<uint32_t>(value)});
         } else {
             m_logger->log<Level::MED, Sys::CP1>(
-                std::tuple{"op", "read"},
-                std::tuple{"reg", "$f{}", index},
-                std::tuple{"data", HEXFMT64, std::bit_cast<uint64_t>(value)});
+                std::tuple{"op", "r"},
+                std::tuple{std::format("$f{}", index), HEXFMT64, std::bit_cast<uint64_t>(value)});
         }
     }
     return Util::signExt32(value);
@@ -225,14 +216,12 @@ constexpr auto Registers::writeFgr(std::size_t index, T value) -> void {
     IF_LOG_ENABLED(m_logger) {
         if constexpr (sizeof(T) == 4) {
             m_logger->log<Level::MED, Sys::CP1>(
-                std::tuple{"op", "write"},
-                std::tuple{"reg", "$f{}", index},
-                std::tuple{"data", HEXFMT32, std::bit_cast<uint32_t>(value)});
+                std::tuple{"op", "w"},
+                std::tuple{std::format("$f{}", index), HEXFMT32, std::bit_cast<uint32_t>(value)});
         } else {
             m_logger->log<Level::MED, Sys::CP1>(
-                std::tuple{"op", "write"},
-                std::tuple{"reg", "$f{}", index},
-                std::tuple{"data", HEXFMT64, std::bit_cast<uint64_t>(value)});
+                std::tuple{"op", "w"},
+                std::tuple{std::format("$f{}", index), HEXFMT64, std::bit_cast<uint64_t>(value)});
         }
     }
 }

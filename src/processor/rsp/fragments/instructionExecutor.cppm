@@ -708,10 +708,9 @@ auto InstructionExecutor::readDMem(uint32_t addr) const -> T {
     const auto value = m_memoryBus->readPhysical<T>(addr);
     IF_LOG_ENABLED(m_logger) {
         m_logger->log<Level::HIGH, Sys::RSP>(
-            std::tuple{"op", "read"},
-            std::tuple{"size", sizeof(T)},
+            std::tuple{"op", "r"},
             std::tuple{"addr", HEXFMT12, addr - RSP_DMEM_BASE},
-            std::tuple{"data", HEXFMT32, static_cast<std::make_unsigned_t<T>>(value)});
+            Memory::makePrintData(value));
     }
     return value;
 }
@@ -722,10 +721,9 @@ auto InstructionExecutor::writeDMem(uint32_t addr, T value) -> void {
     m_memoryBus->writePhysical<T>(addr, value);
     IF_LOG_ENABLED(m_logger) {
         m_logger->log<Level::HIGH, Sys::RSP>(
-            std::tuple{"op", "write"},
-            std::tuple{"size", sizeof(T)},
+            std::tuple{"op", "w"},
             std::tuple{"addr", HEXFMT12, addr - RSP_DMEM_BASE},
-            std::tuple{"data", HEXFMT32, static_cast<std::make_unsigned_t<T>>(value)});
+            Memory::makePrintData(value));
     }
 }
 

@@ -157,10 +157,9 @@ auto MemoryBus::readPhysical(PhysicalAddr paddr) const -> T {
 
     IF_LOG_ENABLED(m_logger) {
         m_logger->log<Level::HIGH, Sys::RDRAM>(
-            std::tuple{"op", "read"},
-            std::tuple{"size", sizeof(T)},
+            std::tuple{"op", "r"},
             std::tuple{"addr", HEXFMT32, paddr},
-            std::tuple{"data", HEXFMT32, static_cast<std::make_unsigned_t<T>>(data)});
+            makePrintData(data));
     }
     return data;
 }
@@ -169,10 +168,9 @@ template <std::integral T>
 auto MemoryBus::writePhysical(PhysicalAddr paddr, T data) const -> void {
     IF_LOG_ENABLED(m_logger) {
         m_logger->log<Level::HIGH, Sys::RDRAM>(
-            std::tuple{"op", "write"},
-            std::tuple{"size", sizeof(T)},
+            std::tuple{"op", "w"},
             std::tuple{"addr", HEXFMT32, paddr},
-            std::tuple{"data", HEXFMT32, static_cast<std::make_unsigned_t<T>>(data)});
+            makePrintData(data));
     }
     switch (Impl::getPhysicalSegment(paddr)) {
         case PhysSeg::RDRAM: [[fallthrough]];

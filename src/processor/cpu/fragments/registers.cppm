@@ -117,10 +117,11 @@ template <std::integral T>
 auto Registers<System>::readGpr(std::size_t index) const -> T {
     auto value = static_cast<T>(m_gprs[index]);
     IF_LOG_ENABLED(m_logger) {
-        m_logger->log<Level::MED, System>(
-            std::tuple{"op", "read"},
-            std::tuple{"reg", "{}", static_cast<ISA::CPU_REG>(index)},
-            std::tuple{"data", HEXFMT32, static_cast<uint32_t>(value)});
+        if (index != 0) {
+            m_logger->log<Level::MED, System>(
+                std::tuple{"op", "r"},
+                std::tuple{std::format("{}", static_cast<ISA::CPU_REG>(index)), HEXFMT32, static_cast<uint32_t>(value)});
+        }
     }
     return index == 0 ? 0 : value;
 }
@@ -132,9 +133,8 @@ auto Registers<System>::writeGpr(std::size_t index, T value) -> void {
         m_gprs[index] = value;
         IF_LOG_ENABLED(m_logger) {
             m_logger->log<Level::MED, System>(
-                std::tuple{"op", "write"},
-                std::tuple{"reg", "{}", static_cast<ISA::CPU_REG>(index)},
-                std::tuple{"data", HEXFMT32, static_cast<uint32_t>(value)});
+                std::tuple{"op", "w"},
+                std::tuple{std::format("{}", static_cast<ISA::CPU_REG>(index)), HEXFMT32, static_cast<uint32_t>(value)});
         }
     }
 }
@@ -145,9 +145,8 @@ auto Registers<System>::readHi() const -> T {
     auto value = static_cast<T>(m_hi);
     IF_LOG_ENABLED(m_logger) {
         m_logger->log<Level::MED, System>(
-            std::tuple{"op", "read"},
-            std::tuple{"reg", "hi"},
-            std::tuple{"data", HEXFMT32, static_cast<uint32_t>(value)});
+            std::tuple{"op", "r"},
+            std::tuple{"hi", HEXFMT32, static_cast<uint32_t>(value)});
     }
     return value;
 }
@@ -158,9 +157,8 @@ auto Registers<System>::writeHi(T value) -> void {
     m_hi = Util::signExt32(value);
     IF_LOG_ENABLED(m_logger) {
         m_logger->log<Level::MED, System>(
-            std::tuple{"op", "write"},
-            std::tuple{"reg", "hi"},
-            std::tuple{"data", HEXFMT32, static_cast<uint32_t>(value)});
+            std::tuple{"op", "w"},
+            std::tuple{"hi", HEXFMT32, static_cast<uint32_t>(value)});
     }
 }
 
@@ -170,9 +168,8 @@ auto Registers<System>::readLo() const -> T {
     auto value = static_cast<T>(m_lo);
     IF_LOG_ENABLED(m_logger) {
         m_logger->log<Level::MED, System>(
-            std::tuple{"op", "read"},
-            std::tuple{"reg", "lo"},
-            std::tuple{"data", HEXFMT32, static_cast<uint32_t>(value)});
+            std::tuple{"op", "r"},
+            std::tuple{"lo", HEXFMT32, static_cast<uint32_t>(value)});
     }
     return value;
 }
@@ -183,9 +180,8 @@ auto Registers<System>::writeLo(T value) -> void {
     m_lo = Util::signExt32(value);
     IF_LOG_ENABLED(m_logger) {
         m_logger->log<Level::MED, System>(
-            std::tuple{"op", "write"},
-            std::tuple{"reg", "lo"},
-            std::tuple{"data", HEXFMT32, static_cast<uint32_t>(value)});
+            std::tuple{"op", "w"},
+            std::tuple{"lo", HEXFMT32, static_cast<uint32_t>(value)});
     }
 }
 

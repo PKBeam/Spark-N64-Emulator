@@ -20,9 +20,16 @@ export class Memory {
     template <std::integral T>
     auto write(PhysicalAddr addr, T data) const -> void;
 
-    template <std::size_t N>
+    template <std::unsigned_integral T>
     auto memcpy(PhysicalAddr dst, PhysicalAddr src) const -> void {
-        std::memcpy(m_memory + dst, m_memory + src, N);
+        IF_LOG_ENABLED(m_logger) {
+            m_logger->log<Level::HIGH, Sys::PHYS_MEM>(
+                std::tuple{"op", "rw"},
+                std::tuple{"src", HEXFMT32, src},
+                std::tuple{"dst", HEXFMT32, dst},
+                makePrintData(*reinterpret_cast<const T*>(m_memory + src)));
+        }
+        std::memcpy(m_memory + dst, m_memory + src, sizeof(T));
     }
 
   private:
@@ -38,10 +45,9 @@ auto Memory::read(PhysicalAddr paddr) const -> T {
 
     IF_LOG_ENABLED(m_logger) {
         m_logger->log<Level::HIGH, Sys::PHYS_MEM>(
-            std::tuple{"op", "read"},
-            std::tuple{"size", sizeof(T)},
+            std::tuple{"op", "r"},
             std::tuple{"addr", HEXFMT32, paddr},
-            std::tuple{"data", HEXFMT32, static_cast<std::make_unsigned_t<T>>(data)});
+            makePrintData(data));
     }
     return data;
 }
@@ -49,12 +55,10 @@ auto Memory::read(PhysicalAddr paddr) const -> T {
 template <std::integral T>
 auto Memory::write(PhysicalAddr paddr, T data) const -> void {
     IF_LOG_ENABLED(m_logger) {
-        const auto printData = static_cast<std::make_unsigned_t<T>>(data);
         m_logger->log<Level::HIGH, Sys::PHYS_MEM>(
-            std::tuple{"op", "write"},
-            std::tuple{"size", sizeof(T)},
+            std::tuple{"op", "w"},
             std::tuple{"addr", HEXFMT32, paddr},
-            std::tuple{"data", HEXFMT32, printData});
+            makePrintData(data));
     }
     data = Util::byteswapIfLittleEndian(data);
     std::memcpy(m_memory + paddr, &data, sizeof(T));

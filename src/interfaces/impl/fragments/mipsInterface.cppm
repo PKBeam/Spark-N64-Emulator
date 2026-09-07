@@ -50,9 +50,9 @@ auto MipsInterface::updateInterrupt() -> void {
 template <std::meta::info IntrField>
 auto MipsInterface::setInterrupt(bool enable) -> void {
     IF_LOG_ENABLED(m_logger) {
-        m_logger->log<Level::HIGH, Sys::MI>(
-            std::tuple{"op", enable ? "setInterrupt" : "clearInterrupt"},
-            std::tuple{"interrupt", std::meta::identifier_of(IntrField)});
+        m_logger->log<Level::HIGH, Sev::INFO, Sys::MI>("{} interrupt {}",
+                                                       enable ? "Set" : "Clear",
+                                                       std::meta::identifier_of(IntrField));
     }
     m_interrupt.[:IntrField:] = enable ? 1 : 0;
     updateInterrupt();
