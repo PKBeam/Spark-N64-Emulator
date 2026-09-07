@@ -207,6 +207,8 @@ auto RSP::runRspInstruction() -> void {
         case UnifiedOpcode::OP_SUV: m_exec.executeLoadStorePacked<P::STOREV, P::UNSIGNED>(data); break;
         case UnifiedOpcode::OP_LQV: m_exec.executeLoadStoreQuad<P::LOADV, P::QUAD>(data); break;
         case UnifiedOpcode::OP_SQV: m_exec.executeLoadStoreQuad<P::STOREV, P::QUAD>(data); break;
+        case UnifiedOpcode::OP_LRV: m_exec.executeLoadStoreQuad<P::LOADV, P::REST>(data); break;
+        case UnifiedOpcode::OP_SRV: m_exec.executeLoadStoreQuad<P::STOREV, P::REST>(data); break;
 
         case UnifiedOpcode::OP_VADD: m_exec.executeBivariateWithCarryIn<P::SIGNED, P::ACCUM_ZERO_EXT, P::CLAMP_SIGNED>(data, Func::ADD); break;
         case UnifiedOpcode::OP_VSUB: m_exec.executeBivariateWithCarryIn<P::SIGNED, P::ACCUM_ZERO_EXT, P::CLAMP_SIGNED>(data, Func::SUB); break;
