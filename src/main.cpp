@@ -47,6 +47,10 @@ int main(int argc, char* argv[]) {
             auto sync                      = std::string(arg.substr(21));
             emulatorConfig.logAfterRdpSync = std::stoi(sync);
         }
+        if (arg.starts_with("--log-after-pc="sv)) {
+            auto pc                   = std::string(arg.substr(15));
+            emulatorConfig.logAfterPc = std::stol(pc, nullptr, 16);
+        }
 
         if (arg.starts_with("--log-sys=")) {
             auto systems = std::string_view(arg).substr(10);
@@ -82,11 +86,7 @@ int main(int argc, char* argv[]) {
         emulatorConfig.logger = std::make_shared<Util::Logger>("log.json"sv);
         emulatorConfig.logger->setLevel(*logLevel);
     }
-    if (emulatorConfig.logAfterRdpSync) {
-        contract_assert(emulatorConfig.logger != nullptr);
-        emulatorConfig.logger->disable();
-    }
-    if (emulatorConfig.logAfterBoot) {
+    if (emulatorConfig.logAfterRdpSync || emulatorConfig.logAfterBoot || emulatorConfig.logAfterPc) {
         contract_assert(emulatorConfig.logger != nullptr);
         emulatorConfig.logger->disable();
     }

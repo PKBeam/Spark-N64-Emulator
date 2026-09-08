@@ -9,6 +9,8 @@ import :Interface;
 import :MipsInterface;
 import InterfaceTypes;
 
+constexpr std::size_t RSP_CYCLES_PER_VI_INTERRUPT = 62500000 / 60;
+
 namespace Interfaces {
 
 export class VideoInterface : public Interface {
@@ -18,6 +20,7 @@ export class VideoInterface : public Interface {
     auto read(uint32_t addr) -> uint32_t override;
     auto write(uint32_t addr, uint32_t data) -> void override;
 
+    // Real-time interrupts
     auto hasTimerFired() const -> bool {
         return m_timerTick;
     }
@@ -26,12 +29,26 @@ export class VideoInterface : public Interface {
         m_timerTick = false;
     }
 
+    // Deterministic interrupts
+    auto tick(std::size_t cycles) -> void {
+        if (m_ctrl.type == 0) {
+            return;
+        }
+        m_interruptCounter += cycles;
+        if (m_interruptCounter >= RSP_CYCLES_PER_VI_INTERRUPT) {
+            m_interruptCounter = 0;
+            m_mipsInterface->setInterrupt<^^Interfaces::MI_INTERRUPT::vi>(true);
+        }
+    }
+
   private:
     std::thread                   m_interruptGenerator;
     std::shared_ptr<Util::Logger> m_logger;
     bool                          m_timerTick{};
     MipsInterface*                m_mipsInterface;
     VI_CTRL                       m_ctrl{};
+
+    std::size_t m_interruptCounter{};
 };
 
 VideoInterface::VideoInterface(std::shared_ptr<Util::Logger> logger, MipsInterface* mipsInterface)
@@ -41,7 +58,7 @@ VideoInterface::VideoInterface(std::shared_ptr<Util::Logger> logger, MipsInterfa
         while (true) {
             const auto now     = std::chrono::high_resolution_clock::now();
             const auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(now - prev).count();
-            if (elapsed >= 166670) { // 6Hz
+            if (elapsed >= 16667) { // 60Hz
                 prev        = now;
                 m_timerTick = true;
             }
@@ -99,16 +116,16 @@ auto VideoInterface::write(uint32_t addr, uint32_t data) -> void {
     addr = VI_REG_ADDR::BASE + (addr & 0x3F);
     logOperation<Sys::VI, VI_REG_ADDR>(m_logger, "write", addr, data);
 
-    if (addr == VI_REG_ADDR::VI_V_CURRENT) { // TODO clean up
-        m_mipsInterface->setInterrupt<^^MI_INTERRUPT::vi>(false);
-    }
-
     switch (addr) {
-        case VI_REG_ADDR::VI_CTRL: [[fallthrough]];
+        case VI_REG_ADDR::VI_V_CURRENT:
+            m_mipsInterface->setInterrupt<^^Interfaces::MI_INTERRUPT::vi>(false);
+            break;
+        case VI_REG_ADDR::VI_CTRL:
+            m_ctrl = std::bit_cast<VI_CTRL>(data);
+            break;
         case VI_REG_ADDR::VI_ORIGIN: [[fallthrough]];
         case VI_REG_ADDR::VI_WIDTH: [[fallthrough]];
         case VI_REG_ADDR::VI_V_INTR: [[fallthrough]];
-        case VI_REG_ADDR::VI_V_CURRENT: [[fallthrough]];
         case VI_REG_ADDR::VI_BURST: [[fallthrough]];
         case VI_REG_ADDR::VI_V_TOTAL: [[fallthrough]];
         case VI_REG_ADDR::VI_H_TOTAL: [[fallthrough]];

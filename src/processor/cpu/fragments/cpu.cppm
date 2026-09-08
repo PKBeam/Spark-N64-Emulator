@@ -41,6 +41,10 @@ class CPU {
 
     auto runCpuInstruction() -> void;
 
+    auto readPc() const -> uint32_t {
+        return m_regs.readPc();
+    }
+
   private:
     Registers<Sys::CPU>                  m_regs;
     std::shared_ptr<Util::Logger>        m_logger;

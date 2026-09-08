@@ -45,7 +45,7 @@ auto AudioInterface::read(uint32_t addr) -> uint32_t {
             case AI_REG_ADDR::AI_BITRATE: [[fallthrough]];
             case AI_REG_ADDR::AI_CONTROL: [[fallthrough]];
             case AI_REG_ADDR::AI_LENGTH:
-                return m_length;
+                return 0;
             case AI_REG_ADDR::AI_STATUS:
                 return std::bit_cast<uint32_t>(m_status);
             default:

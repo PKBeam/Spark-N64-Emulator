@@ -23,11 +23,12 @@ export class Memory {
     template <std::unsigned_integral T>
     auto memcpy(PhysicalAddr dst, PhysicalAddr src) const -> void {
         IF_LOG_ENABLED(m_logger) {
+            const auto data = *reinterpret_cast<const T*>(m_memory + src);
             m_logger->log<Level::HIGH, Sys::PHYS_MEM>(
                 std::tuple{"op", "rw"},
                 std::tuple{"src", HEXFMT32, src},
                 std::tuple{"dst", HEXFMT32, dst},
-                makePrintData(*reinterpret_cast<const T*>(m_memory + src)));
+                makePrintData(Util::byteswapIfLittleEndian(data)));
         }
         std::memcpy(m_memory + dst, m_memory + src, sizeof(T));
     }

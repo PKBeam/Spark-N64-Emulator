@@ -18,3 +18,8 @@ add_custom_command(
     COMMENT "Copying data directory to build output"
 )
 
+target_compile_definitions(n64emu PRIVATE
+    $<$<CONFIG:Release>:
+        BUILD_RELEASE=1
+    >
+)

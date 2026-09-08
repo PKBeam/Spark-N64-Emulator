@@ -21,8 +21,11 @@ struct info {};
 #define contract_assert(x)
 #endif
 
+#if defined(BUILD_RELEASE)
+#define IF_LOG_ENABLED(x) if (0)
+#define WITH_LOG_DISABLED(logger, expr) expr
+#else
 #define IF_LOG_ENABLED(logger) if (logger && logger->enabled())
-
 #define WITH_LOG_DISABLED(logger, expr)         \
     [&]<typename Result = decltype(expr)>() {   \
         bool was_enabled = false;               \
@@ -43,6 +46,7 @@ struct info {};
             return result;                      \
         }                                       \
     }();
+#endif
 
 #define HEXFMT8 "{:#04x}"
 #define HEXFMT12 "{:#05x}"
