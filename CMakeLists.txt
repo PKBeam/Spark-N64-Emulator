@@ -72,4 +72,8 @@ if(CMAKE_BUILD_TYPE)
     endif()
 endif()
 
+if(DISABLE_LOGS)
+    add_compile_definitions(DISABLE_LOGS)
+endif()
+
 add_subdirectory(src)

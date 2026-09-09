@@ -21,7 +21,7 @@ struct info {};
 #define contract_assert(x)
 #endif
 
-#if defined(BUILD_RELEASE)
+#if defined(DISABLE_LOGS)
 #define IF_LOG_ENABLED(x) if (0)
 #define WITH_LOG_DISABLED(logger, expr) expr
 #else

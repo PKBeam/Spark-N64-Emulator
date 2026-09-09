@@ -18,9 +18,3 @@ add_custom_command(
         ${CMAKE_SOURCE_DIR}/data $<TARGET_FILE_DIR:n64emu>/data
     COMMENT "Copying data directory to build output"
 )
-
-target_compile_definitions(n64emu PRIVATE
-    $<$<CONFIG:Release>:
-        BUILD_RELEASE=1
-    >
-)

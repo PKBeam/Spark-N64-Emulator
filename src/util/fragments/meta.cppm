@@ -8,6 +8,10 @@ export module Util:Meta;
 
 export namespace Util {
 
+consteval auto privilegedContext() {
+    return std::meta::access_context::unchecked();
+}
+
 consteval auto isNull(std::meta::info i) {
     return i == std::meta::info{};
 }
@@ -23,6 +27,10 @@ consteval auto staticEnumeratorsOf(std::meta::info i) {
 
 consteval auto staticAnnotationsOf(std::meta::info i) {
     return std::define_static_array(std::meta::annotations_of(i));
+}
+
+consteval auto staticMembersOf(std::meta::info i) {
+    return std::define_static_array(std::meta::members_of(i, privilegedContext()));
 }
 
 consteval auto annotationOf(std::meta::info i) {

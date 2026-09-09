@@ -82,21 +82,7 @@ auto translate(VirtualAddr vaddr) -> PhysicalAddr {
     if (kseg0Lo <= vaddr && vaddr <= kseg1Hi) [[likely]] {
         return vaddr & 0x1FFFFFFF;
     }
-
-    template for (constexpr auto e : Util::staticEnumeratorsOf(^^VirtSeg)) {
-        constexpr auto a     = std::meta::annotations_of_with_type(e, ^^Util::Range)[0];
-        constexpr auto range = std::meta::extract<Util::Range>(a);
-        if (range.contains(vaddr)) {
-            if constexpr (e != (^^VirtSeg::KSEG0) && e != ^^VirtSeg::KSEG1) {
-                throw Util::Error(
-                    "Unimplemented virtual memory range {}", std::meta::identifier_of(e));
-            }
-            if (!range.contains(vaddr + sizeof(T) - 1)) {
-                throw Util::Error("Out of bounds N64 virtual address access " HEXFMT32 ", size {}", vaddr, sizeof(T));
-            }
-            return vaddr - range.lower;
-        }
-    }
+    // does any N64 game use the other segments?
     throw Util::Error("Translation failed on N64 virtual address " HEXFMT32, vaddr);
 }
 } // namespace Impl

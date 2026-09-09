@@ -20,7 +20,8 @@
             "cacheVariables": {
                 "CMAKE_CXX_COMPILER": "/usr/bin/g++-16",
                 "CMAKE_BUILD_TYPE": "Release",
-                "CMAKE_EXPORT_COMPILE_COMMANDS": "OFF"
+                "CMAKE_EXPORT_COMPILE_COMMANDS": "OFF",
+                "DISABLE_LOGS": "1"
             }
         },
         {
@@ -32,6 +33,18 @@
                 "CMAKE_CXX_COMPILER": "/usr/bin/g++-16",
                 "CMAKE_BUILD_TYPE": "RelWithDebInfo",
                 "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+            }
+        },
+        {
+            "name": "profiling",
+            "displayName": "Profiling",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build/profiling",
+            "cacheVariables": {
+                "CMAKE_CXX_COMPILER": "/usr/bin/g++-16",
+                "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+                "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+                "DISABLE_LOGS": "1"
             }
         }
     ],
@@ -47,6 +60,10 @@
         {
             "name": "reldeb",
             "configurePreset": "reldeb"
+        },
+        {
+            "name": "profiling",
+            "configurePreset": "profiling"
         }
     ]
 }
