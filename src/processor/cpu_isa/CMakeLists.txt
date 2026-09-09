@@ -11,6 +11,7 @@ target_sources(isa PUBLIC
         fragments/registers.cppm
 )
 target_compile_options(isa PUBLIC ${CXX_COMPILE_OPTIONS})
+target_link_options(isa PUBLIC ${CXX_LINK_OPTIONS})
 target_include_directories(isa PUBLIC ${CMAKE_SOURCE_DIR}/src)
 target_link_libraries(isa PUBLIC util)
 

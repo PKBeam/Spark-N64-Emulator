@@ -7,5 +7,6 @@ target_sources(cp0 PUBLIC
         fragments/cp0.cppm
 )
 target_compile_options(cp0 PUBLIC ${CXX_COMPILE_OPTIONS})
+target_link_options(cp0 PUBLIC ${CXX_LINK_OPTIONS})
 target_include_directories(cp0 PUBLIC ${CMAKE_SOURCE_DIR}/src)
 target_link_libraries(cp0 PUBLIC isa util)

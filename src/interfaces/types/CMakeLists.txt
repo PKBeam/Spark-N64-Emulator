@@ -15,6 +15,7 @@ target_sources(interface_types PUBLIC
         fragments/videoInterfaceTypes.cppm
 )
 target_compile_options(interface_types PUBLIC ${CXX_COMPILE_OPTIONS})
+target_link_options(interface_types PUBLIC ${CXX_LINK_OPTIONS})
 target_include_directories(interface_types PUBLIC ${CMAKE_SOURCE_DIR}/src)
 target_link_libraries(interface_types PUBLIC util)
 

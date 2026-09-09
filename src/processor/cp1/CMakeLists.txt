@@ -9,5 +9,6 @@ target_sources(cp1 PUBLIC
         fragments/registers.cppm
 )
 target_compile_options(cp1 PUBLIC ${CXX_COMPILE_OPTIONS})
+target_link_options(cp1 PUBLIC ${CXX_LINK_OPTIONS})
 target_include_directories(cp1 PUBLIC ${CMAKE_SOURCE_DIR}/src)
 target_link_libraries(cp1 PUBLIC isa memory util)

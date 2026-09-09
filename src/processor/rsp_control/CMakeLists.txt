@@ -7,6 +7,7 @@ target_sources(rsp_control PUBLIC
         fragments/rspControl.cppm
 )
 target_compile_options(rsp_control PUBLIC ${CXX_COMPILE_OPTIONS})
+target_link_options(rsp_control PUBLIC ${CXX_LINK_OPTIONS})
 target_include_directories(rsp_control PUBLIC ${CMAKE_SOURCE_DIR}/src)
 target_link_libraries(rsp_control PUBLIC rdp_control memory_types interface_types util)
 

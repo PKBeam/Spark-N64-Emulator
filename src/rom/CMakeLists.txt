@@ -8,6 +8,7 @@ target_sources(rom PUBLIC
         fragments/types.cppm
 )
 target_compile_options(rom PUBLIC ${CXX_COMPILE_OPTIONS})
+target_link_options(rom PUBLIC ${CXX_LINK_OPTIONS})
 target_include_directories(rom PUBLIC ${CMAKE_SOURCE_DIR}/src)
 target_link_libraries(rom PUBLIC isa util)
 

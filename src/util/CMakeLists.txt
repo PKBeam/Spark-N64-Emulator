@@ -12,4 +12,5 @@ target_sources(util PUBLIC
         fragments/types.cppm
 )
 target_compile_options(util PRIVATE ${CXX_COMPILE_OPTIONS})
+target_link_options(util PUBLIC ${CXX_LINK_OPTIONS})
 target_include_directories(util PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})

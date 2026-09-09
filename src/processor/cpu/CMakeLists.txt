@@ -9,5 +9,6 @@ target_sources(cpu PUBLIC
         fragments/registers.cppm
 )
 target_compile_options(cpu PUBLIC ${CXX_COMPILE_OPTIONS})
+target_link_options(cpu PUBLIC ${CXX_LINK_OPTIONS})
 target_include_directories(cpu PUBLIC ${CMAKE_SOURCE_DIR}/src)
 target_link_libraries(cpu PUBLIC isa cp0 cp1 util rom memory)

@@ -18,6 +18,7 @@ target_sources(interfaces PUBLIC
         fragments/videoInterface.cppm
 )
 target_compile_options(interfaces PUBLIC ${CXX_COMPILE_OPTIONS})
+target_link_options(interfaces PUBLIC ${CXX_LINK_OPTIONS})
 target_include_directories(interfaces PUBLIC ${CMAKE_SOURCE_DIR}/src)
 target_link_libraries(interfaces PUBLIC cp0 memory_types rdp_control rsp_control util isa rom)
 
