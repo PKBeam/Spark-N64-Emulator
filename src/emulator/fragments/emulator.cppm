@@ -30,13 +30,14 @@ using namespace std::string_view_literals;
 export class Emulator {
   public:
     struct Config {
-        std::shared_ptr<Util::Logger> logger          = nullptr;
-        std::size_t                   memorySize      = 0;
-        bool                          dumpRom         = false;
-        bool                          dumpPifRom      = false;
-        bool                          logAfterBoot    = false;
-        std::optional<uint32_t>       logAfterPc      = std::nullopt;
-        std::optional<std::size_t>    logAfterRdpSync = std::nullopt;
+        std::shared_ptr<Util::Logger> logger                 = nullptr;
+        std::size_t                   memorySize             = 0;
+        bool                          dumpRom                = false;
+        bool                          dumpPifRom             = false;
+        bool                          logAfterBoot           = false;
+        std::optional<uint32_t>       logAfterPc             = std::nullopt;
+        std::optional<std::size_t>    logAfterRdpSync        = std::nullopt;
+        std::optional<std::size_t>    terminateAfterRdpSyncs = std::nullopt;
     };
 
     constexpr Emulator(Config config);
@@ -172,6 +173,9 @@ constexpr auto Emulator::loadRom(std::filesystem::path path) -> void {
             m_logger->enable();
         });
     }
+    if (m_config.terminateAfterRdpSyncs) {
+        m_rdp->setTerminateAfterSyncs(*m_config.terminateAfterRdpSyncs);
+    }
     try {
         while (true) {
             // Deterministic VI interrupts
@@ -199,7 +203,7 @@ constexpr auto Emulator::loadRom(std::filesystem::path path) -> void {
                     m_rsp->dumpIMem("rsp_imem.txt");
                     throw;
                 }
-                m_rdp->runCommand();
+                m_rdp->runRdpCommand();
             }
         }
     } catch (const Util::Error& e) {

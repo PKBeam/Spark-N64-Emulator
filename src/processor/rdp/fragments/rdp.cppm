@@ -24,7 +24,11 @@ class RDP {
           m_rdpControl(rdpControl),
           m_mipsInterface(mipsInterface) {};
 
-    auto runCommand() -> void;
+    auto runRdpCommand() -> void;
+
+    constexpr auto setTerminateAfterSyncs(int terminateAfterSyncs) -> void {
+        m_terminateAfterSyncs = terminateAfterSyncs;
+    }
 
     constexpr auto getSyncCount() const -> std::size_t {
         return m_syncs;
@@ -42,6 +46,7 @@ class RDP {
     std::size_t                   m_syncs{};
     std::optional<Util::Colour>   m_primColour{};
 
+    int                   m_terminateAfterSyncs{-1};
     std::function<void()> m_syncCallback{};
     std::size_t           m_syncCallbackCount{};
 };
@@ -57,7 +62,7 @@ auto makeCommand(std::deque<uint64_t>& cmds) -> CommandT {
     return std::bit_cast<CommandT>(cmdWords);
 }
 
-auto RDP::runCommand() -> void {
+auto RDP::runRdpCommand() -> void {
     auto& cmds = m_rdpControl->getCommands();
     if (cmds.empty()) {
         return;
@@ -79,6 +84,10 @@ auto RDP::runCommand() -> void {
                 cmds.pop_front();
                 if (m_syncCallback && m_syncs == m_syncCallbackCount) {
                     m_syncCallback();
+                }
+                if (static_cast<int>(m_syncs) == m_terminateAfterSyncs) {
+                    std::println("Reached {} syncs, terminating", m_syncs);
+                    std::terminate();
                 }
                 break;
             }

@@ -6,6 +6,10 @@ import std;
 import ISA;
 import Util;
 
+// Sentinel value indicating no pending jump.
+// These values are on a hot path so they need to be as fast as possible to check.
+constexpr auto PC_NO_JUMP = 0x1;
+
 export namespace CPU {
 
 template <Sys System>
@@ -57,9 +61,9 @@ struct Registers {
     uint64_t                 m_lo{};
 
     // program counter state management
-    uint64_t                m_pc{};
-    std::optional<uint64_t> m_delaySlotPc{};
-    std::optional<uint64_t> m_pendingJumpPc{};
+    uint64_t m_pc{};
+    uint64_t m_delaySlotPc   = PC_NO_JUMP;
+    uint64_t m_pendingJumpPc = PC_NO_JUMP;
 };
 
 template <Sys System>
@@ -79,35 +83,35 @@ auto Registers<System>::writePcDelayed(uint64_t newPc) -> void {
 
 template <Sys System>
 auto Registers<System>::pcIsDelaySlot() const -> bool {
-    return m_delaySlotPc.has_value();
+    return m_delaySlotPc != PC_NO_JUMP;
 }
 
 template <Sys System>
 auto Registers<System>::clearDelaySlot() -> void {
-    m_delaySlotPc.reset();
+    m_delaySlotPc = PC_NO_JUMP;
 }
 
 template <Sys System>
 auto Registers<System>::advancePc() -> void {
-    if (m_delaySlotPc) {
-        m_pc = *m_delaySlotPc;
-        m_delaySlotPc.reset();
-    } else {
+    if (m_delaySlotPc == PC_NO_JUMP) {
         m_pc += 4;
+    } else {
+        m_pc          = m_delaySlotPc;
+        m_delaySlotPc = PC_NO_JUMP;
     }
     if constexpr (System == Sys::RSP) {
         m_pc &= 0xFFF;
     }
-    if (m_pendingJumpPc) {
-        m_delaySlotPc = m_pendingJumpPc;
-        m_pendingJumpPc.reset();
+    if (m_pendingJumpPc != PC_NO_JUMP) {
+        m_delaySlotPc   = m_pendingJumpPc;
+        m_pendingJumpPc = PC_NO_JUMP;
     }
 }
 
 template <Sys System>
 auto Registers<System>::getNextPc() const -> uint64_t {
-    if (m_delaySlotPc) {
-        return *m_delaySlotPc;
+    if (m_delaySlotPc != PC_NO_JUMP) {
+        return m_delaySlotPc;
     }
     return m_pc + 4;
 }

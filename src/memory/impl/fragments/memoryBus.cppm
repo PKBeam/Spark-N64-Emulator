@@ -75,11 +75,12 @@ auto getPhysicalSegment(PhysicalAddr paddr) -> PhysSeg {
 }
 
 template <std::integral T>
-auto translate(VirtualAddr vaddr, std::shared_ptr<Util::Logger> logger) -> PhysicalAddr {
-    IF_LOG_ENABLED(logger) {
-        if (vaddr % sizeof(T) != 0) {
-            logger->log<Level::HIGH, Sev::WARNING, Sys::RDRAM>("Unaligned virtual address access " HEXFMT32 ", size {}", vaddr, sizeof(T));
-        }
+auto translate(VirtualAddr vaddr) -> PhysicalAddr {
+    // Hot path optimisation- almost every vaddr is in KSEG0-1
+    constexpr auto kseg0Lo = Util::rangeOf(VirtSeg::KSEG0).lower;
+    constexpr auto kseg1Hi = Util::rangeOf(VirtSeg::KSEG1).upper;
+    if (kseg0Lo <= vaddr && vaddr <= kseg1Hi) [[likely]] {
+        return vaddr & 0x1FFFFFFF;
     }
 
     template for (constexpr auto e : Util::staticEnumeratorsOf(^^VirtSeg)) {
@@ -102,12 +103,22 @@ auto translate(VirtualAddr vaddr, std::shared_ptr<Util::Logger> logger) -> Physi
 
 template <std::integral T>
 auto MemoryBus::read(VirtualAddr addr) const -> T {
-    return readPhysical<T>(Impl::translate<T>(addr, m_logger));
+    if (addr % sizeof(T) != 0) [[unlikely]] {
+        IF_LOG_ENABLED(m_logger) {
+            m_logger->log<Level::HIGH, Sev::WARNING, Sys::RDRAM>("Unaligned virtual address access " HEXFMT32 ", size {}", addr, sizeof(T));
+        }
+    }
+    return readPhysical<T>(Impl::translate<T>(addr));
 }
 
 template <std::integral T>
 auto MemoryBus::write(VirtualAddr addr, T data) const -> void {
-    writePhysical<T>(Impl::translate<T>(addr, m_logger), data);
+    if (addr % sizeof(T) != 0) [[unlikely]] {
+        IF_LOG_ENABLED(m_logger) {
+            m_logger->log<Level::HIGH, Sev::WARNING, Sys::RDRAM>("Unaligned virtual address access " HEXFMT32 ", size {}", addr, sizeof(T));
+        }
+    }
+    writePhysical<T>(Impl::translate<T>(addr), data);
 }
 
 template <std::integral T>
@@ -118,8 +129,7 @@ auto MemoryBus::readPhysical(PhysicalAddr paddr) const -> T {
         case PhysSeg::RDRAM: [[fallthrough]];
         case PhysSeg::RSP_DMEM: [[fallthrough]];
         case PhysSeg::RSP_IMEM:
-            data = m_memory->read<T>(paddr);
-            break;
+            return m_memory->read<T>(paddr); // skip the logging at the bottom
         case PhysSeg::RDRAM_UNUSED:
             data = 0;
             break;
@@ -166,18 +176,12 @@ auto MemoryBus::readPhysical(PhysicalAddr paddr) const -> T {
 
 template <std::integral T>
 auto MemoryBus::writePhysical(PhysicalAddr paddr, T data) const -> void {
-    IF_LOG_ENABLED(m_logger) {
-        m_logger->log<Level::HIGH, Sys::RDRAM>(
-            std::tuple{"op", "w"},
-            std::tuple{"addr", HEXFMT32, paddr},
-            makePrintData(data));
-    }
     switch (Impl::getPhysicalSegment(paddr)) {
         case PhysSeg::RDRAM: [[fallthrough]];
         case PhysSeg::RSP_DMEM: [[fallthrough]];
         case PhysSeg::RSP_IMEM:
             m_memory->write<T>(paddr, data);
-            break;
+            return; // skip the logging at the bottom
         case PhysSeg::RDRAM_UNUSED: break;
         case PhysSeg::MIPS_INTERFACE: m_mipsInterface->sizedWrite(paddr, sizeof(T), data); break;
         case PhysSeg::AUDIO_INTERFACE: m_audioInterface->sizedWrite(paddr, sizeof(T), data); break;
@@ -200,6 +204,12 @@ auto MemoryBus::writePhysical(PhysicalAddr paddr, T data) const -> void {
             break;
         default:
             throw Util::Error("Unimplemented physical memory range {}", Impl::getPhysicalSegment(paddr));
+    }
+    IF_LOG_ENABLED(m_logger) {
+        m_logger->log<Level::HIGH, Sys::RDRAM>(
+            std::tuple{"op", "w"},
+            std::tuple{"addr", HEXFMT32, paddr},
+            makePrintData(data));
     }
 }
 

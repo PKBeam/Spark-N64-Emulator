@@ -80,6 +80,10 @@ int main(int argc, char* argv[]) {
         if (arg == "--dump-pif-rom"sv) {
             emulatorConfig.dumpPifRom = true;
         }
+        if (arg.starts_with("--num-rdp-syncs="sv)) {
+            auto sync                             = std::string(arg.substr(16));
+            emulatorConfig.terminateAfterRdpSyncs = std::stoi(sync);
+        }
     }
 
     if (logLevel) {

@@ -38,7 +38,10 @@ export class MipsInterface : public Interface {
 
 auto MipsInterface::updateInterrupt() -> void {
     auto cause = m_cp0->readReg<ISA::CP0_REG::CAUSE>();
-    if (std::bit_cast<uint32_t>(m_interrupt) & std::bit_cast<uint32_t>(m_mask)) {
+
+    const auto interrupts = std::bit_cast<uint32_t>(m_interrupt);
+    const auto mask       = std::bit_cast<uint32_t>(m_mask);
+    if (interrupts & mask) {
         cause.ip |= (1 << 2); // set IP2
         cause.exc = 0;
     } else {

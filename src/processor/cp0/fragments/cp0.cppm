@@ -45,6 +45,9 @@ class CP0 {
     std::shared_ptr<Util::Logger> m_logger;
     bool                          m_hasInterrupt{};
     std::array<uint32_t, 32>      m_regs;
+
+    // this shadows m_regs[compare] as an optimisation
+    uint32_t m_compare{};
 };
 
 CP0::CP0(std::shared_ptr<Util::Logger> logger) {
@@ -102,6 +105,7 @@ auto CP0::writeReg(std::size_t index, T value) -> void {
             }
             updateInterrupt();
         }
+        m_compare = value;
     }
     m_regs[index] = Util::signExt32(value);
     IF_LOG_ENABLED(m_logger) {
@@ -127,10 +131,8 @@ auto CP0::writeReg(T value) -> void {
 }
 
 auto CP0::incrementCount() -> void {
-    // direct accesses because this will be called a LOT
-    auto&      count   = m_regs[static_cast<uint8_t>(ISA::CP0_REG::COUNT)];
-    const auto compare = m_regs[static_cast<uint8_t>(ISA::CP0_REG::COMPARE)];
-    if (++count == compare) {
+    auto& count = m_regs[static_cast<uint8_t>(ISA::CP0_REG::COUNT)]; // direct access for speed (TODO is this necessary?)
+    if (++count == m_compare) [[unlikely]] {
         auto cause = readReg<ISA::CP0_REG::CAUSE>();
         cause.ip |= 0x80; // set IP7
         writeReg(cause);

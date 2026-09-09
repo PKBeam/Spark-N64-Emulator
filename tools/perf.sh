@@ -1,6 +1,6 @@
 #!/usr/bin/bash
 cd ../build/reldeb/src
-sudo perf record --call-graph dwarf ./n64emu
+sudo perf record --call-graph dwarf ./n64emu --num-rdp-syncs=500
 sudo perf script > out.perf
 sudo perf report --stdio > perfreport.txt
 # need FlameGraph in $PATH
