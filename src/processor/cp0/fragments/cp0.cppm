@@ -149,7 +149,7 @@ auto CP0::hasInterrupt() const -> bool {
 
 auto CP0::updateInterrupt() -> void {
     const auto status = WITH_LOG_DISABLED(m_logger, readReg<ISA::CP0_REG::STATUS>());
-    const auto cause  = WITH_LOG_DISABLED(m_logger, readReg<ISA::CP0_REG::CAUSE>());
+    auto       cause  = WITH_LOG_DISABLED(m_logger, readReg<ISA::CP0_REG::CAUSE>());
     m_hasInterrupt    = status.im & cause.ip && status.ie && !status.exl && !status.erl;
 }
 

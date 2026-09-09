@@ -86,10 +86,9 @@ class PlotNavigator:
         self.ax.set_ylim(ylim)
         
         self.ax.set_aspect("equal")
-        self.ax.add_patch(Rectangle((0, 0), 320, 240, fill=False, linewidth=2, edgecolor="red"))
         for patch in self.frames[self.frame]:
             self.ax.add_patch(patch)
-
+        self.ax.add_patch(Rectangle((0, 0), 320, 240, fill=False, linewidth=2, edgecolor="red"))
         self.fig.canvas.draw()
 
     def previousFrame(self, event):

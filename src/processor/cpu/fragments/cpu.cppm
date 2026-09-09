@@ -37,8 +37,6 @@ class CPU {
 
     auto emulateInitialBoot() -> void;
 
-    auto checkInterrupts() -> void;
-
     auto runCpuInstruction() -> void;
 
     auto readPc() const -> uint32_t {
@@ -46,6 +44,8 @@ class CPU {
     }
 
   private:
+    auto handleInterrupt() -> void;
+
     Registers<Sys::CPU>                  m_regs;
     std::shared_ptr<Util::Logger>        m_logger;
     Memory::MemoryBus*                   m_memoryBus{};
@@ -98,21 +98,26 @@ auto CPU::emulateInitialBoot() -> void {
     m_cp0->writeReg<ISA::CP0_REG::CONFIG>(static_cast<uint32_t>(0x0006E463));
 }
 
-auto CPU::checkInterrupts() -> void {
-    if (m_cp0->hasInterrupt()) {
-        auto status = m_cp0->readReg<ISA::CP0_REG::STATUS>();
-        status.exl  = 1;
-        m_cp0->writeReg(status);
-        const auto nextPc = m_regs.pcIsDelaySlot() ? m_regs.readPc() - 4 : m_regs.readPc();
-        m_cp0->writeReg<ISA::CP0_REG::EPC>(nextPc);
-        m_regs.writePc(status.bev ? 0xBFC00000 : 0x80000000);
-        m_regs.clearDelaySlot();
-        IF_LOG_ENABLED(m_logger) {
-            m_logger->log<Level::HIGH, Sys::CPU>(
-                std::tuple{"interruptStatus", HEXFMT32, std::bit_cast<uint32_t>(status)},
-                std::tuple{"interruptCause", HEXFMT32, std::bit_cast<uint32_t>(m_cp0->readReg<ISA::CP0_REG::CAUSE>())},
-                std::tuple{"returnPc", HEXFMT32, nextPc});
-        }
+auto CPU::handleInterrupt() -> void {
+    auto status = m_cp0->readReg<ISA::CP0_REG::STATUS>();
+    status.exl  = 1;
+    m_cp0->writeReg(status);
+    auto nextPc = m_regs.readPc();
+    if (m_regs.pcIsDelaySlot()) {
+        nextPc -= 4;
+        auto cause = m_cp0->readReg<ISA::CP0_REG::CAUSE>();
+        cause.bd   = 1;
+        m_cp0->writeReg(cause);
+    }
+    m_cp0->writeReg<ISA::CP0_REG::EPC>(nextPc);
+    m_regs.writePc(status.bev ? 0xBFC00000 : 0x80000000);
+    m_regs.clearDelaySlot();
+    IF_LOG_ENABLED(m_logger) {
+        m_logger->log<Level::HIGH, Sys::CPU>(
+            std::tuple{"op", "interrupt"},
+            std::tuple{"status", HEXFMT32, std::bit_cast<uint32_t>(status)},
+            std::tuple{"cause", HEXFMT32, std::bit_cast<uint32_t>(m_cp0->readReg<ISA::CP0_REG::CAUSE>())},
+            std::tuple{"returnPc", HEXFMT32, nextPc});
     }
 }
 
@@ -142,6 +147,27 @@ auto CPU::runCpuInstruction() -> void {
     const auto op   = inst.opcode;
     const auto data = inst.data;
 
+    // handle interrupts
+    if (m_cp0->hasInterrupt()) { // handle CP0 first
+        handleInterrupt();
+        return;
+    }
+    auto status = WITH_LOG_DISABLED(m_logger, m_cp0->readReg<ISA::CP0_REG::STATUS>());
+    if (!status.isCoprocessorUsable(1)) {
+        if (inst.isCOP1()) {
+            IF_LOG_ENABLED(m_logger) {
+                m_logger->log<Level::HIGH, Sev::INFO, Sys::CPU>("CP1 unusable exception");
+            }
+            auto cause = m_cp0->readReg<ISA::CP0_REG::CAUSE>();
+            cause.exc  = static_cast<uint32_t>(ISA::CP0_EXCEPTION::COP_UNUSABLE);
+            cause.ce   = 1;
+            m_cp0->writeReg(cause);
+            handleInterrupt();
+            return;
+        }
+    }
+
+    // execute the opcode
     switch (op) {
         case UnifiedOpcode::OP_SYNC: [[fallthrough]];
         case UnifiedOpcode::OP_NOP: break;

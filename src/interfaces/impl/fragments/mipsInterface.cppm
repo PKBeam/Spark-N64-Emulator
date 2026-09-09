@@ -40,6 +40,7 @@ auto MipsInterface::updateInterrupt() -> void {
     auto cause = m_cp0->readReg<ISA::CP0_REG::CAUSE>();
     if (std::bit_cast<uint32_t>(m_interrupt) & std::bit_cast<uint32_t>(m_mask)) {
         cause.ip |= (1 << 2); // set IP2
+        cause.exc = 0;
     } else {
         cause.ip &= ~(1 << 2); // clear IP2
     }

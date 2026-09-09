@@ -183,7 +183,6 @@ constexpr auto Emulator::loadRom(std::filesystem::path path) -> void {
             //}
 
             for (auto _ : std::views::iota(0uz, CycleRatios::CPU)) {
-                m_cpu->checkInterrupts();
                 m_cpu->runCpuInstruction();
                 m_cp0->incrementCount();
                 IF_LOG_ENABLED(m_logger) {

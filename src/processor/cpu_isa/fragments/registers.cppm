@@ -104,6 +104,10 @@ struct CP0Status {
     uint32_t fr : 1 = 0;
     uint32_t rp : 1 = 0;
     uint32_t cu : 4 = 0;
+
+    constexpr auto isCoprocessorUsable(std::size_t coprocessor) const -> bool {
+        return (cu & (1 << coprocessor)) != 0;
+    }
 };
 
 struct CP0Cause {

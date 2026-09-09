@@ -20,6 +20,15 @@ export {
         constexpr auto getCoprocessor() const -> uint32_t {
             return (data >> 26) & 0b11;
         }
+
+        constexpr auto isCOP1() const {
+            using namespace Opcodes;
+            const auto op              = static_cast<uint32_t>(opcode);
+            const auto isCOP1          = (UnifiedOpcodeBase::CP1_BASE <= op && op < UnifiedOpcodeBase::COP2_LOAD_BASE);
+            const auto isStoreLoadCOP1 = opcode == UnifiedOpcode::OP_LWC1 || opcode == UnifiedOpcode::OP_SWC1 || opcode == UnifiedOpcode::OP_LDC1 || opcode == UnifiedOpcode::OP_SDC1;
+            const auto isCOPz_COP1     = (UnifiedOpcodeBase::COPz_rs_BASE <= op && op < UnifiedOpcodeBase::CP0_BASE) && (getCoprocessor() == 1);
+            return isCOP1 || isStoreLoadCOP1 || isCOPz_COP1;
+        }
     };
 }
 
