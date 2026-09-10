@@ -75,5 +75,8 @@ endif()
 if(DISABLE_LOGS)
     add_compile_definitions(DISABLE_LOGS)
 endif()
+if(DETERMINISTIC_VI_INTERRUPTS)
+    add_compile_definitions(DETERMINISTIC_VI_INTERRUPTS)
+endif()
 
 add_subdirectory(src)

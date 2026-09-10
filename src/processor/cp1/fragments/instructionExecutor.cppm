@@ -158,7 +158,7 @@ auto InstructionExecutor::executeBivariate(uint32_t inst, Function&& func, Excep
             const auto exception = exceptFunc(fs, ft);
             if (exception != ISA::CP1_EXCEPTION::NONE) {
                 throw Util::Error("FPU exception {} occurred during instruction execution (fs={}, ft={})",
-                                  static_cast<int>(exception),
+                                  exception,
                                   fs,
                                   ft);
             }

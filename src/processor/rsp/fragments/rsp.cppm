@@ -40,6 +40,10 @@ class RSP {
 
     auto runRspInstruction() -> void;
 
+    auto getPc() const -> uint32_t {
+        return m_gprs.readPc();
+    }
+
   private:
     std::shared_ptr<Util::Logger> m_logger;
     Control*                      m_control{};
@@ -371,7 +375,6 @@ auto RSP::runRspInstruction() -> void {
             halt();
             break;
         default:
-            dumpIMem("rsp_imem.txt");
             throw Util::Error("RSP unimplemented instruction @ PC " HEXFMT12 ": {} (" HEXFMT32 ")", m_gprs.readPc(), inst, data);
     }
 

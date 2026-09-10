@@ -152,6 +152,9 @@ constexpr auto formatOperands(Instruction inst) -> std::vector<std::string> {
                                     case UnifiedOpcode::OP_SUV: [[fallthrough]];
                                     case UnifiedOpcode::OP_LDV: [[fallthrough]];
                                     case UnifiedOpcode::OP_SDV: return 3;
+                                    case UnifiedOpcode::OP_LTV: [[fallthrough]];
+                                    case UnifiedOpcode::OP_STV: [[fallthrough]];
+                                    case UnifiedOpcode::OP_SWV: [[fallthrough]];
                                     case UnifiedOpcode::OP_LQV: [[fallthrough]];
                                     case UnifiedOpcode::OP_SQV: [[fallthrough]];
                                     case UnifiedOpcode::OP_LRV: [[fallthrough]];

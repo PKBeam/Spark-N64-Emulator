@@ -9,8 +9,6 @@ import :Interface;
 import :MipsInterface;
 import InterfaceTypes;
 
-constexpr std::size_t RSP_CYCLES_PER_VI_INTERRUPT = 62500000 / 60;
-
 namespace Interfaces {
 
 export class VideoInterface : public Interface {
@@ -20,17 +18,10 @@ export class VideoInterface : public Interface {
     auto read(uint32_t addr) -> uint32_t override;
     auto write(uint32_t addr, uint32_t data) -> void override;
 
-    // Real-time interrupts
-    auto hasTimerFired() const -> bool {
-        return m_timerTick;
-    }
-
-    auto clearTimerFired() -> void {
-        m_timerTick = false;
-    }
-
+#if defined(DETERMINISTIC_VI_INTERRUPTS)
     // Deterministic interrupts
     auto tick(std::size_t cycles) -> void {
+        constexpr std::size_t RSP_CYCLES_PER_VI_INTERRUPT = 62500000 / 60;
         if (m_ctrl.type == 0) {
             return;
         }
@@ -40,19 +31,31 @@ export class VideoInterface : public Interface {
             m_mipsInterface->setInterrupt<^^Interfaces::MI_INTERRUPT::vi>(true);
         }
     }
+#else
+    // Real-time interrupts
+    auto hasTimerFired() const -> bool {
+        return m_timerTick;
+    }
 
+    auto clearTimerFired() -> void {
+        m_timerTick = false;
+    }
+#endif
   private:
-    std::thread                   m_interruptGenerator;
+#if defined(DETERMINISTIC_VI_INTERRUPTS)
+    std::size_t m_interruptCounter{};
+#else
+    bool        m_timerTick{};
+    std::thread m_interruptGenerator;
+#endif
     std::shared_ptr<Util::Logger> m_logger;
-    bool                          m_timerTick{};
     MipsInterface*                m_mipsInterface;
     VI_CTRL                       m_ctrl{};
-
-    std::size_t m_interruptCounter{};
 };
 
 VideoInterface::VideoInterface(std::shared_ptr<Util::Logger> logger, MipsInterface* mipsInterface)
     : m_logger(logger), m_mipsInterface(mipsInterface) {
+#if !defined(DETERMINISTIC_VI_INTERRUPTS)
     m_interruptGenerator = std::thread([this]() {
         auto prev = std::chrono::high_resolution_clock::now();
         while (true) {
@@ -64,6 +67,7 @@ VideoInterface::VideoInterface(std::shared_ptr<Util::Logger> logger, MipsInterfa
             }
         }
     });
+#endif
 }
 
 auto VideoInterface::read(uint32_t addr) -> uint32_t {

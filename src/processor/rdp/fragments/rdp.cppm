@@ -68,13 +68,13 @@ auto RDP::runRdpCommand() -> void {
         return;
     }
     IF_LOG_ENABLED(m_logger) {
-        m_logger->log<Level::HIGH, Sev::INFO, Sys::RDP>("Received {} commands", cmds.size());
+        m_logger->log<Level::MED, Sev::INFO, Sys::RDP>("Received {} commands", cmds.size());
     }
     while (!cmds.empty()) {
         const auto cmdBits = cmds.front();
         const auto cmdType = getCommand(cmdBits);
         IF_LOG_ENABLED(m_logger) {
-            m_logger->log<Level::HIGH, Sys::RDP>(
+            m_logger->log<Level::MED, Sys::RDP>(
                 std::tuple{"command", "{}", cmdType});
         }
         switch (cmdType) {
@@ -88,6 +88,9 @@ auto RDP::runRdpCommand() -> void {
                 if (static_cast<int>(m_syncs) == m_terminateAfterSyncs) {
                     std::println("Reached {} syncs, terminating", m_syncs);
                     std::terminate();
+                }
+                IF_LOG_ENABLED(m_logger) {
+                    m_logger->log<Level::HIGH, Sev::INFO, Sys::RDP>("SYNC_FULL at sync {}", m_syncs);
                 }
                 break;
             }
@@ -121,7 +124,7 @@ auto RDP::runRdpCommand() -> void {
 
                 IF_LOG_ENABLED(m_logger) {
                     const auto tri = cmd.getTriangle();
-                    m_logger->log<Level::HIGH, Sys::RDP>(
+                    m_logger->log<Level::MED, Sys::RDP>(
                         std::tuple{"op", "draw"},
                         std::tuple{"type", "triangle"},
                         std::tuple{"coords", "{}", tri});
@@ -131,7 +134,7 @@ auto RDP::runRdpCommand() -> void {
             case Command::FILL_RECTANGLE: {
                 const auto cmd = makeCommand<Commands::FillRectangle, 1>(cmds);
                 IF_LOG_ENABLED(m_logger) {
-                    m_logger->log<Level::HIGH, Sys::RDP>(
+                    m_logger->log<Level::MED, Sys::RDP>(
                         std::tuple{"op", "draw"},
                         std::tuple{"type", "rectangle"},
                         std::tuple{"coords", "{}", cmd.getRectangle()});
@@ -141,7 +144,7 @@ auto RDP::runRdpCommand() -> void {
             case Command::TEXTURE_RECTANGLE: {
                 const auto cmd = makeCommand<Commands::TextureRectangle, 2>(cmds);
                 IF_LOG_ENABLED(m_logger) {
-                    m_logger->log<Level::HIGH, Sys::RDP>(
+                    m_logger->log<Level::MED, Sys::RDP>(
                         std::tuple{"op", "draw"},
                         std::tuple{"type", "rectangle"},
                         std::tuple{"coords", "{}", cmd.getRectangle()});
@@ -152,7 +155,7 @@ auto RDP::runRdpCommand() -> void {
                 const auto cmd = makeCommand<Commands::SetPrimitiveColor, 1>(cmds);
                 m_primColour.emplace(cmd.red / 255.0f, cmd.green / 255.0f, cmd.blue / 255.0f, cmd.alpha / 255.0f);
                 IF_LOG_ENABLED(m_logger) {
-                    m_logger->log<Level::HIGH, Sys::RDP>(
+                    m_logger->log<Level::MED, Sys::RDP>(
                         std::tuple{"op", "setColour"},
                         std::tuple{"colour", "{}", *m_primColour});
                 }
@@ -176,7 +179,7 @@ auto RDP::runRdpCommand() -> void {
             case Command::SET_SCISSOR:
                 cmds.pop_front();
                 IF_LOG_ENABLED(m_logger) {
-                    m_logger->log<Level::HIGH, Sev::WARNING, Sys::RDP>("Ignoring command {}", cmdType);
+                    m_logger->log<Level::MED, Sev::WARNING, Sys::RDP>("Ignoring command {}", cmdType);
                 }
                 break;
             // No-ops

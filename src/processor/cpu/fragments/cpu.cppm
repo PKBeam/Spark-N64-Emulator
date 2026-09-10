@@ -39,7 +39,7 @@ class CPU {
 
     auto runCpuInstruction() -> void;
 
-    auto readPc() const -> uint32_t {
+    auto getPc() const -> uint32_t {
         return m_regs.readPc();
     }
 
@@ -436,7 +436,6 @@ auto CPU::runCpuInstruction() -> void {
             break;
         }
         default:
-            dumpIMem("cpu_imem.txt");
             throw Util::Error("CPU unimplemented instruction @ PC " HEXFMT32 ": {} (" HEXFMT32 ")", m_regs.readPc(), inst, data);
     }
 

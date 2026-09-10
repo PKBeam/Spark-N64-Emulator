@@ -24,7 +24,7 @@ struct Info {
 namespace Parsers {
 
 [[= Info(sstr("--log"),
-         sstr("Set the log level\n(Default: HIGH)"))]] //
+         sstr("Set the log level    (Default: HIGH)"))]] //
     constexpr auto log(Emulator::Config* config, std::string_view LEVEL = "HIGH"sv) -> void {
     auto logLevel = std::optional<Level>{};
     try {
@@ -56,7 +56,7 @@ namespace Parsers {
 }
 
 [[= Info(sstr("--log-after-rdp-sync"),
-         sstr("Enable logging after a certain number of RDP syncs\n(Default: 1)"))]] //
+         sstr("Enable logging after a certain number of RDP syncs    (Default: 1)"))]] //
     constexpr auto logAfterRdpSync(Emulator::Config* config, std::string_view RDP_SYNC = "1"sv) -> void {
     const auto value = std::stoi(std::string(RDP_SYNC));
     if (value < 1) {
@@ -67,11 +67,14 @@ namespace Parsers {
 }
 
 [[= Info(sstr("--log-after-pc"),
-         sstr("Enable logging after reaching a specific program counter\n(Default: 0xBFC00000)"))]] //
-    constexpr auto logAfterPc(Emulator::Config* config, std::string_view PC = "0xBFC00000"sv) -> void {
+         sstr("Enable logging after reaching a specific program counter"))]] //
+    constexpr auto logAfterPc(Emulator::Config* config, std::string_view PC = ""sv) -> void {
+    if (PC.empty()) {
+        throw Util::Error("Program counter not specified", PC);
+    }
     const auto value = std::stol(std::string(PC), nullptr, 16);
     if (value % 4 != 0) {
-        throw Util::Error("Program counter {} must be aligned to 4 bytes", PC);
+        throw Util::Error("Program counter must be aligned to 4 bytes", PC);
     }
     config->logAfterPc = value;
     config->logger->disable();
@@ -120,7 +123,7 @@ namespace Parsers {
     config->dumpPifRom = true;
 }
 [[= Info(sstr("--num-rdp-syncs"),
-         sstr("Terminate after a certain number of RDP syncs\n(Default: 1)"))]] //
+         sstr("Terminate after a certain number of RDP syncs    (Default: 1)"))]] //
     constexpr auto numRdpSyncs(Emulator::Config* config, std::string_view RDP_SYNCS = "1"sv) -> void {
     const auto value = std::stoi(std::string(RDP_SYNCS));
     if (value < 1) {
@@ -140,7 +143,7 @@ namespace Parsers {
         constexpr auto param = std::meta::parameters_of(fn)[1];
         if constexpr (std::meta::has_identifier(param)) {
             constexpr auto paramName = std::meta::has_identifier(param) ? std::meta::identifier_of(param) : "";
-            std::println("{} {}\n    {}\n", fnArg.name, paramName, fnArg.description);
+            std::println("{}={}\n    {}\n", fnArg.name, paramName, fnArg.description);
             continue;
         }
         std::println("{}\n    {}\n", fnArg.name, fnArg.description);

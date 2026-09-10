@@ -48,6 +48,7 @@ export class Emulator {
   private:
     // emulates PIF and IPL3
     constexpr auto emulateInitialBoot() -> void;
+    constexpr auto processViInterrupt() -> void;
 
     const Config                  m_config;
     std::shared_ptr<Util::Logger> m_logger;
@@ -148,6 +149,17 @@ Emulator::~Emulator() {
     delete m_videoInterface;
 }
 
+constexpr auto Emulator::processViInterrupt() -> void {
+#if defined(DETERMINISTIC_VI_INTERRUPTS)
+    m_videoInterface->tick(CycleRatios::VI_DEBUG);
+#else
+    if (m_videoInterface->hasTimerFired()) {
+        m_mipsInterface->setInterrupt<^^Interfaces::MI_INTERRUPT::vi>(true);
+        m_videoInterface->clearTimerFired();
+    }
+#endif
+}
+
 constexpr auto Emulator::loadRom(std::filesystem::path path) -> void {
     m_rom.emplace(path);
 
@@ -178,37 +190,36 @@ constexpr auto Emulator::loadRom(std::filesystem::path path) -> void {
     }
     try {
         while (true) {
-            // Deterministic VI interrupts
-            m_videoInterface->tick(CycleRatios::VI_DEBUG);
-            // Real-time VI interrupts
-            // if (m_videoInterface->hasTimerFired()) {
-            //    m_mipsInterface->setInterrupt<^^Interfaces::MI_INTERRUPT::vi>(true);
-            //    m_videoInterface->clearTimerFired();
-            //}
+            processViInterrupt();
 
             for (auto _ : std::views::iota(0uz, CycleRatios::CPU)) {
                 m_cpu->runCpuInstruction();
                 m_cp0->incrementCount();
                 IF_LOG_ENABLED(m_logger) {
-                    if (m_config.logAfterPc && m_cpu->readPc() == *m_config.logAfterPc) {
+                    if (m_cpu->getPc() == m_config.logAfterPc) {
                         m_logger->enable();
                     }
                 }
             }
 
             for (auto _ : std::views::iota(0uz, CycleRatios::RSP)) {
-                try {
-                    m_rsp->runRspInstruction();
-                } catch (const Util::Error& e) {
-                    m_rsp->dumpIMem("rsp_imem.txt");
-                    throw;
-                }
+                m_rsp->runRspInstruction();
                 m_rdp->runRdpCommand();
             }
         }
     } catch (const Util::Error& e) {
-        std::println("Exception thrown @ RDP sync {}", m_rdp->getSyncCount());
-        if (m_logger) {
+        std::println("A fatal exception occurred @\n"
+                     "    RDP sync: {}\n"
+                     "    CPU PC  : " HEXFMT32 "\n"
+                     "    RSP PC  : " HEXFMT12,
+                     m_rdp->getSyncCount(),
+                     m_cpu->getPc(),
+                     m_rsp->getPc());
+        std::println("Dumping CPU instruction memory space");
+        m_cpu->dumpIMem("cpu_imem.txt");
+        std::println("Dumping RSP instruction memory space");
+        m_rsp->dumpIMem("rsp_imem.txt");
+        IF_LOG_ENABLED(m_logger) {
             m_logger->flush();
         }
         throw;
