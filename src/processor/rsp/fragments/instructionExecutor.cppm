@@ -549,7 +549,7 @@ auto InstructionExecutor::executeReciprocalLow(uint32_t inst) -> void {
         const auto absInput = static_cast<uint32_t>(std::abs(static_cast<int64_t>(input)));
         const auto shift    = std::countl_zero(absInput);
         if constexpr (Func == Param::RecipFunc::RECIP) {
-            const auto index = (absInput << (shift + 1)) >> 23; // get 9 bits below first set bit
+            const auto index = (static_cast<uint64_t>(absInput) << (shift + 1)) >> 23; // get 9 bits below first set bit
             result           = ((1u << 16 | RCP_LOOKUP[index]) << 14) >> (31 - shift);
         } else {
             const auto index = (static_cast<uint64_t>(absInput) << shift & 0x7FC00000) >> 22;

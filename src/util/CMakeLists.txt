@@ -9,6 +9,8 @@ target_sources(util PUBLIC
         fragments/log.cppm
         fragments/math.cppm
         fragments/meta.cppm
+        fragments/signal.cppm
+        fragments/timer.cppm
         fragments/types.cppm
 )
 target_compile_options(util PRIVATE ${CXX_COMPILE_OPTIONS})

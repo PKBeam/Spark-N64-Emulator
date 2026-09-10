@@ -13,62 +13,47 @@ namespace Interfaces {
 
 export class VideoInterface : public Interface {
   public:
-    VideoInterface(std::shared_ptr<Util::Logger> logger, MipsInterface* mipsInterface);
+    VideoInterface(std::shared_ptr<Util::Logger> logger, MipsInterface* mipsInterface) : m_logger(logger), m_mipsInterface(mipsInterface) {}
 
     auto read(uint32_t addr) -> uint32_t override;
     auto write(uint32_t addr, uint32_t data) -> void override;
 
 #if defined(DETERMINISTIC_VI_INTERRUPTS)
-    // Deterministic interrupts
     auto tick(std::size_t cycles) -> void {
         constexpr std::size_t RSP_CYCLES_PER_VI_INTERRUPT = 62500000 / 60;
         if (m_ctrl.type == 0) {
             return;
         }
-        m_interruptCounter += cycles;
-        if (m_interruptCounter >= RSP_CYCLES_PER_VI_INTERRUPT) {
-            m_interruptCounter = 0;
+        m_cycles += cycles;
+        if (m_cycles >= RSP_CYCLES_PER_VI_INTERRUPT) {
+            m_cycles = 0;
             m_mipsInterface->setInterrupt<^^Interfaces::MI_INTERRUPT::vi>(true);
         }
     }
 #else
-    // Real-time interrupts
-    auto hasTimerFired() const -> bool {
-        return m_timerTick;
+    auto processNextFrame() -> void {
+        if (m_ctrl.type != 0) {
+            m_tick = true;
+        }
     }
+    auto getInterrupt() -> bool {
+        const auto old = m_tick;
+        m_tick         = false;
+        return old;
+    }
+#endif
 
-    auto clearTimerFired() -> void {
-        m_timerTick = false;
-    }
-#endif
   private:
-#if defined(DETERMINISTIC_VI_INTERRUPTS)
-    std::size_t m_interruptCounter{};
-#else
-    bool        m_timerTick{};
-    std::thread m_interruptGenerator;
-#endif
     std::shared_ptr<Util::Logger> m_logger;
     MipsInterface*                m_mipsInterface;
     VI_CTRL                       m_ctrl{};
-};
 
-VideoInterface::VideoInterface(std::shared_ptr<Util::Logger> logger, MipsInterface* mipsInterface)
-    : m_logger(logger), m_mipsInterface(mipsInterface) {
-#if !defined(DETERMINISTIC_VI_INTERRUPTS)
-    m_interruptGenerator = std::thread([this]() {
-        auto prev = std::chrono::high_resolution_clock::now();
-        while (true) {
-            const auto now     = std::chrono::high_resolution_clock::now();
-            const auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(now - prev).count();
-            if (elapsed >= 16667) { // 60Hz
-                prev        = now;
-                m_timerTick = true;
-            }
-        }
-    });
+#if defined(DETERMINISTIC_VI_INTERRUPTS)
+    std::size_t m_cycles{};
+#else
+    std::atomic<bool> m_tick{};
 #endif
-}
+};
 
 auto VideoInterface::read(uint32_t addr) -> uint32_t {
     contract_assert(addr % 4 == 0 &&

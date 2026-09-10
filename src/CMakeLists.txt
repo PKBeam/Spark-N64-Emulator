@@ -3,6 +3,7 @@ add_subdirectory(interfaces)
 add_subdirectory(memory)
 add_subdirectory(processor)
 add_subdirectory(rom)
+add_subdirectory(gui)
 add_subdirectory(util)
 
 add_executable(n64emu main.cpp)
@@ -10,7 +11,7 @@ set_target_properties(n64emu PROPERTIES CXX_MODULE_STD ON)
 target_compile_options(n64emu PUBLIC ${CXX_COMPILE_OPTIONS})
 target_include_directories(n64emu PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_options(n64emu PUBLIC ${CXX_LINK_OPTIONS})
-target_link_libraries(n64emu PUBLIC stdc++exp emulator)
+target_link_libraries(n64emu PUBLIC stdc++exp emulator gui)
 
 add_custom_command(
     TARGET n64emu POST_BUILD

@@ -2,6 +2,7 @@
 
 import std;
 import Emulator;
+import Gui;
 import Util;
 
 using namespace std::string_view_literals;
@@ -173,6 +174,11 @@ auto parse(const std::vector<std::string_view>& args) -> Emulator::Config {
 }
 } // namespace Args
 
+constinit auto g_shouldTerminate = std::atomic<bool>{false};
+auto           signalHandler(int signal) -> void {
+    g_shouldTerminate = true;
+}
+
 int main(int argc, char* argv[]) {
     // get args
     auto args = std::vector<std::string_view>{};
@@ -183,8 +189,24 @@ int main(int argc, char* argv[]) {
     auto config       = Args::parse(args);
     config.memorySize = 0x1FD00000; // maximum size of usable physical memory in N64
 
-    auto emu = Emulator(config);
-    emu.loadRom("/home/pkbeam/Legend of Zelda, The - Ocarina of Time (USA).z64");
+    auto app    = GUI::Application(argc, argv, g_shouldTerminate);
+    auto window = GUI::Window(app.getVulkanInstance());
+    window.show();
 
-    return 0;
+    auto emulator       = Emulator(config);
+    auto emulatorThread = std::jthread([&emulator]() {
+        emulator.loadRom("/home/pkbeam/Legend of Zelda, The - Ocarina of Time (USA).z64");
+        while (!g_shouldTerminate) {
+            emulator.runCycle();
+        }
+    });
+
+    auto timer = Util::Timer<60>([&]() {
+        emulator.processNextFrame();
+    });
+    std::signal(Util::SigInt, signalHandler);
+    std::signal(Util::SigTerm, signalHandler);
+
+    auto code = app.run();
+    return code;
 }

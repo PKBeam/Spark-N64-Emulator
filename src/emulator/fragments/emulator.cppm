@@ -45,6 +45,9 @@ export class Emulator {
 
     constexpr auto loadRom(std::filesystem::path romFilePath) -> void;
 
+    constexpr auto processNextFrame() -> void;
+    constexpr auto runCycle() -> void;
+
   private:
     // emulates PIF and IPL3
     constexpr auto emulateInitialBoot() -> void;
@@ -130,7 +133,6 @@ constexpr Emulator::Emulator(Config config) : m_config(config) {
 }
 
 Emulator::~Emulator() {
-    delete m_memory;
     delete m_cp0;
     delete m_cp1;
     delete m_rdpControl;
@@ -138,6 +140,7 @@ Emulator::~Emulator() {
     delete m_cpu;
     delete m_rdp;
     delete m_rsp;
+    delete m_memory;
     delete m_memoryBus;
     delete m_audioInterface;
     delete m_mipsInterface;
@@ -149,13 +152,18 @@ Emulator::~Emulator() {
     delete m_videoInterface;
 }
 
+constexpr auto Emulator::processNextFrame() -> void {
+#if !defined(DETERMINISTIC_VI_INTERRUPTS)
+    m_videoInterface->processNextFrame();
+#endif
+}
+
 constexpr auto Emulator::processViInterrupt() -> void {
 #if defined(DETERMINISTIC_VI_INTERRUPTS)
     m_videoInterface->tick(CycleRatios::VI_DEBUG);
 #else
-    if (m_videoInterface->hasTimerFired()) {
-        m_mipsInterface->setInterrupt<^^Interfaces::MI_INTERRUPT::vi>(true);
-        m_videoInterface->clearTimerFired();
+    if (m_videoInterface->getInterrupt()) {
+        m_mipsInterface->setInterrupt<^^Interfaces::MI_INTERRUPT::vi>(true); // must be set synchronously
     }
 #endif
 }
@@ -188,24 +196,25 @@ constexpr auto Emulator::loadRom(std::filesystem::path path) -> void {
     if (m_config.terminateAfterRdpSyncs) {
         m_rdp->setTerminateAfterSyncs(*m_config.terminateAfterRdpSyncs);
     }
-    try {
-        while (true) {
-            processViInterrupt();
+}
 
-            for (auto _ : std::views::iota(0uz, CycleRatios::CPU)) {
-                m_cpu->runCpuInstruction();
-                m_cp0->incrementCount();
-                IF_LOG_ENABLED(m_logger) {
-                    if (m_cpu->getPc() == m_config.logAfterPc) {
-                        m_logger->enable();
-                    }
+constexpr auto Emulator::runCycle() -> void {
+    try {
+        processViInterrupt();
+
+        for (auto _ : std::views::iota(0uz, CycleRatios::CPU)) {
+            m_cpu->runCpuInstruction();
+            m_cp0->incrementCount();
+            IF_LOG_ENABLED(m_logger) {
+                if (m_cpu->getPc() == m_config.logAfterPc) {
+                    m_logger->enable();
                 }
             }
+        }
 
-            for (auto _ : std::views::iota(0uz, CycleRatios::RSP)) {
-                m_rsp->runRspInstruction();
-                m_rdp->runRdpCommand();
-            }
+        for (auto _ : std::views::iota(0uz, CycleRatios::RSP)) {
+            m_rsp->runRspInstruction();
+            m_rdp->runRdpCommand();
         }
     } catch (const Util::Error& e) {
         std::println("A fatal exception occurred @\n"

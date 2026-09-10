@@ -1,10 +1,8 @@
 module;
-
-import std;
-
+#include "defines.hpp"
 export module Util:Meta;
 
-#include "defines.hpp"
+import std;
 
 export namespace Util {
 
