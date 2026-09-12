@@ -1,5 +1,6 @@
 module;
 #include <util/defines.hpp>
+#include <rdp_gfx_backend/gfxBackend.hpp>
 export module Emulator:Emulator;
 
 import std;
@@ -48,6 +49,10 @@ export class Emulator {
     constexpr auto processNextFrame() -> void;
     constexpr auto runCycle() -> void;
 
+    constexpr auto getRdpGfxBackend() -> RDP::GfxBackend* {
+        return m_rdpGfxBackend;
+    }
+
   private:
     // emulates PIF and IPL3
     constexpr auto emulateInitialBoot() -> void;
@@ -67,6 +72,8 @@ export class Emulator {
     std::optional<RomFile> m_rom;
     std::optional<RomFile> m_pifRom;
     Memory::MemoryBus*     m_memoryBus{};
+
+    RDP::GfxBackend* m_rdpGfxBackend{};
 
     Interfaces::AudioInterface*      m_audioInterface{};
     Interfaces::MipsInterface*       m_mipsInterface{};
@@ -109,8 +116,10 @@ constexpr Emulator::Emulator(Config config) : m_config(config) {
 
     m_cpu = new CPU::CPU(m_logger, m_memoryBus, m_cp0, m_cp1);
 
+    m_rdpGfxBackend = RDP::createGfxBackend();
+
     m_rdpControl = new RDP::Control(m_logger, m_memory);
-    m_rdp        = new RDP::RDP(m_logger, m_rdpControl, m_mipsInterface);
+    m_rdp        = new RDP::RDP(m_logger, m_rdpControl, m_mipsInterface, m_rdpGfxBackend);
     m_rspControl = new RSP::Control(m_logger, m_memory, m_rdpControl);
     m_rsp        = new RSP::RSP(m_logger, m_rspControl, m_mipsInterface, m_memoryBus);
 
@@ -150,6 +159,7 @@ Emulator::~Emulator() {
     delete m_peripheralInterface;
     delete m_serialInterface;
     delete m_videoInterface;
+    delete m_rdpGfxBackend;
 }
 
 constexpr auto Emulator::processNextFrame() -> void {

@@ -7,8 +7,7 @@ from matplotlib.patches import Polygon, Rectangle
 
 def pointFromLog(logStr: str):
     point = list(map(float, logStr[1:-1].split(", ")))
-    point[1] = 240 - point[1]
-    return point
+    return [point[0], 240 - point[1]]
 
 class PlotNavigator:
     def __init__(self, fileName: str):

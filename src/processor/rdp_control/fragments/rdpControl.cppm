@@ -73,7 +73,7 @@ auto Control::getCommands() -> std::deque<uint64_t>& {
         m_cmdBufferIn.clear();
     }
     IF_LOG_ENABLED(m_logger) {
-        m_logger->log<Level::HIGH, Sev::INFO, Sys::RDP>("Command buffer emptied by RDP");
+        m_logger->log<Level::LOW, Sev::INFO, Sys::RDP>("Command buffer emptied by RDP");
     }
     m_status.startPending = 0;
     if (m_status.endPending) { // begin the next pending transfer
@@ -103,7 +103,7 @@ auto Control::fetchCommands() -> void {
     } // release commands
 
     IF_LOG_ENABLED(m_logger) {
-        m_logger->log<Level::HIGH, Sev::INFO, Sys::RDP>("DMA {} commands from " HEXFMT32 " into command buffer", numCommands, baseAddr);
+        m_logger->log<Level::LOW, Sev::INFO, Sys::RDP>("DMA {} commands from " HEXFMT32 " into command buffer", numCommands, baseAddr);
     }
     m_current = m_endAddr;
 }

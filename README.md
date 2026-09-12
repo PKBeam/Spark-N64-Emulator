@@ -28,3 +28,4 @@ Install from apt:
 - vulkan-validationlayers
 - qt6-base-dev
 - qt6-wayland
+- glslc

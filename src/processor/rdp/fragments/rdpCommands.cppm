@@ -117,6 +117,25 @@ struct FillTriangle {
         return Util::Triangle(v0, v1, v2);
     }
 
+    constexpr auto getRenderTriangle() const -> Util::RenderTriangle { // s11.2 format
+        constexpr auto signExtendS11_2 = [](uint64_t value) {
+            return static_cast<int32_t>(static_cast<uint32_t>(value) << 18) >> 18;
+        };
+        const auto y0 = signExtendS11_2(yh);
+        const auto y1 = signExtendS11_2(ym);
+        const auto y2 = signExtendS11_2(yl);
+        const auto x1 = Util::toFixedS15_16<true, 12, 16>((xlI << 16) + xlF);
+        const auto x  = [this, y0](int32_t y) {
+            const auto xh      = Util::toFixedS15_16<true, 12, 16>((xhI << 16) + xhF);
+            const auto dxdy    = Util::toFixedS15_16<true, 14, 16>((dxHdyI << 16) + dxHdyF);
+            const auto y0Floor = y0 & ~3;
+            return xh + static_cast<int32_t>((static_cast<int64_t>(y - y0Floor) * dxdy) >> 2);
+        };
+        const auto x0 = x(y0);
+        const auto x2 = x(y2);
+        return {x0, y0, 0, x1, y1, 0, x2, y2, 0};
+    }
+
     struct Cmd {
         uint8_t zbuffer : 1;
         uint8_t texture : 1;
@@ -169,59 +188,59 @@ struct FillTriangle {
         uint64_t dgDyF : 16;
         uint64_t drDyF : 16;
     };
+};
 
-    struct Texture {
-        uint64_t    : 16;
-        uint64_t wI : 16;
-        uint64_t tI : 16;
-        uint64_t sI : 16;
+struct Texture {
+    uint64_t    : 16;
+    uint64_t wI : 16;
+    uint64_t tI : 16;
+    uint64_t sI : 16;
 
-        uint64_t       : 16;
-        uint64_t dwDxI : 16;
-        uint64_t dtDxI : 16;
-        uint64_t dsDxI : 16;
+    uint64_t       : 16;
+    uint64_t dwDxI : 16;
+    uint64_t dtDxI : 16;
+    uint64_t dsDxI : 16;
 
-        uint64_t    : 16;
-        uint64_t wF : 16;
-        uint64_t tF : 16;
-        uint64_t sF : 16;
+    uint64_t    : 16;
+    uint64_t wF : 16;
+    uint64_t tF : 16;
+    uint64_t sF : 16;
 
-        uint64_t       : 16;
-        uint64_t dwDxF : 16;
-        uint64_t dtDxF : 16;
-        uint64_t dsDxF : 16;
+    uint64_t       : 16;
+    uint64_t dwDxF : 16;
+    uint64_t dtDxF : 16;
+    uint64_t dsDxF : 16;
 
-        uint64_t       : 16;
-        uint64_t dwDeI : 16;
-        uint64_t dtDeI : 16;
-        uint64_t dsDeI : 16;
+    uint64_t       : 16;
+    uint64_t dwDeI : 16;
+    uint64_t dtDeI : 16;
+    uint64_t dsDeI : 16;
 
-        uint64_t       : 16;
-        uint64_t dwDyI : 16;
-        uint64_t dtDyI : 16;
-        uint64_t dsDyI : 16;
+    uint64_t       : 16;
+    uint64_t dwDyI : 16;
+    uint64_t dtDyI : 16;
+    uint64_t dsDyI : 16;
 
-        uint64_t       : 16;
-        uint64_t dwDeF : 16;
-        uint64_t dtDeF : 16;
-        uint64_t dsDeF : 16;
+    uint64_t       : 16;
+    uint64_t dwDeF : 16;
+    uint64_t dtDeF : 16;
+    uint64_t dsDeF : 16;
 
-        uint64_t       : 16;
-        uint64_t dwDyF : 16;
-        uint64_t dtDyF : 16;
-        uint64_t dsDyF : 16;
-    };
+    uint64_t       : 16;
+    uint64_t dwDyF : 16;
+    uint64_t dtDyF : 16;
+    uint64_t dsDyF : 16;
+};
 
-    struct Depth {
-        uint64_t dzdyF : 16;
-        uint64_t dzdyI : 16;
-        uint64_t dzdeF : 16;
-        uint64_t dzdeI : 16;
-        uint64_t dzdxF : 16;
-        uint64_t dzdxI : 16;
-        uint64_t zF    : 16;
-        uint64_t zI    : 16;
-    };
+struct Depth {
+    uint64_t dzdyF : 16;
+    uint64_t dzdyI : 16;
+    uint64_t dzdeF : 16;
+    uint64_t dzdeI : 16;
+    uint64_t dzdxF : 16;
+    uint64_t dzdxI : 16;
+    uint64_t zF    : 16;
+    uint64_t zI    : 16;
 };
 
 struct TextureRectangle {
@@ -246,6 +265,17 @@ struct TextureRectangle {
         const auto v0 = Util::Point(ConvertU10_2(ulx), ConvertU10_2(uly));
         const auto v1 = Util::Point(ConvertU10_2(lrx), ConvertU10_2(lry));
         return Util::Rectangle(v0, v1);
+    }
+
+    constexpr auto getRenderTriangles() const -> std::array<Util::RenderTriangle, 2> {
+        const auto v0x = Util::toFixedS15_16<false, 10, 2>(ulx);
+        const auto v0y = Util::toFixedS15_16<false, 10, 2>(uly);
+        const auto v1x = Util::toFixedS15_16<false, 10, 2>(lrx);
+        const auto v1y = Util::toFixedS15_16<false, 10, 2>(lry);
+        return {
+            Util::RenderTriangle{v0x, v0y, 0, v1x - v0x, v0y, 0, v0x, v1y - v0y, 0},
+            Util::RenderTriangle{v1x, v1y, 0, v0x, v1y - v0y, 0, v1x - v0x, v0y, 0},
+        };
     }
 };
 
@@ -400,6 +430,17 @@ struct FillRectangle {
         const auto v0 = Util::Point(ConvertU10_2(upperLeftX), ConvertU10_2(upperLeftY));
         const auto v1 = Util::Point(ConvertU10_2(lowerRightX), ConvertU10_2(lowerRightY));
         return Util::Rectangle(v0, v1);
+    }
+
+    constexpr auto getRenderTriangles() const -> std::array<Util::RenderTriangle, 2> {
+        const auto v0x = Util::toFixedS15_16<false, 10, 2>(upperLeftX);
+        const auto v0y = Util::toFixedS15_16<false, 10, 2>(upperLeftY);
+        const auto v1x = Util::toFixedS15_16<false, 10, 2>(lowerRightX);
+        const auto v1y = Util::toFixedS15_16<false, 10, 2>(lowerRightY);
+        return {
+            Util::RenderTriangle{v0x, v0y, 0, v1x - v0x, v0y, 0, v0x, v1y - v0y, 0},
+            Util::RenderTriangle{v1x, v1y, 0, v0x, v1y - v0y, 0, v1x - v0x, v0y, 0},
+        };
     }
 };
 
@@ -559,6 +600,6 @@ struct SetColorImage {
 };
 
 } // namespace Commands
-}; // namespace RDP
+} // namespace RDP
 
 STD_FORMATTER_ENUM(RDP::Command, [](auto&& e) { return Util::enumName(e).value_or("NOP"); });

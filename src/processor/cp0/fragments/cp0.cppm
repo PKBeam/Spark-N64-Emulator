@@ -135,6 +135,7 @@ auto CP0::incrementCount() -> void {
     if (++count == m_compare) [[unlikely]] {
         auto cause = readReg<ISA::CP0_REG::CAUSE>();
         cause.ip |= 0x80; // set IP7
+        cause.exc = 0;    // set interrupt code = 0
         writeReg(cause);
 
         IF_LOG_ENABLED(m_logger) {

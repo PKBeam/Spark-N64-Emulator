@@ -1,4 +1,5 @@
 #define sstr(s) std::define_static_string(s)
+#include <rdp_gfx_backend/gfxBackend.hpp>
 
 import std;
 import Emulator;
@@ -6,6 +7,10 @@ import Gui;
 import Util;
 
 using namespace std::string_view_literals;
+
+extern "C" const char* __lsan_default_suppressions() {
+    return "leak:libvulkan.so\nleak:in vkCreateInstance";
+}
 
 auto handle_contract_violation(const std::contracts::contract_violation& violation) -> void {
     std::println("Contract violation: {}", violation.comment());
@@ -174,9 +179,11 @@ auto parse(const std::vector<std::string_view>& args) -> Emulator::Config {
 }
 } // namespace Args
 
+auto           g_emulatorThread  = std::jthread{};
 constinit auto g_shouldTerminate = std::atomic<bool>{false};
-auto           signalHandler(int signal) -> void {
-    g_shouldTerminate = true;
+
+auto signalHandler(int signal) -> void {
+    g_emulatorThread.request_stop();
 }
 
 int main(int argc, char* argv[]) {
@@ -189,23 +196,25 @@ int main(int argc, char* argv[]) {
     auto config       = Args::parse(args);
     config.memorySize = 0x1FD00000; // maximum size of usable physical memory in N64
 
-    auto app    = GUI::Application(argc, argv, g_shouldTerminate);
-    auto window = GUI::Window(app.getVulkanInstance());
-    window.show();
-
-    auto emulator       = Emulator(config);
-    auto emulatorThread = std::jthread([&emulator]() {
+    auto emulator    = Emulator(config);
+    auto app         = GUI::Application(argc, argv, emulator.getRdpGfxBackend(), g_shouldTerminate);
+    g_emulatorThread = std::jthread([&emulator](std::stop_token stopToken) {
         emulator.loadRom("/home/pkbeam/Legend of Zelda, The - Ocarina of Time (USA).z64");
-        while (!g_shouldTerminate) {
+        while (!stopToken.stop_requested()) {
             emulator.runCycle();
         }
+        // TODO clean up emulator
+        // now signal the application to stop
+        g_shouldTerminate = true;
     });
-
-    auto timer = Util::Timer<60>([&]() {
+#if !defined(DETERMINISTIC_VI_INTERRUPTS)
+    auto timer = Util::Timer<60 /*fps*/>([&]() { // TODO maybe move this inside VI
         emulator.processNextFrame();
     });
+#endif
     std::signal(Util::SigInt, signalHandler);
     std::signal(Util::SigTerm, signalHandler);
+    std::signal(Util::SigTstp, signalHandler);
 
     auto code = app.run();
     return code;

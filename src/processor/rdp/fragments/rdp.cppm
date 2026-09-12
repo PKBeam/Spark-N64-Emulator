@@ -1,6 +1,7 @@
 module;
 
 #include <util/defines.hpp>
+#include <rdp_gfx_backend/gfxBackend.hpp>
 
 export module RDP:RDP;
 
@@ -19,10 +20,12 @@ class RDP {
   public:
     RDP(std::shared_ptr<Util::Logger> logger,
         ::RDP::Control*               rdpControl,
-        Interfaces::MipsInterface*    mipsInterface)
+        Interfaces::MipsInterface*    mipsInterface,
+        GfxBackend*                   gfxBackend)
         : m_logger(logger),
           m_rdpControl(rdpControl),
-          m_mipsInterface(mipsInterface) {};
+          m_mipsInterface(mipsInterface),
+          m_gfxBackend(gfxBackend) {};
 
     auto runRdpCommand() -> void;
 
@@ -46,6 +49,7 @@ class RDP {
     std::size_t                   m_syncs{};
     std::optional<Util::Colour>   m_primColour{};
 
+    GfxBackend*           m_gfxBackend{};
     int                   m_terminateAfterSyncs{-1};
     std::function<void()> m_syncCallback{};
     std::size_t           m_syncCallbackCount{};
@@ -68,7 +72,7 @@ auto RDP::runRdpCommand() -> void {
         return;
     }
     IF_LOG_ENABLED(m_logger) {
-        m_logger->log<Level::MED, Sev::INFO, Sys::RDP>("Received {} commands", cmds.size());
+        m_logger->log<Level::LOW, Sev::INFO, Sys::RDP>("Received {} commands", cmds.size());
     }
     while (!cmds.empty()) {
         const auto cmdBits = cmds.front();
@@ -79,6 +83,7 @@ auto RDP::runRdpCommand() -> void {
         }
         switch (cmdType) {
             case Command::SYNC_FULL: {
+                m_gfxBackend->renderFrame();
                 m_mipsInterface->setInterrupt<^^Interfaces::MI_INTERRUPT::dp>(true);
                 m_syncs++;
                 cmds.pop_front();
@@ -121,18 +126,21 @@ auto RDP::runRdpCommand() -> void {
                         cmds.pop_front();
                     }
                 }
-
+                const auto tri = cmd.getRenderTriangle();
+                m_gfxBackend->addTriangle(tri.data());
                 IF_LOG_ENABLED(m_logger) {
-                    const auto tri = cmd.getTriangle();
                     m_logger->log<Level::MED, Sys::RDP>(
                         std::tuple{"op", "draw"},
                         std::tuple{"type", "triangle"},
-                        std::tuple{"coords", "{}", tri});
+                        std::tuple{"coords", "{}", cmd.getTriangle()});
                 }
                 break;
             }
             case Command::FILL_RECTANGLE: {
-                const auto cmd = makeCommand<Commands::FillRectangle, 1>(cmds);
+                const auto cmd  = makeCommand<Commands::FillRectangle, 1>(cmds);
+                const auto tris = cmd.getRenderTriangles(); // todo fill optimisation in vk
+                // m_gfxBackend->addTriangle(tris[0].data());
+                // m_gfxBackend->addTriangle(tris[1].data());
                 IF_LOG_ENABLED(m_logger) {
                     m_logger->log<Level::MED, Sys::RDP>(
                         std::tuple{"op", "draw"},
@@ -142,7 +150,10 @@ auto RDP::runRdpCommand() -> void {
                 break;
             }
             case Command::TEXTURE_RECTANGLE: {
-                const auto cmd = makeCommand<Commands::TextureRectangle, 2>(cmds);
+                const auto cmd  = makeCommand<Commands::TextureRectangle, 2>(cmds);
+                const auto tris = cmd.getRenderTriangles();
+                // m_gfxBackend->addTriangle(tris[0].data());
+                // m_gfxBackend->addTriangle(tris[1].data());
                 IF_LOG_ENABLED(m_logger) {
                     m_logger->log<Level::MED, Sys::RDP>(
                         std::tuple{"op", "draw"},

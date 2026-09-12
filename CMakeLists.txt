@@ -72,7 +72,7 @@ if(CMAKE_BUILD_TYPE)
     endif()
 endif()
 
-find_package(Vulkan REQUIRED)
+find_package(Vulkan REQUIRED COMPONENTS glslc)
 find_package(Qt6 REQUIRED COMPONENTS Gui)
 
 if(DISABLE_LOGS)

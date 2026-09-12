@@ -14,6 +14,8 @@ export class Memory {
         : m_logger(logger),
           m_memory(reinterpret_cast<std::byte*>(std::malloc(memorySize))) {}
 
+    ~Memory();
+
     template <std::integral T>
     auto read(PhysicalAddr addr) const -> T;
 
@@ -37,6 +39,10 @@ export class Memory {
     std::shared_ptr<Util::Logger> m_logger;
     std::byte*                    m_memory{};
 };
+
+Memory::~Memory() {
+    std::free(reinterpret_cast<void*>(m_memory));
+}
 
 template <std::integral T>
 auto Memory::read(PhysicalAddr paddr) const -> T {

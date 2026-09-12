@@ -79,10 +79,10 @@ constexpr auto sign(T value) -> int {
     return 0;
 }
 
-template <bool Signed, std::size_t IntBits, std::size_t FracBits, std::integral T>
+template <bool Signed, std::size_t IntBits, std::size_t FracBits, std::integral T, std::floating_point U = float>
     requires(FracBits < 8 * sizeof(T) && std::is_unsigned_v<T>)
-constexpr auto toFloat(T fixedPoint) -> float {
-    constexpr auto scale = static_cast<float>(static_cast<T>(1) << FracBits);
+constexpr auto toFloat(T fixedPoint) -> U {
+    constexpr auto scale = static_cast<U>(static_cast<T>(1) << FracBits);
     if constexpr (Signed) { // sign extension
         if ((fixedPoint >> (IntBits + FracBits - 1)) & 1) {
             fixedPoint |= ~((static_cast<T>(1) << (IntBits + FracBits)) - 1);
@@ -90,6 +90,22 @@ constexpr auto toFloat(T fixedPoint) -> float {
         return static_cast<std::make_signed_t<T>>(fixedPoint) / scale;
     }
     return fixedPoint / scale;
+}
+
+template <bool Signed, std::size_t IntBits, std::size_t FracBits, std::integral T>
+    requires(FracBits < 8 * sizeof(T))
+constexpr auto toFixedS15_16(T fixedPoint) -> int32_t {
+    if constexpr (FracBits < 16) {
+        fixedPoint = static_cast<T>(fixedPoint) << (16 - FracBits);
+    } else {
+        fixedPoint = static_cast<T>(fixedPoint) >> (FracBits - 16);
+    }
+    if constexpr (Signed) { // sign extension
+        if ((fixedPoint >> (IntBits + FracBits - 1)) & 1) {
+            fixedPoint |= ~((static_cast<T>(1) << (IntBits + FracBits)) - 1);
+        }
+    }
+    return fixedPoint;
 }
 
 struct Colour {
@@ -104,8 +120,10 @@ template <typename T = float>
 struct Point {
     T x;
     T y;
-    constexpr Point(T a, T b) : x(a), y(b) {}
+    T z;
+    constexpr Point(T a, T b, T c = 0) : x(a), y(b), z(c) {}
 };
+static_assert(sizeof(Util::Point<int32_t>) == 3 * sizeof(int32_t));
 
 template <typename T = float>
     requires(std::is_arithmetic_v<T>)
@@ -115,6 +133,7 @@ struct Triangle {
     Point<T> v2;
     constexpr Triangle(Point<T> a, Point<T> b, Point<T> c) : v0(a), v1(b), v2(c) {}
 };
+static_assert(sizeof(Util::Triangle<int32_t>) == 3 * sizeof(Util::Point<int32_t>));
 
 template <typename T = float>
     requires(std::is_arithmetic_v<T>)
@@ -123,7 +142,9 @@ struct Rectangle {
     Point<T> v1; // lower right
     constexpr Rectangle(Point<T> a, Point<T> b) : v0(a), v1(b) {}
 };
+static_assert(sizeof(Util::Rectangle<int32_t>) == 2 * sizeof(Util::Point<int32_t>));
 
+using RenderTriangle = std::array<int32_t, 9>; // v0x v0y v0z v1x v1y v1z v2x v2y v2z
 } // namespace Util
 
 template <>
@@ -144,7 +165,7 @@ struct std::formatter<Util::Point<T>> {
     }
 
     constexpr auto format(const Util::Point<T>& point, std::format_context& ctx) const {
-        return std::format_to(ctx.out(), "({:8.2f}, {:8.2f})", point.x, point.y);
+        return std::format_to(ctx.out(), "({:8.2f}, {:8.2f}, {:8.2f})", point.x, point.y, point.z);
     }
 };
 

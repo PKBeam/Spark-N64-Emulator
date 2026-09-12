@@ -37,8 +37,7 @@ export class VideoInterface : public Interface {
         }
     }
     auto getInterrupt() -> bool {
-        const auto old = m_tick;
-        m_tick         = false;
+        const auto old = std::atomic_exchange(&m_tick, false);
         return old;
     }
 #endif

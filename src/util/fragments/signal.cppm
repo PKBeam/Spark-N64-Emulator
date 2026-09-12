@@ -10,5 +10,6 @@ enum Signal {
     SigInt  = SIGINT,
     SigSegv = SIGSEGV,
     SigTerm = SIGTERM,
+    SigTstp = SIGTSTP
 };
 } // namespace Util
