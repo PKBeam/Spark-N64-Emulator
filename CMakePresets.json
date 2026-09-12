@@ -10,7 +10,9 @@
                 "CMAKE_CXX_COMPILER": "/usr/bin/g++-16",
                 "CMAKE_BUILD_TYPE": "Debug",
                 "CMAKE_EXPORT_COMPILE_COMMANDS": "OFF",
-                "DETERMINISTIC_VI_INTERRUPTS": "ON"
+                "DETERMINISTIC_VI_INTERRUPTS": "ON",
+                "ENABLE_LOGS": "ON",
+                "ENABLE_VK_VALIDATION": "ON"
             }
         },
         {
@@ -21,8 +23,7 @@
             "cacheVariables": {
                 "CMAKE_CXX_COMPILER": "/usr/bin/g++-16",
                 "CMAKE_BUILD_TYPE": "Release",
-                "CMAKE_EXPORT_COMPILE_COMMANDS": "OFF",
-                "DISABLE_LOGS": "ON"
+                "CMAKE_EXPORT_COMPILE_COMMANDS": "OFF"
             }
         },
         {
@@ -33,7 +34,8 @@
             "cacheVariables": {
                 "CMAKE_CXX_COMPILER": "/usr/bin/g++-16",
                 "CMAKE_BUILD_TYPE": "RelWithDebInfo",
-                "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+                "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+                "ENABLE_LOGS": "ON"
             }
         },
         {
@@ -44,8 +46,7 @@
             "cacheVariables": {
                 "CMAKE_CXX_COMPILER": "/usr/bin/g++-16",
                 "CMAKE_BUILD_TYPE": "RelWithDebInfo",
-                "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
-                "DISABLE_LOGS": "ON"
+                "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
             }
         }
     ],

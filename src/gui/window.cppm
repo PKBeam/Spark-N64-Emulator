@@ -30,7 +30,7 @@ class Window {
 
 class Application {
   public:
-    Application(int argc, char* argv[], RDP::GfxBackend* rdpGfxBackend, std::atomic<bool>& shouldTerminate);
+    Application(int& argc, char* argv[], RDP::GfxBackend* rdpGfxBackend, std::atomic<bool>& shouldTerminate);
     ~Application();
 
     auto run() -> int;

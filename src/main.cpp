@@ -217,5 +217,7 @@ int main(int argc, char* argv[]) {
     std::signal(Util::SigTstp, signalHandler);
 
     auto code = app.run();
+    g_emulatorThread.request_stop();
+    g_emulatorThread.join();
     return code;
 }

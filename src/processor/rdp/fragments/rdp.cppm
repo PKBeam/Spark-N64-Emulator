@@ -140,8 +140,8 @@ auto RDP::runRdpCommand() -> void {
             case Command::FILL_RECTANGLE: {
                 const auto cmd  = makeCommand<Commands::FillRectangle, 1>(cmds);
                 const auto tris = cmd.getRenderTriangles(); // todo fill optimisation in vk
-                // m_gfxBackend->addTriangle(tris[0].data());
-                // m_gfxBackend->addTriangle(tris[1].data());
+                m_gfxBackend->addTriangle(tris[0].data());
+                m_gfxBackend->addTriangle(tris[1].data());
                 IF_LOG_ENABLED(m_logger) {
                     m_logger->log<Level::MED, Sys::RDP>(
                         std::tuple{"op", "draw"},

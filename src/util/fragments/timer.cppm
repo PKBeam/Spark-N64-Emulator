@@ -14,6 +14,7 @@ class Timer {
         m_nextTick = std::chrono::time_point_cast<Interval>(ClockType::now() + Interval(1));
         m_thread   = std::jthread([this, callback](std::stop_token stoken) {
             while (!stoken.stop_requested()) {
+                std::this_thread::sleep_until(m_nextTick);
                 if (ClockType::now() >= m_nextTick) {
                     callback();
                     m_nextTick = std::chrono::time_point_cast<Interval>(m_nextTick + Interval(1));

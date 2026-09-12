@@ -7,16 +7,17 @@ The goal is to implement an emulator capable of playing retail games at full spe
 
 ## Current Status
 
-Able to boot into the beginning of a game. Outputs vertices but no graphics backend implemented yet.
+Able to boot into Ocarina of Time and render basic triangles with Vulkan.
 
-e.g. triangles for the first frame of Ocarina of Time, rendered with matplotlib:
-
-![First frame of Ocarina of Time](./data/image.png)
+![Ocarina of Time - Spinning N64 logo](./data/image1.png)
+![Ocarina of Time - Title Screen cutscene](./data/image2.png)
 
 ## Building
 
 This project requires GCC 16 as it uses modules, contracts and reflection (C++26).  
 Some or all of these features are not yet available in Clang/MSVC.
+
+Vulkan 1.4 is required.
 
 ## Ubuntu 26.04
 Install from apt:

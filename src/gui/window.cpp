@@ -31,21 +31,17 @@ auto VkWindow::createRenderer() -> QVulkanWindowRenderer* {
     return renderer;
 }
 
-Application::Application(int argc, char* argv[], RDP::GfxBackend* rdpGfxBackend, std::atomic<bool>& shouldTerminate)
+Application::Application(int& argc, char* argv[], RDP::GfxBackend* rdpGfxBackend, std::atomic<bool>& shouldTerminate)
     : m_app(new QGuiApplication(argc, argv)),
       m_timer(new QTimer()),
       m_vkInst(new QVulkanInstance()),
       m_rdpGfxBackend(rdpGfxBackend),
       m_window(new GUI::Window(m_vkInst, m_rdpGfxBackend)) {
-    m_vkInst->setLayers(QByteArrayList()
-                        << "VK_LAYER_KHRONOS_validation"
-                        << "VK_LAYER_GOOGLE_threading"
-                        << "VK_LAYER_LUNARG_parameter_validation"
-                        << "VK_LAYER_LUNARG_object_tracker"
-                        << "VK_LAYER_LUNARG_core_validation"
-                        << "VK_LAYER_LUNARG_image"
-                        << "VK_LAYER_LUNARG_swapchain"
-                        << "VK_LAYER_GOOGLE_unique_objects");
+#if defined(ENABLE_VK_VALIDATION)
+    m_vkInst->setLayers(QByteArrayList() << "VK_LAYER_KHRONOS_validation");
+#else
+    m_vkInst->setLayers({});
+#endif
     m_vkInst->setApiVersion(QVersionNumber(1, 4));
     m_vkInst->setExtensions(QByteArrayList()
                             << "VK_EXT_swapchain_colorspace"
@@ -81,6 +77,11 @@ auto Application::quit() -> void {
 
 Window::Window(QVulkanInstance* vkInst, RDP::GfxBackend* rdpGfxBackend)
     : m_vkInst(vkInst), m_rdpGfxBackend(rdpGfxBackend), m_vkWindow(new VkWindow()) {
+
+    m_vkWindow->QWindow::setFlags(Qt::Window | Qt::WindowTitleHint | Qt::WindowSystemMenuHint |
+                                  Qt::WindowMinimizeButtonHint | Qt::WindowMaximizeButtonHint | Qt::WindowCloseButtonHint);
+    m_vkWindow->setTitle("spark");
+    m_vkWindow->setMinimumSize({320, 240});
 
     constinit static auto features13 = VkPhysicalDeviceVulkan13Features{};
     features13.sType                 = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;

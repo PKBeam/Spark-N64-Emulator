@@ -433,10 +433,10 @@ struct FillRectangle {
     }
 
     constexpr auto getRenderTriangles() const -> std::array<Util::RenderTriangle, 2> {
-        const auto v0x = Util::toFixedS15_16<false, 10, 2>(upperLeftX);
-        const auto v0y = Util::toFixedS15_16<false, 10, 2>(upperLeftY);
-        const auto v1x = Util::toFixedS15_16<false, 10, 2>(lowerRightX);
-        const auto v1y = Util::toFixedS15_16<false, 10, 2>(lowerRightY);
+        const auto v0x = static_cast<int32_t>(upperLeftX);
+        const auto v0y = static_cast<int32_t>(upperLeftY);
+        const auto v1x = static_cast<int32_t>(lowerRightX);
+        const auto v1y = static_cast<int32_t>(lowerRightY);
         return {
             Util::RenderTriangle{v0x, v0y, 0, v1x - v0x, v0y, 0, v0x, v1y - v0y, 0},
             Util::RenderTriangle{v1x, v1y, 0, v0x, v1y - v0y, 0, v1x - v0x, v0y, 0},
