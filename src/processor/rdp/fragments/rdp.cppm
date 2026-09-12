@@ -83,7 +83,8 @@ auto RDP::runRdpCommand() -> void {
         }
         switch (cmdType) {
             case Command::SYNC_FULL: {
-                m_gfxBackend->renderFrame();
+                m_gfxBackend->startRenderPass();
+                m_gfxBackend->completeRenderFrame();
                 m_mipsInterface->setInterrupt<^^Interfaces::MI_INTERRUPT::dp>(true);
                 m_syncs++;
                 cmds.pop_front();
@@ -164,6 +165,7 @@ auto RDP::runRdpCommand() -> void {
             }
             case Command::SET_PRIMITIVE_COLOR: {
                 const auto cmd = makeCommand<Commands::SetPrimitiveColor, 1>(cmds);
+                m_gfxBackend->setPrimitiveColour(cmd.red, cmd.green, cmd.blue, cmd.alpha);
                 m_primColour.emplace(cmd.red / 255.0f, cmd.green / 255.0f, cmd.blue / 255.0f, cmd.alpha / 255.0f);
                 IF_LOG_ENABLED(m_logger) {
                     m_logger->log<Level::MED, Sys::RDP>(
@@ -172,6 +174,10 @@ auto RDP::runRdpCommand() -> void {
                 }
                 break;
             }
+            case Command::SYNC_PIPE:
+                m_gfxBackend->startRenderPass();
+                cmds.pop_front();
+                break;
             // ignore for now
             case Command::SET_COMBINE_MODE: [[fallthrough]];
             case Command::SET_OTHER_MODES: [[fallthrough]];
@@ -195,7 +201,6 @@ auto RDP::runRdpCommand() -> void {
                 break;
             // No-ops
             case Command::SYNC_LOAD: [[fallthrough]];
-            case Command::SYNC_PIPE: [[fallthrough]];
             case Command::SYNC_TILE:
                 cmds.pop_front();
                 break;

@@ -22,6 +22,23 @@ class VulkanBackend : public GfxBackend {
         VkExtent2D  m_extent    = VkExtent2D{.width = 0, .height = 0};
     };
 
+    // Vulkan push constants
+    struct RdpRenderPassConstants {
+        uint32_t primColour; // RGBA
+    };
+
+    struct CurrentRenderPass {
+        bool                   active        = false;
+        std::vector<int32_t>   vertexData    = {};
+        uint32_t               primColour    = 0;
+        RdpRenderPassConstants pushConstants = {};
+        auto                   reset() -> void {
+            active = false;
+            vertexData.clear();
+            pushConstants = {};
+        }
+    };
+
     VulkanBackend()  = default;
     ~VulkanBackend() = default;
 
@@ -44,7 +61,9 @@ class VulkanBackend : public GfxBackend {
     auto createPipeline() -> void;
 
     auto addTriangle(const int32_t* vtxs) -> void override;
-    auto renderFrame() -> void override;
+    auto setPrimitiveColour(uint8_t r, uint8_t g, uint8_t b, uint8_t a) -> void override;
+    auto startRenderPass() -> void override;
+    auto completeRenderFrame() -> void override;
     auto getRenderOutput() -> RenderOutput;
 
     auto queueMutex() -> std::mutex& {
@@ -65,6 +84,7 @@ class VulkanBackend : public GfxBackend {
     VkCommandPool   m_commandPool   = VK_NULL_HANDLE;
     VkCommandBuffer m_commandBuffer = VK_NULL_HANDLE;
     VkFence         m_renderFence   = VK_NULL_HANDLE;
+    std::mutex      m_resourceMutex;
     std::mutex      m_queueMutex; // todo find a better home for this
 
     VkBuffer       m_vertexBuffer       = VK_NULL_HANDLE;
@@ -78,10 +98,12 @@ class VulkanBackend : public GfxBackend {
     VkPipelineLayout            m_pipelineLayout = VK_NULL_HANDLE;
 
     bool                     m_renderedAtLeastOnce    = false;
+    bool                     m_initialized            = false;
+    bool                     m_renderTargetHasContent = false;
     std::size_t              m_renderTargetWriteIndex = 0;
     std::atomic<std::size_t> m_renderTargetReadIndex  = 0;
 
-    std::vector<int32_t> m_vertexData;
+    CurrentRenderPass m_currentRenderPass;
 };
 
 }; // namespace RDP

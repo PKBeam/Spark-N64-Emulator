@@ -160,6 +160,8 @@ constexpr auto formatOperands(Instruction inst) -> std::vector<std::string> {
                                     case UnifiedOpcode::OP_LRV: [[fallthrough]];
                                     case UnifiedOpcode::OP_SRV: [[fallthrough]];
                                     case UnifiedOpcode::OP_LHV: [[fallthrough]];
+                                    case UnifiedOpcode::OP_LFV: [[fallthrough]];
+                                    case UnifiedOpcode::OP_SFV: [[fallthrough]];
                                     case UnifiedOpcode::OP_SHV: return 4;
                                     default: throw Util::Error("Unexpected RSP Load/Store opcode {}", opcode);
                                 }

@@ -13,40 +13,67 @@ auto VulkanBackend::init(
     VkInstance       vkInstance,
     VkPhysicalDevice vkPhysicalDevice,
     uint32_t         vkQueueFamilyIndex) -> void {
+    auto lock = std::lock_guard<std::mutex>(m_resourceMutex);
+
     m_vkInstance         = vkInstance;
     m_vkPhysicalDevice   = vkPhysicalDevice;
     m_vkDevice           = vkDevice;
     m_vkQueueFamilyIndex = vkQueueFamilyIndex;
-
+    m_currentRenderPass  = {};
     vkGetDeviceQueue(m_vkDevice, m_vkQueueFamilyIndex, 0, &m_vkQueue);
 
     createRenderTargets();
     createPipeline();
     createCmdObjects();
+    m_renderedAtLeastOnce = false;
+    m_initialized         = true;
 }
 
 auto VulkanBackend::destroy() -> void {
+    auto lock = std::lock_guard<std::mutex>(m_resourceMutex);
+    if (!m_initialized) {
+        return;
+    }
+
+    m_initialized = false;
     vkDeviceWaitIdle(m_vkDevice);
-    //  TODO vertex buffer
 
     if (m_vertexBuffer != VK_NULL_HANDLE) {
         vkUnmapMemory(m_vkDevice, m_vertexBufferMem);
-        m_vertexBufferMapped = nullptr;
         vkDestroyBuffer(m_vkDevice, m_vertexBuffer, nullptr);
         m_vertexBuffer = VK_NULL_HANDLE;
         vkFreeMemory(m_vkDevice, m_vertexBufferMem, nullptr);
         m_vertexBufferMem = VK_NULL_HANDLE;
     }
+    m_vertexBufferMapped = nullptr;
     vkDestroyFence(m_vkDevice, m_renderFence, nullptr);
+    m_renderFence = VK_NULL_HANDLE;
     vkDestroyCommandPool(m_vkDevice, m_commandPool, nullptr);
+    m_commandPool   = VK_NULL_HANDLE;
+    m_commandBuffer = VK_NULL_HANDLE;
     vkDestroyPipeline(m_vkDevice, m_pipeline, nullptr);
+    m_pipeline = VK_NULL_HANDLE;
     vkDestroyPipelineLayout(m_vkDevice, m_pipelineLayout, nullptr);
+    m_pipelineLayout = VK_NULL_HANDLE;
     vkDestroyRenderPass(m_vkDevice, m_renderPass, nullptr);
+    m_renderPass = VK_NULL_HANDLE;
     for (const auto i : std::views::iota(0uz, MAX_BUFFERS)) {
         vkDestroyImageView(m_vkDevice, m_renderTargets[i].m_imageView, nullptr);
         vkDestroyImage(m_vkDevice, m_renderTargets[i].m_image, nullptr);
         vkFreeMemory(m_vkDevice, m_renderTargets[i].m_mem, nullptr);
+        m_renderTargets[i] = {};
     }
+    m_vertexBufferSize = 0;
+    m_currentRenderPass.reset();
+    m_renderedAtLeastOnce      = false;
+    m_currentRenderPass.active = false;
+    m_renderTargetWriteIndex   = 0;
+    m_renderTargetReadIndex.store(0, std::memory_order_release);
+    m_vkQueue            = VK_NULL_HANDLE;
+    m_vkDevice           = VK_NULL_HANDLE;
+    m_vkPhysicalDevice   = VK_NULL_HANDLE;
+    m_vkInstance         = VK_NULL_HANDLE;
+    m_vkQueueFamilyIndex = 0;
 }
 
 auto VulkanBackend::findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties) -> uint32_t {
@@ -318,14 +345,20 @@ auto VulkanBackend::createPipeline() -> void {
         .blendConstants  = {0.0f, 0.0f, 0.0f, 0.0f},
     };
 
+    const auto pushRange = VkPushConstantRange{
+        .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
+        .offset     = 0,
+        .size       = sizeof(RDP::VulkanBackend::RdpRenderPassConstants),
+    };
+
     const auto layoutInfo = VkPipelineLayoutCreateInfo{
         .sType                  = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
         .pNext                  = nullptr,
         .flags                  = 0,
         .setLayoutCount         = 0,
         .pSetLayouts            = nullptr,
-        .pushConstantRangeCount = 0,
-        .pPushConstantRanges    = nullptr,
+        .pushConstantRangeCount = 1,
+        .pPushConstantRanges    = &pushRange,
     };
     vkCreatePipelineLayout(m_vkDevice, &layoutInfo, nullptr, &m_pipelineLayout);
 
@@ -367,16 +400,17 @@ auto VulkanBackend::createPipeline() -> void {
     vkDestroyShaderModule(m_vkDevice, fragShaderModule, nullptr);
 }
 
-auto VulkanBackend::renderFrame() -> void {
-    if (m_vertexData.empty()) {
+auto VulkanBackend::startRenderPass() -> void {
+    auto lock = std::lock_guard<std::mutex>(m_resourceMutex);
+    if (!m_initialized || m_currentRenderPass.vertexData.empty()) {
         return;
     }
 
-    reallocVertexBuffer(m_vertexData.size() * sizeof(int32_t));
-    std::memcpy(m_vertexBufferMapped, m_vertexData.data(), m_vertexData.size() * sizeof(int32_t));
-
     vkWaitForFences(m_vkDevice, 1, &m_renderFence, VK_TRUE, UINT64_MAX);
     vkResetFences(m_vkDevice, 1, &m_renderFence);
+
+    reallocVertexBuffer(m_currentRenderPass.vertexData.size() * sizeof(int32_t));
+    std::memcpy(m_vertexBufferMapped, m_currentRenderPass.vertexData.data(), m_currentRenderPass.vertexData.size() * sizeof(int32_t));
     vkResetCommandBuffer(m_commandBuffer, 0);
 
     const auto beginInfo = VkCommandBufferBeginInfo{
@@ -390,11 +424,11 @@ auto VulkanBackend::renderFrame() -> void {
     const auto preBarrier = VkImageMemoryBarrier2{
         .sType               = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
         .pNext               = nullptr,
-        .srcStageMask        = VK_PIPELINE_STAGE_2_NONE,
-        .srcAccessMask       = VK_ACCESS_2_NONE,
+        .srcStageMask        = m_currentRenderPass.active ? VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT : VK_PIPELINE_STAGE_2_NONE,
+        .srcAccessMask       = m_currentRenderPass.active ? VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT : VK_ACCESS_2_NONE,
         .dstStageMask        = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-        .dstAccessMask       = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
-        .oldLayout           = VK_IMAGE_LAYOUT_UNDEFINED,
+        .dstAccessMask       = VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
+        .oldLayout           = m_currentRenderPass.active ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL : VK_IMAGE_LAYOUT_UNDEFINED,
         .newLayout           = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
         .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
         .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
@@ -429,7 +463,7 @@ auto VulkanBackend::renderFrame() -> void {
         .resolveMode        = VK_RESOLVE_MODE_NONE,
         .resolveImageView   = VK_NULL_HANDLE,
         .resolveImageLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-        .loadOp             = VK_ATTACHMENT_LOAD_OP_CLEAR,
+        .loadOp             = m_currentRenderPass.active ? VK_ATTACHMENT_LOAD_OP_LOAD : VK_ATTACHMENT_LOAD_OP_CLEAR,
         .storeOp            = VK_ATTACHMENT_STORE_OP_STORE,
         .clearValue         = VkClearValue{.color = {{0.0f, 0.0f, 0.0f, 1.0f}}},
     };
@@ -454,7 +488,8 @@ auto VulkanBackend::renderFrame() -> void {
     vkCmdBindPipeline(m_commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pipeline);
     auto offset = VkDeviceSize{0};
     vkCmdBindVertexBuffers(m_commandBuffer, 0, 1, &m_vertexBuffer, &offset);
-    vkCmdDraw(m_commandBuffer, m_vertexData.size() / 3, 1, 0, 0);
+    vkCmdPushConstants(m_commandBuffer, m_pipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(RdpRenderPassConstants), &m_currentRenderPass.pushConstants);
+    vkCmdDraw(m_commandBuffer, m_currentRenderPass.vertexData.size() / 3, 1, 0, 0);
     vkCmdEndRendering(m_commandBuffer);
 
     const auto postBarrier = VkImageMemoryBarrier2{
@@ -514,16 +549,24 @@ auto VulkanBackend::renderFrame() -> void {
         auto lock = std::lock_guard<std::mutex>(m_queueMutex);
         vkQueueSubmit2(m_vkQueue, 1, &submitInfo, m_renderFence);
     }
-    m_renderTargetReadIndex.store(m_renderTargetWriteIndex, std::memory_order_release);
-    m_renderTargetWriteIndex = (m_renderTargetWriteIndex + 1) % m_renderTargets.size();
-    m_renderedAtLeastOnce    = true;
-    m_vertexData.clear();
+    m_currentRenderPass.active = true;
+    m_currentRenderPass.vertexData.clear();
+}
+auto VulkanBackend::completeRenderFrame() -> void {
+    auto lock = std::lock_guard<std::mutex>(m_resourceMutex);
+    if (!m_initialized || !m_currentRenderPass.active) {
+        return;
+    }
 
-    // {
+    m_renderTargetReadIndex.store(m_renderTargetWriteIndex, std::memory_order_release);
+    m_renderTargetWriteIndex   = (m_renderTargetWriteIndex + 1) % m_renderTargets.size();
+    m_currentRenderPass.active = false;
+
+    // if (!m_renderedAtLeastOnce) {
     //     auto lock = std::lock_guard<std::mutex>(m_queueMutex);
     //     dumpToFile();
-    //     std::terminate();
     // }
+    m_renderedAtLeastOnce = true;
 }
 
 auto VulkanBackend::dumpToFile() -> void {
@@ -712,7 +755,8 @@ auto VulkanBackend::dumpToFile() -> void {
 }
 
 auto VulkanBackend::getRenderOutput() -> RenderOutput {
-    if (!m_renderedAtLeastOnce)
+    auto lock = std::lock_guard<std::mutex>(m_resourceMutex);
+    if (!m_initialized || !m_renderedAtLeastOnce)
         return RenderOutput{.m_image = VK_NULL_HANDLE, .m_imageView = VK_NULL_HANDLE, .m_extent = VkExtent2D{.width = 0, .height = 0}};
     const auto& rt = m_renderTargets[m_renderTargetReadIndex.load(std::memory_order_acquire)];
     return RenderOutput{
@@ -720,10 +764,28 @@ auto VulkanBackend::getRenderOutput() -> RenderOutput {
         .m_imageView = rt.m_imageView,
         .m_extent    = VkExtent2D{.width = 320, .height = 240}};
 }
+
 auto VulkanBackend::addTriangle(const int32_t* vtxs) -> void {
-    for (const auto i : std::views::iota(0, 3)) {
-        m_vertexData.insert(m_vertexData.end(), {vtxs[i * 3], vtxs[i * 3 + 1], vtxs[i * 3 + 2]});
+    auto lock = std::lock_guard<std::mutex>(m_resourceMutex);
+    if (!m_initialized) {
+        return;
     }
+
+    for (const auto i : std::views::iota(0, 3)) {
+        m_currentRenderPass.vertexData.insert(
+            m_currentRenderPass.vertexData.end(), {vtxs[i * 3], vtxs[i * 3 + 1], vtxs[i * 3 + 2]});
+    }
+}
+
+auto VulkanBackend::setPrimitiveColour(uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha) -> void {
+    auto lock = std::lock_guard<std::mutex>(m_resourceMutex);
+    if (!m_initialized) {
+        return;
+    }
+    m_currentRenderPass.pushConstants.primColour = (static_cast<uint32_t>(red) << 24) |
+                                                   (static_cast<uint32_t>(green) << 16) |
+                                                   (static_cast<uint32_t>(blue) << 8) |
+                                                   (static_cast<uint32_t>(alpha));
 }
 
 } // namespace RDP
