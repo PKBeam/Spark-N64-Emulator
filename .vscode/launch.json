@@ -12,7 +12,12 @@
             "args": [],
             "stopAtEntry": false,
             "cwd": "${workspaceRoot}/build/debug/src/",
-            "environment": [],
+            "environment": [
+                {
+                    "name": "QT_QPA_PLATFORM",
+                    "value": "xcb"
+                }
+            ],
             "externalConsole": false,
             "MIMode": "gdb",
             "setupCommands": [
@@ -36,7 +41,12 @@
             "args": [],
             "stopAtEntry": false,
             "cwd": "${workspaceRoot}/build/reldeb/src/",
-            "environment": [],
+            "environment": [
+                {
+                    "name": "QT_QPA_PLATFORM",
+                    "value": "xcb"
+                }
+            ],
             "externalConsole": false,
             "MIMode": "gdb",
             "setupCommands": [

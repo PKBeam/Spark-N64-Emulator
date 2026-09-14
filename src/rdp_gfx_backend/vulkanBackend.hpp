@@ -24,7 +24,7 @@ class VulkanBackend : public GfxBackend {
 
     // Vulkan push constants
     struct RdpRenderPassConstants {
-        uint32_t primColour; // RGBA
+        RDP::CombineInputs combineInputs;
     };
 
     struct CurrentRenderPass {
@@ -60,8 +60,8 @@ class VulkanBackend : public GfxBackend {
     auto createCmdObjects() -> void;
     auto createPipeline() -> void;
 
-    auto addTriangle(const int32_t* vtxs) -> void override;
-    auto setPrimitiveColour(uint8_t r, uint8_t g, uint8_t b, uint8_t a) -> void override;
+    auto addTriangle(const std::byte* vtxBytes) -> void override;
+    auto setCombineInputs(const CombineInputs& inputs) -> void override;
     auto startRenderPass() -> void override;
     auto completeRenderFrame() -> void override;
     auto getRenderOutput() -> RenderOutput;
@@ -96,6 +96,8 @@ class VulkanBackend : public GfxBackend {
     VkRenderPass                m_renderPass     = VK_NULL_HANDLE;
     VkPipeline                  m_pipeline       = VK_NULL_HANDLE;
     VkPipelineLayout            m_pipelineLayout = VK_NULL_HANDLE;
+
+    VkExtent2D m_extent = {320, 240};
 
     bool                     m_renderedAtLeastOnce    = false;
     bool                     m_initialized            = false;

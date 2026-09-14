@@ -250,19 +250,41 @@ auto VulkanRenderer::initSwapChainResources() -> void {
     vkAllocateDescriptorSets(m_window->device(), &allocInfo, m_descriptorSets.data());
 }
 
-auto VulkanRenderer::releaseSwapChainResources() -> void {}
+auto VulkanRenderer::releaseSwapChainResources() -> void {
+    if (m_window->device() != VK_NULL_HANDLE && m_descriptorPool != VK_NULL_HANDLE) {
+        vkDestroyDescriptorPool(m_window->device(), m_descriptorPool, nullptr);
+        m_descriptorPool = VK_NULL_HANDLE;
+    }
+    m_descriptorSets.clear();
+}
 
 auto VulkanRenderer::releaseResources() -> void {
     m_rdpBackend->destroy();
 
     if (m_window->device() != VK_NULL_HANDLE) {
         vkDeviceWaitIdle(m_window->device());
-        vkDestroyPipeline(m_window->device(), m_pipeline, nullptr);
-        vkDestroyPipelineLayout(m_window->device(), m_pipelineLayout, nullptr);
-        vkDestroyDescriptorPool(m_window->device(), m_descriptorPool, nullptr);
-        vkDestroyDescriptorSetLayout(m_window->device(), m_descriptorSetLayout, nullptr);
-        vkDestroySampler(m_window->device(), m_sampler, nullptr);
+        if (m_pipeline != VK_NULL_HANDLE) {
+            vkDestroyPipeline(m_window->device(), m_pipeline, nullptr);
+            m_pipeline = VK_NULL_HANDLE;
+        }
+        if (m_pipelineLayout != VK_NULL_HANDLE) {
+            vkDestroyPipelineLayout(m_window->device(), m_pipelineLayout, nullptr);
+            m_pipelineLayout = VK_NULL_HANDLE;
+        }
+        if (m_descriptorPool != VK_NULL_HANDLE) {
+            vkDestroyDescriptorPool(m_window->device(), m_descriptorPool, nullptr);
+            m_descriptorPool = VK_NULL_HANDLE;
+        }
+        if (m_descriptorSetLayout != VK_NULL_HANDLE) {
+            vkDestroyDescriptorSetLayout(m_window->device(), m_descriptorSetLayout, nullptr);
+            m_descriptorSetLayout = VK_NULL_HANDLE;
+        }
+        if (m_sampler != VK_NULL_HANDLE) {
+            vkDestroySampler(m_window->device(), m_sampler, nullptr);
+            m_sampler = VK_NULL_HANDLE;
+        }
     }
+    m_descriptorSets.clear();
 }
 
 auto VulkanRenderer::startNextFrame() -> void {

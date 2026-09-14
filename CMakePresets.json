@@ -35,6 +35,7 @@
                 "CMAKE_CXX_COMPILER": "/usr/bin/g++-16",
                 "CMAKE_BUILD_TYPE": "RelWithDebInfo",
                 "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+                "DETERMINISTIC_VI_INTERRUPTS": "ON",
                 "ENABLE_LOGS": "ON"
             }
         },

@@ -10,6 +10,53 @@ import Util;
 
 export namespace RDP {
 
+struct TextureFormat {
+    enum Value {
+        RGBA,
+        YUV,
+        CI,
+        IA,
+        I,
+    };
+    Value value;
+    constexpr TextureFormat(uint8_t value = 0)
+        : value(static_cast<Value>(std::min(value, static_cast<uint8_t>(Value::I)))) {}
+};
+
+struct PixelSize {
+    uint8_t        value;
+    constexpr auto bitsPerPixel() const -> std::size_t {
+        return 4 << value;
+    }
+    constexpr auto bytesPerPixel() const -> std::size_t {
+        return bitsPerPixel() / 8;
+    }
+};
+
+struct PixelFormat {
+    TextureFormat format;
+    PixelSize     size;
+};
+
+struct TextureImage {
+    PixelSize pixelSize;
+    uint16_t  imageWidth;
+    uint32_t  rdramAddr;
+};
+
+struct Tile {
+    struct Extent {
+        Util::UFixedPoint<10, 2> ulS;
+        Util::UFixedPoint<10, 2> ulT;
+        Util::UFixedPoint<10, 2> lrS;
+        Util::UFixedPoint<10, 2> lrT;
+    };
+    PixelFormat pixelFormat;
+    uint16_t    lineLength;
+    uint16_t    tmemAddress;
+    Extent      extent;
+};
+
 enum class Command : uint8_t {
     FILL_TRIANGLE = 0x08,
     FILL_TRIANGLE_Z,
@@ -94,46 +141,25 @@ struct FillTriangle {
     uint64_t xmI    : 12;
     uint64_t        : 4;
 
-    constexpr auto getTriangle() const {
-        constexpr auto ConvertS11_16 = [](uint64_t value) {
-            return Util::toFloat<true, 12, 16>(value);
-        };
-        constexpr auto ConvertS14_16 = [](uint64_t value) {
-            return Util::toFloat<true, 14, 16>(value);
-        };
-        constexpr auto ConvertS11_2 = [](uint64_t value) {
-            return Util::toFloat<true, 12, 2>(value);
-        };
-        const auto dxdy = ConvertS14_16((dxHdyI << 16) + dxHdyF);
-        const auto y0   = ConvertS11_2(yh);
-        const auto y1   = ConvertS11_2(ym);
-        const auto y2   = ConvertS11_2(yl);
-        const auto x0   = ConvertS11_16((xhI << 16) + xhF);
-        const auto x1   = ConvertS11_16((xlI << 16) + xlF);
-        const auto x2   = x0 + (y2 - y0) * dxdy;
-        const auto v0   = Util::Point(x0, y0);
-        const auto v1   = Util::Point(x1, y1);
-        const auto v2   = Util::Point(x2, y2);
-        return Util::Triangle(v0, v1, v2);
-    }
-
-    constexpr auto getRenderTriangle() const -> Util::RenderTriangle { // s11.2 format
-        constexpr auto signExtendS11_2 = [](uint64_t value) {
-            return static_cast<int32_t>(static_cast<uint32_t>(value) << 18) >> 18;
-        };
-        const auto y0 = signExtendS11_2(yh);
-        const auto y1 = signExtendS11_2(ym);
-        const auto y2 = signExtendS11_2(yl);
-        const auto x1 = Util::toFixedS15_16<true, 12, 16>((xlI << 16) + xlF);
-        const auto x  = [this, y0](int32_t y) {
-            const auto xh      = Util::toFixedS15_16<true, 12, 16>((xhI << 16) + xhF);
-            const auto dxdy    = Util::toFixedS15_16<true, 14, 16>((dxHdyI << 16) + dxHdyF);
-            const auto y0Floor = y0 & ~3;
-            return xh + static_cast<int32_t>((static_cast<int64_t>(y - y0Floor) * dxdy) >> 2);
+    constexpr auto getTriangle() const -> Util::RenderTriangle {
+        const auto y0 = static_cast<Util::SFixedPoint<16, 16>>(Util::SFixedPoint<12, 2>(yh));
+        const auto y1 = static_cast<Util::SFixedPoint<16, 16>>(Util::SFixedPoint<12, 2>(ym));
+        const auto y2 = static_cast<Util::SFixedPoint<16, 16>>(Util::SFixedPoint<12, 2>(yl));
+        const auto x  = [this, y0](Util::SFixedPoint<12, 2> y) {
+            const auto xh   = Util::SFixedPoint<12, 16>(xhI, xhF);
+            const auto dxdy = Util::SFixedPoint<14, 16>(dxHdyI, dxHdyF);
+            const auto dy   = y - y0.floor();
+            const auto dx   = dxdy * dy;
+            return static_cast<Util::SFixedPoint<16, 16>>(xh + dx);
         };
         const auto x0 = x(y0);
+        const auto x1 = static_cast<Util::SFixedPoint<16, 16>>(Util::SFixedPoint<12, 16>(xlI, xlF));
         const auto x2 = x(y2);
-        return {x0, y0, 0, x1, y1, 0, x2, y2, 0};
+
+        const auto v0 = Util::Point(x0, y0);
+        const auto v1 = Util::Point(x1, y1);
+        const auto v2 = Util::Point(x2, y2);
+        return Util::RenderTriangle(v0, v1, v2);
     }
 
     struct Cmd {
@@ -188,59 +214,94 @@ struct FillTriangle {
         uint64_t dgDyF : 16;
         uint64_t drDyF : 16;
     };
-};
 
-struct Texture {
-    uint64_t    : 16;
-    uint64_t wI : 16;
-    uint64_t tI : 16;
-    uint64_t sI : 16;
+    struct Texture {
+        uint64_t    : 16;
+        uint64_t wI : 16;
+        uint64_t tI : 16;
+        uint64_t sI : 16;
 
-    uint64_t       : 16;
-    uint64_t dwDxI : 16;
-    uint64_t dtDxI : 16;
-    uint64_t dsDxI : 16;
+        uint64_t       : 16;
+        uint64_t dwDxI : 16;
+        uint64_t dtDxI : 16;
+        uint64_t dsDxI : 16;
 
-    uint64_t    : 16;
-    uint64_t wF : 16;
-    uint64_t tF : 16;
-    uint64_t sF : 16;
+        uint64_t    : 16;
+        uint64_t wF : 16;
+        uint64_t tF : 16;
+        uint64_t sF : 16;
 
-    uint64_t       : 16;
-    uint64_t dwDxF : 16;
-    uint64_t dtDxF : 16;
-    uint64_t dsDxF : 16;
+        uint64_t       : 16;
+        uint64_t dwDxF : 16;
+        uint64_t dtDxF : 16;
+        uint64_t dsDxF : 16;
 
-    uint64_t       : 16;
-    uint64_t dwDeI : 16;
-    uint64_t dtDeI : 16;
-    uint64_t dsDeI : 16;
+        uint64_t       : 16;
+        uint64_t dwDeI : 16;
+        uint64_t dtDeI : 16;
+        uint64_t dsDeI : 16;
 
-    uint64_t       : 16;
-    uint64_t dwDyI : 16;
-    uint64_t dtDyI : 16;
-    uint64_t dsDyI : 16;
+        uint64_t       : 16;
+        uint64_t dwDyI : 16;
+        uint64_t dtDyI : 16;
+        uint64_t dsDyI : 16;
 
-    uint64_t       : 16;
-    uint64_t dwDeF : 16;
-    uint64_t dtDeF : 16;
-    uint64_t dsDeF : 16;
+        uint64_t       : 16;
+        uint64_t dwDeF : 16;
+        uint64_t dtDeF : 16;
+        uint64_t dsDeF : 16;
 
-    uint64_t       : 16;
-    uint64_t dwDyF : 16;
-    uint64_t dtDyF : 16;
-    uint64_t dsDyF : 16;
-};
+        uint64_t       : 16;
+        uint64_t dwDyF : 16;
+        uint64_t dtDyF : 16;
+        uint64_t dsDyF : 16;
 
-struct Depth {
-    uint64_t dzdyF : 16;
-    uint64_t dzdyI : 16;
-    uint64_t dzdeF : 16;
-    uint64_t dzdeI : 16;
-    uint64_t dzdxF : 16;
-    uint64_t dzdxI : 16;
-    uint64_t zF    : 16;
-    uint64_t zI    : 16;
+        // input tri is s10.2
+        constexpr auto getTexCoords(const Util::RenderTriangle& tri) const -> Util::RenderTriangle {
+            // TODO add W/perspective coord
+            const auto s = Util::SFixedPoint<16, 16>(sI, sF);
+            const auto t = Util::SFixedPoint<16, 16>(tI, tF);
+            const auto w = Util::SFixedPoint<16, 16>(wI, wF);
+
+            const auto dsdx = Util::SFixedPoint<16, 16>(dsDxI, dsDxF);
+            const auto dsdy = Util::SFixedPoint<16, 16>(dsDyI, dsDyF);
+            const auto dtdx = Util::SFixedPoint<16, 16>(dtDxI, dtDxF);
+            const auto dtdy = Util::SFixedPoint<16, 16>(dtDyI, dtDyF);
+            const auto dwdx = Util::SFixedPoint<16, 16>(dwDxI, dwDxF);
+            const auto dwdy = Util::SFixedPoint<16, 16>(dwDyI, dwDyF);
+
+            const auto st = [this, tri, dsdx, dsdy, dtdx, dtdy, dwdx, dwdy, s, t, w](Util::SFixedPoint<16, 16> x, Util::SFixedPoint<12, 16> y) {
+                const auto dx      = Util::SFixedPoint<12, 16>(x) - Util::SFixedPoint<12, 16>(tri.v0().x);
+                const auto yhFloor = Util::SFixedPoint<12, 2>(tri.v0().y).floor();
+                const auto dy      = Util::SFixedPoint<12, 2>(y) - yhFloor;
+
+                const auto dsx = dsdx * dx;
+                const auto dsy = dsdy * dy;
+                const auto dtx = dtdx * dx;
+                const auto dty = dtdy * dy;
+                const auto dwx = dwdx * dx;
+                const auto dwy = dwdy * dy;
+
+                return Util::Point{s + dsx + dsy, t + dtx + dty, w + dwx + dwy};
+            };
+            const auto v0 = st(tri.v0().x, tri.v0().y);
+            const auto v1 = st(tri.v1().x, tri.v1().y);
+            const auto v2 = st(tri.v2().x, tri.v2().y);
+
+            return Util::RenderTriangle(v0, v1, v2);
+        }
+    };
+
+    struct Depth {
+        uint64_t dzdyF : 16;
+        uint64_t dzdyI : 16;
+        uint64_t dzdeF : 16;
+        uint64_t dzdeI : 16;
+        uint64_t dzdxF : 16;
+        uint64_t dzdxI : 16;
+        uint64_t zF    : 16;
+        uint64_t zI    : 16;
+    };
 };
 
 struct TextureRectangle {
@@ -259,22 +320,28 @@ struct TextureRectangle {
     uint64_t s    : 10;
 
     constexpr auto getRectangle() const {
-        constexpr auto ConvertU10_2 = [](uint64_t value) {
-            return Util::toFloat<false, 10, 2>(value);
-        };
-        const auto v0 = Util::Point(ConvertU10_2(ulx), ConvertU10_2(uly));
-        const auto v1 = Util::Point(ConvertU10_2(lrx), ConvertU10_2(lry));
+        const auto ulxF = static_cast<float>(Util::UFixedPoint<10, 2>(ulx));
+        const auto lrxF = static_cast<float>(Util::UFixedPoint<10, 2>(lrx));
+        const auto ulyF = static_cast<float>(Util::UFixedPoint<10, 2>(uly));
+        const auto lryF = static_cast<float>(Util::UFixedPoint<10, 2>(lry));
+        const auto v0   = Util::Point(ulxF, ulyF);
+        const auto v1   = Util::Point(lrxF, lryF);
         return Util::Rectangle(v0, v1);
     }
 
-    constexpr auto getRenderTriangles() const -> std::array<Util::RenderTriangle, 2> {
-        const auto v0x = Util::toFixedS15_16<false, 10, 2>(ulx);
-        const auto v0y = Util::toFixedS15_16<false, 10, 2>(uly);
-        const auto v1x = Util::toFixedS15_16<false, 10, 2>(lrx);
-        const auto v1y = Util::toFixedS15_16<false, 10, 2>(lry);
+    constexpr auto getTriangles() const -> std::array<Util::RenderTriangle, 2> {
+        const auto v0x = static_cast<Util::SFixedPoint<16, 16>>(Util::UFixedPoint<10, 2>(ulx));
+        const auto v1x = static_cast<Util::SFixedPoint<16, 16>>(Util::UFixedPoint<10, 2>(lrx));
+        const auto v0y = static_cast<Util::SFixedPoint<16, 16>>(Util::UFixedPoint<10, 2>(uly));
+        const auto v1y = static_cast<Util::SFixedPoint<16, 16>>(Util::UFixedPoint<10, 2>(lry));
+
+        const auto v0 = Util::Point(v0x, v0y);
+        const auto v1 = Util::Point(v1x, v0y);
+        const auto v2 = Util::Point(v0x, v1y);
+        const auto v3 = Util::Point(v1x, v1y);
         return {
-            Util::RenderTriangle{v0x, v0y, 0, v1x - v0x, v0y, 0, v0x, v1y - v0y, 0},
-            Util::RenderTriangle{v1x, v1y, 0, v0x, v1y - v0y, 0, v1x - v0x, v0y, 0},
+            Util::RenderTriangle(v0, v1, v3),
+            Util::RenderTriangle(v0, v3, v2),
         };
     }
 };
@@ -301,15 +368,25 @@ struct SetConvert {
 };
 
 struct SetScissor {
-    uint32_t lower_right_y : 12;
-    uint32_t lower_right_x : 12;
-    uint32_t odd           : 1;
-    uint32_t field         : 1;
-    uint32_t               : 6;
-    uint32_t upper_left_y  : 12;
-    uint32_t upper_left_x  : 12;
-    uint32_t command       : 6;
-    uint32_t               : 2;
+    uint32_t lowerRightY : 12;
+    uint32_t lowerRightX : 12;
+    uint32_t odd         : 1;
+    uint32_t field       : 1;
+    uint32_t             : 6;
+    uint32_t upperLeftY  : 12;
+    uint32_t upperLeftX  : 12;
+    uint32_t command     : 6;
+    uint32_t             : 2;
+
+    constexpr auto getRectangle() const {
+        const auto v0x = static_cast<float>(Util::UFixedPoint<10, 2>(upperLeftX));
+        const auto v1x = static_cast<float>(Util::UFixedPoint<10, 2>(upperLeftY));
+        const auto v0y = static_cast<float>(Util::UFixedPoint<10, 2>(lowerRightX));
+        const auto v1y = static_cast<float>(Util::UFixedPoint<10, 2>(lowerRightY));
+        const auto v0  = Util::Point(v0x, v0y);
+        const auto v1  = Util::Point(v1x, v1y);
+        return Util::Rectangle(v0, v1);
+    }
 };
 
 struct SetPrimitiveDepth {
@@ -363,6 +440,13 @@ struct SetOtherModes {
     uint64_t atomicPrim     : 1;
     uint64_t command        : 6;
     uint64_t                : 2;
+
+    enum CycleType {
+        CYCLE_1    = 0,
+        CYCLE_2    = 1,
+        CYCLE_COPY = 2,
+        CYCLE_FILL = 3
+    };
 };
 
 struct LoadTLUT {
@@ -391,6 +475,14 @@ struct LoadBlock {
 };
 
 struct LoadTile {
+    uint64_t lowerRightT : 12;
+    uint64_t lowerRightS : 12;
+    uint64_t tile        : 3;
+    uint64_t             : 5;
+    uint64_t upperLeftT  : 12;
+    uint64_t upperLeftS  : 12;
+    uint64_t command     : 6;
+    uint64_t             : 2;
 };
 
 struct SetTile {
@@ -424,22 +516,28 @@ struct FillRectangle {
     uint64_t             : 2;
 
     constexpr auto getRectangle() const {
-        constexpr auto ConvertU10_2 = [](uint64_t value) {
-            return Util::toFloat<false, 10, 2>(value);
-        };
-        const auto v0 = Util::Point(ConvertU10_2(upperLeftX), ConvertU10_2(upperLeftY));
-        const auto v1 = Util::Point(ConvertU10_2(lowerRightX), ConvertU10_2(lowerRightY));
+        const auto v0x = static_cast<float>(Util::UFixedPoint<10, 2>(upperLeftX));
+        const auto v1x = static_cast<float>(Util::UFixedPoint<10, 2>(upperLeftY));
+        const auto v0y = static_cast<float>(Util::UFixedPoint<10, 2>(lowerRightX));
+        const auto v1y = static_cast<float>(Util::UFixedPoint<10, 2>(lowerRightY));
+        const auto v0  = Util::Point(v0x, v0y);
+        const auto v1  = Util::Point(v1x, v1y);
         return Util::Rectangle(v0, v1);
     }
 
-    constexpr auto getRenderTriangles() const -> std::array<Util::RenderTriangle, 2> {
-        const auto v0x = static_cast<int32_t>(upperLeftX);
-        const auto v0y = static_cast<int32_t>(upperLeftY);
-        const auto v1x = static_cast<int32_t>(lowerRightX);
-        const auto v1y = static_cast<int32_t>(lowerRightY);
+    constexpr auto getTriangles() const -> std::array<Util::RenderTriangle, 2> {
+        const auto v0x = static_cast<Util::SFixedPoint<16, 16>>(Util::UFixedPoint<10, 2>(upperLeftX));
+        const auto v1x = static_cast<Util::SFixedPoint<16, 16>>(Util::UFixedPoint<10, 2>(upperLeftY));
+        const auto v0y = static_cast<Util::SFixedPoint<16, 16>>(Util::UFixedPoint<10, 2>(lowerRightX));
+        const auto v1y = static_cast<Util::SFixedPoint<16, 16>>(Util::UFixedPoint<10, 2>(lowerRightY));
+
+        const auto v0 = Util::Point(v0x, v0y);
+        const auto v1 = Util::Point(v1x, v0y);
+        const auto v2 = Util::Point(v0x, v1y);
+        const auto v3 = Util::Point(v1x, v1y);
         return {
-            Util::RenderTriangle{v0x, v0y, 0, v1x - v0x, v0y, 0, v0x, v1y - v0y, 0},
-            Util::RenderTriangle{v1x, v1y, 0, v0x, v1y - v0y, 0, v1x - v0x, v0y, 0},
+            Util::RenderTriangle(v0, v1, v3),
+            Util::RenderTriangle(v0, v3, v2),
         };
     }
 };
@@ -452,6 +550,13 @@ struct SetFillColor {
 };
 
 struct SetFogColor {
+    uint64_t alpha   : 8;
+    uint64_t blue    : 8;
+    uint64_t green   : 8;
+    uint64_t red     : 8;
+    uint64_t         : 24;
+    uint64_t command : 6;
+    uint64_t         : 2;
 };
 
 struct SetBlendColor {
@@ -506,72 +611,120 @@ struct SetCombineMode {
     uint64_t command : 6;
     uint64_t         : 2;
 
+    struct Inputs {
+        constexpr static uint64_t Combined = -1;
+
+        uint32_t tex0 = 0xFFFFFFFF; // TODO
+        uint32_t tex1 = 0xFFFFFFFF; // TODO
+        uint32_t primitive;
+        uint32_t shade = 0xFFFFFFFF; // TODO
+        uint32_t environment;
+        uint32_t one   = 0xFFFFFFFF;
+        uint32_t zero  = 0;
+        uint32_t noise = 0; // TODO?
+        uint32_t combinedAlpha;
+        uint32_t tex0Alpha;
+        uint32_t tex1Alpha;
+        uint32_t primitiveAlpha;
+        uint32_t shadeAlpha;
+        uint32_t environmentAlpha;
+        uint32_t lodFraction;
+        uint32_t primLodFrac;
+        uint32_t scale;
+        uint32_t center;
+        uint32_t k4;
+        uint32_t k5;
+
+        template <typename E>
+        constexpr auto inputFor(E value) -> uint64_t {
+            template for (constexpr auto e : Util::staticEnumeratorsOf(^^E)) {
+                constexpr auto enumValue = std::meta::extract<E>(e);
+                if (value == enumValue) {
+                    if constexpr (std::meta::annotations_of(e).empty()) {
+                        return Inputs::Combined;
+                    } else {
+                        constexpr auto field = std::meta::extract<std::meta::info>(Util::annotationOf(e));
+                        const auto     value = this->[:field:];
+                        if constexpr (std::meta::display_string_of(^^E).contains("Alpha")) {
+                            return value & 0xFF; // clear RGB
+                        } else {
+                            return value & 0xFFFFFF00; // clear alpha
+                        }
+                    }
+                }
+            }
+            return 0;
+        }
+    };
+
+    // clang-format off
     enum class Base : uint8_t {
         COMBINED,
-        TEX0,
-        TEX1,
-        PRIMITIVE,
-        SHADE,
-        ENVIRONMENT,
-        ONE,
-        ZERO,
+        TEX0        [[=^^Inputs::tex0]],
+        TEX1        [[=^^Inputs::tex1]],
+        PRIMITIVE   [[=^^Inputs::primitive]],
+        SHADE       [[=^^Inputs::shade]],
+        ENVIRONMENT [[=^^Inputs::environment]],
+        ONE         [[=^^Inputs::one]],
+        ZERO        [[=^^Inputs::zero]],
     };
 
     enum class RgbA : uint8_t {
         COMBINED,
-        TEX0,
-        TEX1,
-        PRIMITIVE,
-        SHADE,
-        ENVIRONMENT,
-        ONE,
-        NOISE,
-        ZERO,
+        TEX0        [[=^^Inputs::tex0]],
+        TEX1        [[=^^Inputs::tex1]],
+        PRIMITIVE   [[=^^Inputs::primitive]],
+        SHADE       [[=^^Inputs::shade]],
+        ENVIRONMENT [[=^^Inputs::environment]],
+        ONE         [[=^^Inputs::one]],
+        NOISE       [[=^^Inputs::noise]],
+        ZERO        [[=^^Inputs::zero]],
     };
     using AlphaA = Base;
     enum class RgbB : uint8_t {
         COMBINED,
-        TEX0,
-        TEX1,
-        PRIMITIVE,
-        SHADE,
-        ENVIRONMENT,
-        CENTER,
-        K4,
-        ZERO,
+        TEX0        [[=^^Inputs::tex0]],
+        TEX1        [[=^^Inputs::tex1]],
+        PRIMITIVE   [[=^^Inputs::primitive]],
+        SHADE       [[=^^Inputs::shade]],
+        ENVIRONMENT [[=^^Inputs::environment]],
+        CENTER      [[=^^Inputs::center]],
+        K4          [[=^^Inputs::k4]],
+        ZERO        [[=^^Inputs::zero]],
     };
     using AlphaB = Base;
     enum class RgbC : uint8_t {
         COMBINED,
-        TEX0,
-        TEX1,
-        PRIMITIVE,
-        SHADE,
-        ENVIRONMENT,
-        SCALE,
-        COMBINED_ALPHA,
-        TEX0_ALPHA,
-        TEX1_ALPHA,
-        PRIMITIVE_ALPHA,
-        SHADE_ALPHA,
-        ENVIRONMENT_ALPHA,
-        LOD_FRACTION,
-        PRIM_LOD_FRAC,
-        K5,
-        ZERO
+        TEX0                [[=^^Inputs::tex0]],
+        TEX1                [[=^^Inputs::tex1]],
+        PRIMITIVE           [[=^^Inputs::primitive]],
+        SHADE               [[=^^Inputs::shade]],
+        ENVIRONMENT         [[=^^Inputs::environment]],
+        SCALE               [[=^^Inputs::scale]],
+        COMBINED_ALPHA      [[=^^Inputs::combinedAlpha]],
+        TEX0_ALPHA          [[=^^Inputs::tex0Alpha]],
+        TEX1_ALPHA          [[=^^Inputs::tex1Alpha]],
+        PRIMITIVE_ALPHA     [[=^^Inputs::primitiveAlpha]],
+        SHADE_ALPHA         [[=^^Inputs::shadeAlpha]],
+        ENVIRONMENT_ALPHA   [[=^^Inputs::environmentAlpha]],
+        LOD_FRACTION        [[=^^Inputs::lodFraction]],
+        PRIM_LOD_FRAC       [[=^^Inputs::primLodFrac]],
+        K5                  [[=^^Inputs::k5]],
+        ZERO                [[=^^Inputs::zero]],
     };
     enum class AlphaC : uint8_t {
-        LOD_FRACTION,
-        TEX0,
-        TEX1,
-        PRIMITIVE,
-        SHADE,
-        ENVIRONMENT,
-        PRIM_LOD_FRAC,
-        ZERO
+        LOD_FRACTION    [[=^^Inputs::lodFraction]],
+        TEX0            [[=^^Inputs::tex0]],
+        TEX1            [[=^^Inputs::tex1]],
+        PRIMITIVE       [[=^^Inputs::primitive]],
+        SHADE           [[=^^Inputs::shade]],
+        ENVIRONMENT     [[=^^Inputs::environment]],
+        PRIM_LOD_FRAC   [[=^^Inputs::primLodFrac]],
+        ZERO            [[=^^Inputs::zero]]
     };
     using RgbD   = Base;
     using AlphaD = Base;
+    // clang-format on
 };
 
 struct SetTextureImage {
@@ -603,3 +756,35 @@ struct SetColorImage {
 } // namespace RDP
 
 STD_FORMATTER_ENUM(RDP::Command, [](auto&& e) { return Util::enumName(e).value_or("NOP"); });
+
+STD_FORMATTER_ENUM_NAME(RDP::TextureFormat::Value);
+template <>
+struct std::formatter<RDP::TextureFormat> {
+    constexpr auto parse(std::format_parse_context& ctx) -> std::format_parse_context::iterator {
+        return ctx.begin();
+    }
+
+    constexpr auto format(const RDP::TextureFormat& value, std::format_context& ctx) const {
+        return std::format_to(ctx.out(), "{}", value.value);
+    }
+};
+template <>
+struct std::formatter<RDP::PixelFormat> {
+    constexpr auto parse(std::format_parse_context& ctx) -> std::format_parse_context::iterator {
+        return ctx.begin();
+    }
+
+    constexpr auto format(const RDP::PixelFormat& value, std::format_context& ctx) const {
+        return std::format_to(ctx.out(), "{}{}", value.format, value.size.bitsPerPixel());
+    }
+};
+template <>
+struct std::formatter<RDP::Tile::Extent> {
+    constexpr auto parse(std::format_parse_context& ctx) -> std::format_parse_context::iterator {
+        return ctx.begin();
+    }
+
+    constexpr auto format(const RDP::Tile::Extent& value, std::format_context& ctx) const {
+        return std::format_to(ctx.out(), "(" UPIXFMT ", " UPIXFMT "), (" UPIXFMT ", " UPIXFMT ")", static_cast<float>(value.ulS), static_cast<float>(value.ulT), static_cast<float>(value.lrS), static_cast<float>(value.lrT));
+    }
+};

@@ -55,6 +55,8 @@ struct info {};
 #define HEXFMT32 "{:#010x}"
 #define HEXFMT48 "{:#014x}"
 #define HEXFMT64 "{:#018x}"
+#define UPIXFMT "{:7.2f}"
+#define SPIXFMT "{:8.2f}"
 
 #define STD_FORMATTER_ENUM(ENUM, FMT_FUNC)                                         \
     template <>                                                                    \

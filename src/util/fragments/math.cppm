@@ -1,5 +1,6 @@
 module;
 #include <cfenv>
+#include "defines.hpp"
 export module Util:Math;
 
 import std;
@@ -42,9 +43,9 @@ constexpr auto isQNaN(T value) -> bool {
         return false;
     }
     if constexpr (sizeof(T) == 4) {
-        return (std::bit_cast<uint32_t>(value) & 0x00400000) == 1;
+        return (std::bit_cast<uint32_t>(value) & 0x00400000) != 0;
     } else if constexpr (sizeof(T) == 8) {
-        return (std::bit_cast<uint64_t>(value) & 0x0008000000000000) == 1;
+        return (std::bit_cast<uint64_t>(value) & 0x0008000000000000) != 0;
     } else {
         static_assert(false, "Unsupported floating point type");
     }
@@ -79,84 +80,213 @@ constexpr auto sign(T value) -> int {
     return 0;
 }
 
-template <bool Signed, std::size_t IntBits, std::size_t FracBits, std::integral T, std::floating_point U = float>
-    requires(FracBits < 8 * sizeof(T) && std::is_unsigned_v<T>)
-constexpr auto toFloat(T fixedPoint) -> U {
-    constexpr auto scale = static_cast<U>(static_cast<T>(1) << FracBits);
-    if constexpr (Signed) { // sign extension
-        if ((fixedPoint >> (IntBits + FracBits - 1)) & 1) {
-            fixedPoint |= ~((static_cast<T>(1) << (IntBits + FracBits)) - 1);
-        }
-        return static_cast<std::make_signed_t<T>>(fixedPoint) / scale;
-    }
-    return fixedPoint / scale;
-}
-
-template <bool Signed, std::size_t IntBits, std::size_t FracBits, std::integral T>
-    requires(FracBits < 8 * sizeof(T))
-constexpr auto toFixedS15_16(T fixedPoint) -> int32_t {
-    if constexpr (FracBits < 16) {
-        fixedPoint = static_cast<T>(fixedPoint) << (16 - FracBits);
-    } else {
-        fixedPoint = static_cast<T>(fixedPoint) >> (FracBits - 16);
-    }
-    if constexpr (Signed) { // sign extension
-        if ((fixedPoint >> (IntBits + FracBits - 1)) & 1) {
-            fixedPoint |= ~((static_cast<T>(1) << (IntBits + FracBits)) - 1);
-        }
-    }
-    return fixedPoint;
-}
-
-struct Colour {
-    float r;
-    float g;
-    float b;
-    float a;
-};
-
-template <typename T = float>
-    requires(std::is_arithmetic_v<T>)
+template <typename T>
 struct Point {
     T x;
     T y;
     T z;
     constexpr Point(T a, T b, T c = 0) : x(a), y(b), z(c) {}
+    template <typename U>
+        requires(std::is_convertible_v<U, T>)
+    constexpr Point(const Point<U>& other) {
+        x = static_cast<T>(other.x);
+        y = static_cast<T>(other.y);
+        z = static_cast<T>(other.z);
+    }
+    constexpr auto operator*(T k) -> Point<T> {
+        return Point(x * k, y * k, z * k);
+    }
+    constexpr auto operator/(T k) -> Point<T> {
+        return Point(x / k, y / k, z / k);
+    }
 };
 static_assert(sizeof(Util::Point<int32_t>) == 3 * sizeof(int32_t));
 
-template <typename T = float>
-    requires(std::is_arithmetic_v<T>)
+template <typename T>
+    requires(std::is_default_constructible_v<T>)
 struct Triangle {
-    Point<T> v0;
-    Point<T> v1;
-    Point<T> v2;
-    constexpr Triangle(Point<T> a, Point<T> b, Point<T> c) : v0(a), v1(b), v2(c) {}
+    std::array<T, 9> vertices{};
+    constexpr Triangle(Point<T> a, Point<T> b, Point<T> c) {
+        vertices[0] = a.x;
+        vertices[1] = a.y;
+        vertices[2] = a.z;
+        vertices[3] = b.x;
+        vertices[4] = b.y;
+        vertices[5] = b.z;
+        vertices[6] = c.x;
+        vertices[7] = c.y;
+        vertices[8] = c.z;
+    }
+    template <typename U>
+        requires(std::is_convertible_v<U, T>)
+    constexpr Triangle(const Triangle<U>& other) {
+        for (std::size_t i = 0; i < 9; ++i) {
+            vertices[i] = static_cast<T>(other.vertices[i]);
+        }
+    }
+    constexpr auto v0() const -> Point<T> {
+        return Point<T>(vertices[0], vertices[1], vertices[2]);
+    }
+    constexpr auto v1() const -> Point<T> {
+        return Point<T>(vertices[3], vertices[4], vertices[5]);
+    }
+    constexpr auto v2() const -> Point<T> {
+        return Point<T>(vertices[6], vertices[7], vertices[8]);
+    }
+    template <typename Self>
+    constexpr auto data(this Self&& self) {
+        return self.vertices.data();
+    }
+    template <typename Self>
+    constexpr auto bytes(this Self&& self) {
+        return reinterpret_cast<const std::byte*>(self.vertices.data());
+    }
+    constexpr auto operator*=(T scalar) -> Triangle<T>& {
+        for (std::size_t i = 0; i < 9; ++i) {
+            vertices[i] *= scalar;
+        }
+        return *this;
+    }
+    constexpr auto operator/=(T scalar) -> Triangle<T>& {
+        for (std::size_t i = 0; i < 9; ++i) {
+            vertices[i] /= scalar;
+        }
+        return *this;
+    }
 };
 static_assert(sizeof(Util::Triangle<int32_t>) == 3 * sizeof(Util::Point<int32_t>));
 
-template <typename T = float>
-    requires(std::is_arithmetic_v<T>)
+template <typename T>
 struct Rectangle {
     Point<T> v0; // upper left
     Point<T> v1; // lower right
     constexpr Rectangle(Point<T> a, Point<T> b) : v0(a), v1(b) {}
+    constexpr auto triangles() const -> std::pair<Triangle<T>, Triangle<T>> {
+        return {
+            Triangle<T>(v0, Point<T>(v0.x, v1.y), v1),
+            Triangle<T>(v0, Point<T>(v1.x, v0.y), v1),
+        };
+    }
 };
 static_assert(sizeof(Util::Rectangle<int32_t>) == 2 * sizeof(Util::Point<int32_t>));
 
-using RenderTriangle = std::array<int32_t, 9>; // v0x v0y v0z v1x v1y v1z v2x v2y v2z
-} // namespace Util
+template <bool Signed, std::size_t IntBits, std::size_t FracBits>
+    requires(IntBits > 0 && IntBits + FracBits <= 32)
+struct FixedPoint {
+    using Type = std::conditional_t<Signed, int32_t, uint32_t>;
+    Type value;
 
-template <>
-struct std::formatter<Util::Colour> {
-    constexpr auto parse(std::format_parse_context& ctx) -> std::format_parse_context::iterator {
-        return ctx.begin();
+    static constexpr auto valueMask = [] {
+        return static_cast<uint32_t>((uint64_t(1) << (IntBits + FracBits)) - 1);
+    }();
+    static constexpr auto fractionMask = [] {
+        return (uint32_t(1) << FracBits) - 1;
+    }();
+    constexpr FixedPoint() : value(0) {
+    }
+    template <std::floating_point F>
+    constexpr FixedPoint(F f) : value(static_cast<Type>(f * (1 << FracBits))) {
+    }
+    template <bool OtherSigned, std::size_t OtherIntBits, std::size_t OtherFracBits>
+    constexpr FixedPoint(const FixedPoint<OtherSigned, OtherIntBits, OtherFracBits>& other) {
+        auto raw = other.value;
+        if constexpr (OtherFracBits > FracBits) {
+            raw >>= OtherFracBits - FracBits;
+        } else {
+            raw <<= FracBits - OtherFracBits;
+        }
+        value = FixedPoint(static_cast<uint32_t>(raw)).value;
     }
 
-    constexpr auto format(const Util::Colour& c, std::format_context& ctx) const {
-        return std::format_to(ctx.out(), "({:.2f}, {:.2f}, {:.2f}, {:.2f})", c.r, c.g, c.b, c.a);
+    constexpr FixedPoint(uint32_t v) : value(static_cast<Type>(v & valueMask)) {
+        if constexpr (Signed) {
+            constexpr auto emptyUpperBits = 32 - (IntBits + FracBits);
+
+            value = (value << emptyUpperBits) >> emptyUpperBits;
+        }
+    }
+
+    constexpr FixedPoint(Type integer, uint32_t frac) {
+        *this = FixedPoint((integer << FracBits) | (frac & fractionMask));
+    }
+
+    constexpr auto integer() const -> Type {
+        return value >> FracBits;
+    }
+    constexpr auto fraction() const -> uint32_t {
+        return std::bit_cast<uint32_t>(value) & fractionMask;
+    }
+
+    constexpr auto bits() const -> Type {
+        return value;
+    }
+
+    constexpr auto floor() const -> FixedPoint {
+        return FixedPoint((value >> FracBits) << FracBits);
+    }
+
+    template <std::floating_point F>
+    constexpr operator F() const {
+        constexpr auto scale = static_cast<F>(uint32_t(1) << FracBits);
+        return static_cast<F>(value) / scale;
+    }
+
+    constexpr auto operator+(const FixedPoint& other) const {
+        return FixedPoint(std::bit_cast<uint32_t>(value) + std::bit_cast<uint32_t>(other.value));
+    }
+    constexpr auto operator-(const FixedPoint& other) const {
+        return FixedPoint(std::bit_cast<uint32_t>(value) - std::bit_cast<uint32_t>(other.value));
+    }
+
+    template <bool OtherSigned, std::size_t OtherIntBits, std::size_t OtherFracBits>
+        requires(std::max(IntBits, OtherIntBits) + std::max(FracBits, OtherFracBits) <= 32 &&
+                 (Signed != OtherSigned || IntBits != OtherIntBits || FracBits != OtherFracBits))
+    constexpr auto operator+(const FixedPoint<OtherSigned, OtherIntBits, OtherFracBits>& other) const {
+        using OutSigned   = std::bool_constant<Signed || OtherSigned>;
+        using OutIntBits  = std::integral_constant<std::size_t, std::max(IntBits, OtherIntBits)>;
+        using OutFracBits = std::integral_constant<std::size_t, std::max(FracBits, OtherFracBits)>;
+        using OutType     = FixedPoint<OutSigned::value, OutIntBits::value, OutFracBits::value>;
+        return FixedPoint(OutType(*this) + OutType(other));
+    }
+
+    template <bool OtherSigned, std::size_t OtherIntBits, std::size_t OtherFracBits>
+        requires(std::max(IntBits, OtherIntBits) + std::max(FracBits, OtherFracBits) <= 32 &&
+                 (Signed != OtherSigned || IntBits != OtherIntBits || FracBits != OtherFracBits))
+    constexpr auto operator-(const FixedPoint<OtherSigned, OtherIntBits, OtherFracBits>& other) const {
+        using OutSigned   = std::bool_constant<Signed || OtherSigned>;
+        using OutIntBits  = std::integral_constant<std::size_t, std::max(IntBits, OtherIntBits)>;
+        using OutFracBits = std::integral_constant<std::size_t, std::max(FracBits, OtherFracBits)>;
+        using OutType     = FixedPoint<OutSigned::value, OutIntBits::value, OutFracBits::value>;
+        return FixedPoint(OutType(*this) - OutType(other));
+    }
+
+    template <bool OtherSigned, std::size_t OtherIntBits, std::size_t OtherFracBits>
+    constexpr auto operator*(const FixedPoint<OtherSigned, OtherIntBits, OtherFracBits>& other) const {
+        using OutSigned   = std::bool_constant<Signed || OtherSigned>;
+        using OutFracBits = std::integral_constant<std::size_t, std::max(FracBits, OtherFracBits)>;
+        using OutIntBits  = std::integral_constant<std::size_t, std::min(IntBits + OtherIntBits, 32uz - OutFracBits::value)>;
+        using OutType     = FixedPoint<OutSigned::value, OutIntBits::value, OutFracBits::value>;
+        auto result       = [this, &other] {
+            if constexpr (Signed || OtherSigned) {
+                return static_cast<int64_t>(value) * static_cast<int64_t>(other.value);
+            } else {
+                return static_cast<uint64_t>(value) * static_cast<uint64_t>(other.value);
+            }
+        }();
+        return OutType(static_cast<uint32_t>(result >> std::min(FracBits, OtherFracBits)));
     }
 };
+
+template <std::size_t IntBits, std::size_t FracBits>
+using UFixedPoint = FixedPoint<false, IntBits, FracBits>;
+
+template <std::size_t IntBits, std::size_t FracBits>
+using SFixedPoint = FixedPoint<true, IntBits, FracBits>;
+
+// [xyzxyzxyz] where x,y = s16.16
+using RenderTriangle = Util::Triangle<SFixedPoint<16, 16>>;
+
+} // namespace Util
 
 template <typename T>
 struct std::formatter<Util::Point<T>> {
@@ -165,7 +295,7 @@ struct std::formatter<Util::Point<T>> {
     }
 
     constexpr auto format(const Util::Point<T>& point, std::format_context& ctx) const {
-        return std::format_to(ctx.out(), "({:8.2f}, {:8.2f}, {:8.2f})", point.x, point.y, point.z);
+        return std::format_to(ctx.out(), "(" SPIXFMT ", " SPIXFMT ", " SPIXFMT ")", static_cast<float>(point.x), static_cast<float>(point.y), static_cast<float>(point.z));
     }
 };
 
@@ -176,7 +306,7 @@ struct std::formatter<Util::Triangle<T>> {
     }
 
     constexpr auto format(const Util::Triangle<T>& triangle, std::format_context& ctx) const {
-        return std::format_to(ctx.out(), "{}, {}, {}", triangle.v0, triangle.v1, triangle.v2);
+        return std::format_to(ctx.out(), "{}, {}, {}", triangle.v0(), triangle.v1(), triangle.v2());
     }
 };
 

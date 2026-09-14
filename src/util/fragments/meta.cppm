@@ -50,7 +50,7 @@ template <typename E>
 constexpr auto enumName(E value) -> std::optional<std::string> {
     constexpr static auto enums = Util::staticEnumeratorsOf(^^E);
     template for (constexpr auto e : enums) {
-        auto enumValue = std::meta::extract<E>(e);
+        constexpr auto enumValue = std::meta::extract<E>(e);
         if (value == enumValue) {
             return std::string{std::meta::identifier_of(e)};
         }

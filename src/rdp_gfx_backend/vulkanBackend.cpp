@@ -133,7 +133,7 @@ auto VulkanBackend::createRenderTargets() -> void {
             .flags                 = 0,
             .imageType             = VK_IMAGE_TYPE_2D,
             .format                = VK_FORMAT_R8G8B8A8_UNORM,
-            .extent                = VkExtent3D{.width = 320, .height = 240, .depth = 1}, // todo
+            .extent                = VkExtent3D{.width = m_extent.width, .height = m_extent.height, .depth = 1},
             .mipLevels             = 1,
             .arrayLayers           = 1,
             .samples               = VK_SAMPLE_COUNT_1_BIT,
@@ -274,15 +274,15 @@ auto VulkanBackend::createPipeline() -> void {
     const auto viewport = VkViewport{
         .x        = 0.0f,
         .y        = 0.0f,
-        .width    = 320,
-        .height   = 240,
+        .width    = static_cast<float>(m_extent.width),
+        .height   = static_cast<float>(m_extent.height),
         .minDepth = 0.0f,
         .maxDepth = 1.0f,
     };
 
     const auto scissor = VkRect2D{
         .offset = {0, 0},
-        .extent = {320, 240},
+        .extent = m_extent,
     };
 
     const auto viewportState = VkPipelineViewportStateCreateInfo{
@@ -474,7 +474,7 @@ auto VulkanBackend::startRenderPass() -> void {
         .flags      = 0,
         .renderArea = VkRect2D{
             .offset = VkOffset2D{.x = 0, .y = 0},
-            .extent = VkExtent2D{.width = 320, .height = 240},
+            .extent = m_extent,
         },
         .layerCount           = 1,
         .viewMask             = 0,
@@ -570,8 +570,8 @@ auto VulkanBackend::completeRenderFrame() -> void {
 }
 
 auto VulkanBackend::dumpToFile() -> void {
-    const auto     image     = m_renderTargets[m_renderTargetReadIndex.load(std::memory_order_acquire)].m_image;
-    constexpr auto imageSize = VkDeviceSize{320 * 240 * 4};
+    const auto image     = m_renderTargets[m_renderTargetReadIndex.load(std::memory_order_acquire)].m_image;
+    const auto imageSize = VkDeviceSize{m_extent.width * m_extent.height * 4};
 
     VkBuffer        stagingBuffer = VK_NULL_HANDLE;
     VkDeviceMemory  stagingMemory = VK_NULL_HANDLE;
@@ -662,7 +662,7 @@ auto VulkanBackend::dumpToFile() -> void {
              .layerCount     = 1,
         },
         .imageOffset = VkOffset3D{.x = 0, .y = 0, .z = 0},
-        .imageExtent = VkExtent3D{.width = 320, .height = 240, .depth = 1},
+        .imageExtent = VkExtent3D{.width = m_extent.width, .height = m_extent.height, .depth = 1},
     };
     vkCmdCopyImageToBuffer(
         commandBuffer,
@@ -747,7 +747,7 @@ auto VulkanBackend::dumpToFile() -> void {
     void* data = nullptr;
     vkMapMemory(m_vkDevice, stagingMemory, 0, VK_WHOLE_SIZE, 0, &data);
     auto   qFormat = QImage::Format_RGBA8888;
-    QImage qimg(static_cast<uchar*>(data), 320, 240, qFormat);
+    QImage qimg(static_cast<uchar*>(data), m_extent.width, m_extent.height, qFormat);
     qimg.save("output.png");
     vkUnmapMemory(m_vkDevice, stagingMemory);
     vkDestroyBuffer(m_vkDevice, stagingBuffer, nullptr);
@@ -762,14 +762,16 @@ auto VulkanBackend::getRenderOutput() -> RenderOutput {
     return RenderOutput{
         .m_image     = rt.m_image,
         .m_imageView = rt.m_imageView,
-        .m_extent    = VkExtent2D{.width = 320, .height = 240}};
+        .m_extent    = m_extent,
+    };
 }
 
-auto VulkanBackend::addTriangle(const int32_t* vtxs) -> void {
+auto VulkanBackend::addTriangle(const std::byte* vtxBytes) -> void {
     auto lock = std::lock_guard<std::mutex>(m_resourceMutex);
     if (!m_initialized) {
         return;
     }
+    const auto vtxs = reinterpret_cast<const int32_t*>(vtxBytes);
 
     for (const auto i : std::views::iota(0, 3)) {
         m_currentRenderPass.vertexData.insert(
@@ -777,15 +779,12 @@ auto VulkanBackend::addTriangle(const int32_t* vtxs) -> void {
     }
 }
 
-auto VulkanBackend::setPrimitiveColour(uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha) -> void {
+auto VulkanBackend::setCombineInputs(const CombineInputs& inputs) -> void {
     auto lock = std::lock_guard<std::mutex>(m_resourceMutex);
     if (!m_initialized) {
         return;
     }
-    m_currentRenderPass.pushConstants.primColour = (static_cast<uint32_t>(red) << 24) |
-                                                   (static_cast<uint32_t>(green) << 16) |
-                                                   (static_cast<uint32_t>(blue) << 8) |
-                                                   (static_cast<uint32_t>(alpha));
+    m_currentRenderPass.pushConstants.combineInputs = inputs;
 }
 
 } // namespace RDP

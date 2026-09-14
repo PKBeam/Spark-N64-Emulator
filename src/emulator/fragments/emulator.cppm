@@ -119,7 +119,7 @@ constexpr Emulator::Emulator(Config config) : m_config(config) {
     m_rdpGfxBackend = RDP::createGfxBackend();
 
     m_rdpControl = new RDP::Control(m_logger, m_memory);
-    m_rdp        = new RDP::RDP(m_logger, m_rdpControl, m_mipsInterface, m_rdpGfxBackend);
+    m_rdp        = new RDP::RDP(m_logger, m_rdpControl, m_mipsInterface, m_memoryBus, m_rdpGfxBackend);
     m_rspControl = new RSP::Control(m_logger, m_memory, m_rdpControl);
     m_rsp        = new RSP::RSP(m_logger, m_rspControl, m_mipsInterface, m_memoryBus);
 
