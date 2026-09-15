@@ -32,13 +32,18 @@ layout(location = 0) out flat ivec3 out_shade;
 layout(location = 1) out vec2 out_texCoords; 
 layout(location = 2) out flat int out_tile;
 
+
 void main() {
     float scale = 0.0000152587890625; // 1/(2^16)
     vec3 fpos = vec3(in_position) * vec3(scale, scale, 1);
     gl_Position = vec4((fpos.x / 160) - 1, (fpos.y / 120) - 1, 0, 1.0);
     out_shade = in_shade;
     ShaderTileInfo tileInfo = tileParams.tiles[in_tile];
-    vec2 shiftScale = exp2(vec2(float(tileInfo.sShift), float(tileInfo.tShift)));
-    out_texCoords = vec2(in_texCoords.xy) * shiftScale * scale;
+    ivec2 shifts = ivec2(int(tileInfo.sShift), int(tileInfo.tShift));
+    ivec2 shiftedTexCoords = ivec2(
+        shifts.x >= 0 ? in_texCoords.x << uint(shifts.x) : in_texCoords.x >> uint(-shifts.x),
+        shifts.y >= 0 ? in_texCoords.y << uint(shifts.y) : in_texCoords.y >> uint(-shifts.y));
+    ivec2 maskedTexCoords = shiftedTexCoords & ivec2(tileInfo.sMask, tileInfo.tMask);
+    out_texCoords = vec2(maskedTexCoords) * scale;
     out_tile = in_tile;
 }

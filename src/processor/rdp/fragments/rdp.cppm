@@ -375,14 +375,14 @@ auto RDP::runRdpCommand() -> void {
                              .shift  = static_cast<int8_t>(cmd.shiftS > 10 ? 16 - cmd.shiftS : -static_cast<int>(cmd.shiftS)),
                              .mirror = static_cast<uint8_t>(cmd.mirrorS),
                              .clamp  = static_cast<uint8_t>(cmd.clampS),
-                             .mask   = cmd.maskS,
+                             .mask   = ((cmd.maskS == 0 ? 0xFFFF : ((1u << cmd.maskS) - 1)) << 16) | 0xFFFF,
                         },
                      .t =
                          {
                              .shift  = static_cast<int8_t>(cmd.shiftT > 10 ? 16 - cmd.shiftT : -static_cast<int>(cmd.shiftT)),
                              .mirror = static_cast<uint8_t>(cmd.mirrorT),
                              .clamp  = static_cast<uint8_t>(cmd.clampT),
-                             .mask   = cmd.maskT,
+                             .mask   = ((cmd.maskT == 0 ? 0xFFFF : ((1u << cmd.maskT) - 1)) << 16) | 0xFFFF,
                         },
                 };
                 IF_LOG_ENABLED(m_logger) {
