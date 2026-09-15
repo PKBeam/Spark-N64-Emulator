@@ -85,7 +85,7 @@ struct Point {
     T x;
     T y;
     T z;
-    constexpr Point(T a, T b, T c = 0) : x(a), y(b), z(c) {}
+    constexpr Point(T a, T b, T c = T()) : x(a), y(b), z(c) {}
     template <typename U>
         requires(std::is_convertible_v<U, T>)
     constexpr Point(const Point<U>& other) {
@@ -106,6 +106,8 @@ template <typename T>
     requires(std::is_default_constructible_v<T>)
 struct Triangle {
     std::array<T, 9> vertices{};
+    constexpr Triangle() : vertices{} {
+    }
     constexpr Triangle(Point<T> a, Point<T> b, Point<T> c) {
         vertices[0] = a.x;
         vertices[1] = a.y;
@@ -170,51 +172,72 @@ struct Rectangle {
 };
 static_assert(sizeof(Util::Rectangle<int32_t>) == 2 * sizeof(Util::Point<int32_t>));
 
+struct FixedPointZero {};
+constexpr auto Fxp_0 = FixedPointZero{};
+
 template <bool Signed, std::size_t IntBits, std::size_t FracBits>
-    requires(IntBits > 0 && IntBits + FracBits <= 32)
+    requires(IntBits > 0 && IntBits + FracBits <= 64)
 struct FixedPoint {
-    using Type = std::conditional_t<Signed, int32_t, uint32_t>;
+    static consteval auto valueType() {
+        auto type = (IntBits + FracBits <= 32) ? ^^uint32_t : ^^uint64_t;
+        return Signed ? std::meta::make_signed(type) : type;
+    }
+    using Type = typename[:valueType():];
+
+    static constexpr auto scale     = Type(1) << FracBits;
+    static constexpr auto valueMask = [] {
+        if constexpr (IntBits + FracBits >= 8 * sizeof(Type)) {
+            return static_cast<Type>(-1);
+        } else {
+            return (Type(1) << (IntBits + FracBits)) - 1;
+        }
+    }();
+    static constexpr auto fractionMask = scale - 1;
+
     Type value;
 
-    static constexpr auto valueMask = [] {
-        return static_cast<uint32_t>((uint64_t(1) << (IntBits + FracBits)) - 1);
-    }();
-    static constexpr auto fractionMask = [] {
-        return (uint32_t(1) << FracBits) - 1;
-    }();
-    constexpr FixedPoint() : value(0) {
-    }
+    constexpr FixedPoint() : value(0) {}
+    constexpr FixedPoint(FixedPointZero) : value(0) {}
+
     template <std::floating_point F>
-    constexpr FixedPoint(F f) : value(static_cast<Type>(f * (1 << FracBits))) {
-    }
-    template <bool OtherSigned, std::size_t OtherIntBits, std::size_t OtherFracBits>
-    constexpr FixedPoint(const FixedPoint<OtherSigned, OtherIntBits, OtherFracBits>& other) {
-        auto raw = other.value;
-        if constexpr (OtherFracBits > FracBits) {
-            raw >>= OtherFracBits - FracBits;
-        } else {
-            raw <<= FracBits - OtherFracBits;
-        }
-        value = FixedPoint(static_cast<uint32_t>(raw)).value;
-    }
+    constexpr FixedPoint(F f) : value(static_cast<Type>(f * scale)) {}
 
-    constexpr FixedPoint(uint32_t v) : value(static_cast<Type>(v & valueMask)) {
-        if constexpr (Signed) {
-            constexpr auto emptyUpperBits = 32 - (IntBits + FracBits);
-
-            value = (value << emptyUpperBits) >> emptyUpperBits;
-        }
-    }
+    constexpr FixedPoint(Type) = delete ("Raw integer input is ambiguous; use fromBits() or fromValue() instead");
 
     constexpr FixedPoint(Type integer, uint32_t frac) {
-        *this = FixedPoint((integer << FracBits) | (frac & fractionMask));
+        *this = fromBits((integer << FracBits) | (frac & fractionMask));
+    }
+
+    static constexpr auto fromBits(Type v) -> FixedPoint {
+        auto result  = FixedPoint();
+        result.value = static_cast<Type>(v & valueMask);
+        if constexpr (Signed) {
+            constexpr auto emptyUpperBits = 8 * sizeof(Type) - (IntBits + FracBits);
+            result.value                  = (result.value << emptyUpperBits) >> emptyUpperBits;
+        }
+        return result;
+    }
+
+    static constexpr auto fromValue(Type v) -> FixedPoint {
+        return FixedPoint(v, 0);
+    }
+
+    template <bool OtherSigned, std::size_t OtherIntBits, std::size_t OtherFracBits>
+    constexpr FixedPoint(const FixedPoint<OtherSigned, OtherIntBits, OtherFracBits>& other) {
+        auto otherValue = other.value;
+        if constexpr (OtherFracBits > FracBits) {
+            value = other.value >> (OtherFracBits - FracBits);
+        } else {
+            value = static_cast<Type>(otherValue) << (FracBits - OtherFracBits);
+        }
     }
 
     constexpr auto integer() const -> Type {
         return value >> FracBits;
     }
-    constexpr auto fraction() const -> uint32_t {
-        return std::bit_cast<uint32_t>(value) & fractionMask;
+
+    constexpr auto fraction() const -> Type {
+        return value & fractionMask;
     }
 
     constexpr auto bits() const -> Type {
@@ -222,20 +245,19 @@ struct FixedPoint {
     }
 
     constexpr auto floor() const -> FixedPoint {
-        return FixedPoint((value >> FracBits) << FracBits);
+        return fromBits((value >> FracBits) << FracBits);
     }
 
     template <std::floating_point F>
     constexpr operator F() const {
-        constexpr auto scale = static_cast<F>(uint32_t(1) << FracBits);
-        return static_cast<F>(value) / scale;
+        return static_cast<F>(value) / static_cast<F>(scale);
     }
 
     constexpr auto operator+(const FixedPoint& other) const {
-        return FixedPoint(std::bit_cast<uint32_t>(value) + std::bit_cast<uint32_t>(other.value));
+        return fromBits(static_cast<Type>(value) + static_cast<Type>(other.value));
     }
     constexpr auto operator-(const FixedPoint& other) const {
-        return FixedPoint(std::bit_cast<uint32_t>(value) - std::bit_cast<uint32_t>(other.value));
+        return fromBits(static_cast<Type>(value) - static_cast<Type>(other.value));
     }
 
     template <bool OtherSigned, std::size_t OtherIntBits, std::size_t OtherFracBits>
@@ -261,10 +283,11 @@ struct FixedPoint {
     }
 
     template <bool OtherSigned, std::size_t OtherIntBits, std::size_t OtherFracBits>
+        requires(IntBits + OtherIntBits + FracBits + OtherFracBits <= 64) // overflow
     constexpr auto operator*(const FixedPoint<OtherSigned, OtherIntBits, OtherFracBits>& other) const {
         using OutSigned   = std::bool_constant<Signed || OtherSigned>;
-        using OutFracBits = std::integral_constant<std::size_t, std::max(FracBits, OtherFracBits)>;
-        using OutIntBits  = std::integral_constant<std::size_t, std::min(IntBits + OtherIntBits, 32uz - OutFracBits::value)>;
+        using OutFracBits = std::integral_constant<std::size_t, FracBits + OtherFracBits>;
+        using OutIntBits  = std::integral_constant<std::size_t, IntBits + OtherIntBits>;
         using OutType     = FixedPoint<OutSigned::value, OutIntBits::value, OutFracBits::value>;
         auto result       = [this, &other] {
             if constexpr (Signed || OtherSigned) {
@@ -273,7 +296,7 @@ struct FixedPoint {
                 return static_cast<uint64_t>(value) * static_cast<uint64_t>(other.value);
             }
         }();
-        return OutType(static_cast<uint32_t>(result >> std::min(FracBits, OtherFracBits)));
+        return OutType::fromBits(result);
     }
 };
 

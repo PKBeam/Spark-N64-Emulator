@@ -1,8 +1,6 @@
 module;
-
 #include <util/defines.hpp>
 #include <rdp_gfx_backend/gfxBackend.hpp>
-
 export module RDP:RDP;
 
 import std;
@@ -83,6 +81,7 @@ class RDP {
 
   private:
     auto makeCombinerInputs() -> ::RDP::CombineInputs;
+    auto flushBackend() -> void;
 
     std::shared_ptr<Util::Logger> m_logger;
     ::RDP::Control*               m_rdpControl{};
@@ -98,6 +97,8 @@ class RDP {
     int                   m_terminateAfterSyncs{-1};
     std::function<void()> m_syncCallback{};
     std::size_t           m_syncCallbackCount{};
+
+    std::bitset<8> m_tileUsedThisDraw{};
 
     Commands::SetCombineMode         m_combineMode{};
     Commands::SetCombineMode::Inputs m_combineInputs{};
@@ -157,6 +158,33 @@ auto RDP::makeCombinerInputs() -> ::RDP::CombineInputs {
     return inputs;
 }
 
+auto RDP::flushBackend() -> void {
+    const auto inputs = makeCombinerInputs();
+    m_gfxBackend->setCombineInputs(inputs);
+    for (auto tileIndex = 0uz; tileIndex < m_tileUsedThisDraw.size(); ++tileIndex) {
+        if (!m_tileUsedThisDraw[tileIndex]) {
+            continue;
+        }
+
+        const auto& tile = m_tiles[tileIndex];
+        m_gfxBackend->updateTile(
+            tileIndex,
+            m_textureMemory + tile.tmemAddress,
+            tile.params());
+        IF_LOG_ENABLED(m_logger) {
+            m_logger->log<Level::MED, Sys::RDP>(
+                std::tuple{"op", "flushTile"},
+                std::tuple{"tile", "{}", tileIndex},
+                std::tuple{"tmemAddress", "{}", tile.tmemAddress},
+                std::tuple{"width", "{}", tile.extent.width()},
+                std::tuple{"height", "{}", tile.extent.height()},
+                std::tuple{"format", "{}", tile.format});
+        }
+    }
+    m_gfxBackend->startRenderPass();
+    m_tileUsedThisDraw.reset();
+}
+
 auto RDP::runRdpCommand() -> void {
     auto& cmds = m_rdpControl->getCommands();
     if (cmds.empty()) {
@@ -173,8 +201,13 @@ auto RDP::runRdpCommand() -> void {
                 std::tuple{"command", "{}", cmdType});
         }
         switch (cmdType) {
+            case Command::SYNC_PIPE: {
+                flushBackend();
+                cmds.pop_front();
+                break;
+            }
             case Command::SYNC_FULL: {
-                m_gfxBackend->startRenderPass();
+                flushBackend();
                 m_gfxBackend->completeRenderFrame();
                 m_mipsInterface->setInterrupt<^^Interfaces::MI_INTERRUPT::dp>(true);
                 m_syncs++;
@@ -205,25 +238,19 @@ auto RDP::runRdpCommand() -> void {
                 const auto tri = cmd.getTriangle();
                 IF_LOG_ENABLED(m_logger) {
                     m_logger->log<Level::MED, Sys::RDP>(
-                        std::tuple{"op", "triangleDraw"},
+                        std::tuple{"op", "drawTriangle"},
+                        std::tuple{"tile", "{}", cmd.tile},
                         std::tuple{"coords", "{}", tri});
                 }
-                auto shadeCmd = std::optional<Commands::FillTriangle::Shade>{};
+                auto shade = Util::RenderTriangle{};
                 if (cmdHeader.shade) {
-                    shadeCmd.emplace(makeCommand<Commands::FillTriangle::Shade, 8>(cmds));
+                    const auto shadeCmd = makeCommand<Commands::FillTriangle::Shade, 8>(cmds);
                 }
 
-                auto textureCmd = std::optional<Commands::FillTriangle::Texture>{};
+                auto texCoords = Util::RenderTriangle{};
                 if (cmdHeader.texture) {
-                    textureCmd.emplace(makeCommand<Commands::FillTriangle::Texture, 8>(cmds));
-                    auto texCoords = textureCmd->getTexCoords(tri);
-                    if (m_mode.perspTexEn) {
-                        auto fCoords = static_cast<Util::Triangle<float>>(texCoords);
-                        texCoords    = Util::RenderTriangle{
-                            fCoords.v0() / fCoords.v0().z,
-                            fCoords.v1() / fCoords.v1().z,
-                            fCoords.v2() / fCoords.v2().z};
-                    }
+                    const auto textureCmd = makeCommand<Commands::FillTriangle::Texture, 8>(cmds);
+                    texCoords             = textureCmd.getTexCoords(tri, m_mode.perspTexEn);
                     IF_LOG_ENABLED(m_logger) {
                         m_logger->log<Level::MED, Sys::RDP>(
                             std::tuple{"op", "triangleTexture"},
@@ -235,32 +262,34 @@ auto RDP::runRdpCommand() -> void {
                         cmds.pop_front();
                     }
                 }
-                m_gfxBackend->addTriangle(tri.bytes());
+                m_tileUsedThisDraw.set(cmd.tile);
+                m_gfxBackend->addTriangle(cmd.tile, tri.bytes(), shade.bytes(), texCoords.bytes());
                 break;
             }
             case Command::FILL_RECTANGLE: {
                 const auto cmd  = makeCommand<Commands::FillRectangle, 1>(cmds);
                 const auto tris = cmd.getTriangles(); // todo fill optimisation in vk
-                m_gfxBackend->addTriangle(tris[0].bytes());
-                m_gfxBackend->addTriangle(tris[1].bytes());
+                // m_gfxBackend->addTriangle(tris[0].bytes(), nullptr, nullptr, 0);
+                // m_gfxBackend->addTriangle(tris[1].bytes(), nullptr, nullptr, 0);
                 IF_LOG_ENABLED(m_logger) {
                     m_logger->log<Level::MED, Sys::RDP>(
-                        std::tuple{"op", "draw"},
-                        std::tuple{"type", "rectangle"},
+                        std::tuple{"op", "drawRectangle"},
                         std::tuple{"coords", "{}", cmd.getRectangle()});
                 }
                 break;
             }
             case Command::TEXTURE_RECTANGLE: {
-                const auto cmd  = makeCommand<Commands::TextureRectangle, 2>(cmds);
-                const auto tris = cmd.getTriangles();
-                // m_gfxBackend->addTriangle(tris[0].bytes());
-                // m_gfxBackend->addTriangle(tris[1].bytes());
+                const auto cmd           = makeCommand<Commands::TextureRectangle, 2>(cmds);
+                const auto [coords, uvs] = cmd.getTriangles();
+                m_tileUsedThisDraw.set(cmd.tile);
+                m_gfxBackend->addTriangle(cmd.tile, coords[0].bytes(), nullptr, uvs[0].bytes());
+                m_gfxBackend->addTriangle(cmd.tile, coords[1].bytes(), nullptr, uvs[1].bytes());
                 IF_LOG_ENABLED(m_logger) {
                     m_logger->log<Level::MED, Sys::RDP>(
-                        std::tuple{"op", "draw"},
-                        std::tuple{"type", "rectangle"},
-                        std::tuple{"coords", "{}", cmd.getRectangle()});
+                        std::tuple{"op", "drawRectangle"},
+                        std::tuple{"tile", "{}", cmd.tile},
+                        std::tuple{"coords", "{}, {}", coords[0], coords[1]},
+                        std::tuple{"texture", "{}, {}", uvs[0], uvs[1]});
                 }
                 break;
             }
@@ -323,13 +352,6 @@ auto RDP::runRdpCommand() -> void {
                 }
                 break;
             }
-            case Command::SYNC_PIPE: {
-                const auto inputs = makeCombinerInputs();
-                m_gfxBackend->setCombineInputs(inputs);
-                m_gfxBackend->startRenderPass();
-                cmds.pop_front();
-                break;
-            }
             case Command::SET_COMBINE_MODE: {
                 m_combineMode = makeCommand<Commands::SetCombineMode, 1>(cmds);
                 IF_LOG_ENABLED(m_logger) {
@@ -340,17 +362,28 @@ auto RDP::runRdpCommand() -> void {
                 break;
             }
             case Command::SET_TILE: {
-                const auto cmd   = makeCommand<Commands::SetTile, 1>(cmds);
-                const auto pxFmt = PixelFormat{
-                    .format = static_cast<TextureFormat>(cmd.format),
-                    .size   = cmd.size,
-                };
+                const auto cmd = makeCommand<Commands::SetTile, 1>(cmds);
+
                 const auto tmemAddr = cmd.address * 8;
                 m_tiles[cmd.index]  = Tile{
-                     .pixelFormat = pxFmt,
+                     .format      = {cmd.format, cmd.size},
                      .lineLength  = cmd.line,
                      .tmemAddress = static_cast<uint16_t>(tmemAddr),
-                     .extent      = {0, 0, 0, 0},
+                     .extent      = {Util::Fxp_0, Util::Fxp_0, Util::Fxp_0, Util::Fxp_0},
+                     .s =
+                         {
+                             .shift  = static_cast<int8_t>(cmd.shiftS > 10 ? 16 - cmd.shiftS : -static_cast<int>(cmd.shiftS)),
+                             .mirror = static_cast<uint8_t>(cmd.mirrorS),
+                             .clamp  = static_cast<uint8_t>(cmd.clampS),
+                             .mask   = cmd.maskS,
+                        },
+                     .t =
+                         {
+                             .shift  = static_cast<int8_t>(cmd.shiftT > 10 ? 16 - cmd.shiftT : -static_cast<int>(cmd.shiftT)),
+                             .mirror = static_cast<uint8_t>(cmd.mirrorT),
+                             .clamp  = static_cast<uint8_t>(cmd.clampT),
+                             .mask   = cmd.maskT,
+                        },
                 };
                 IF_LOG_ENABLED(m_logger) {
                     m_logger->log<Level::MED, Sys::RDP>(
@@ -358,7 +391,7 @@ auto RDP::runRdpCommand() -> void {
                         std::tuple{"tile", "{}", cmd.index},
                         std::tuple{"address", HEXFMT12, tmemAddr},
                         std::tuple{"lineLength", HEXFMT12, cmd.line},
-                        std::tuple{"pixelFormat", "{}", pxFmt},
+                        std::tuple{"pixelFormat", "{}", m_tiles[cmd.index].format},
                         std::tuple{"data", HEXFMT64, std::bit_cast<uint64_t>(cmd)});
                 }
                 break;
@@ -366,10 +399,10 @@ auto RDP::runRdpCommand() -> void {
             case Command::SET_TILE_SIZE: {
                 const auto cmd    = makeCommand<Commands::SetTileSize, 1>(cmds);
                 const auto extent = Tile::Extent{
-                    .ulS = cmd.upperLeftS,
-                    .ulT = cmd.upperLeftT,
-                    .lrS = cmd.lowerRightS,
-                    .lrT = cmd.lowerRightT,
+                    .ulS = Util::UFixedPoint<10, 2>::fromBits(cmd.upperLeftS),
+                    .ulT = Util::UFixedPoint<10, 2>::fromBits(cmd.upperLeftT),
+                    .lrS = Util::UFixedPoint<10, 2>::fromBits(cmd.lowerRightS),
+                    .lrT = Util::UFixedPoint<10, 2>::fromBits(cmd.lowerRightT),
                 };
                 m_tiles[cmd.index].extent = extent;
                 IF_LOG_ENABLED(m_logger) {
@@ -409,6 +442,7 @@ auto RDP::runRdpCommand() -> void {
                 IF_LOG_ENABLED(m_logger) {
                     m_logger->log<Level::MED, Sys::RDP>(
                         std::tuple{"op", "loadBlock"},
+                        std::tuple{"tile", "{}", cmd.tile},
                         std::tuple{"rdramAddr", HEXFMT32, rdramBaseAddr},
                         std::tuple{"coords", "(" HEXFMT12 ", " HEXFMT12 "), (" HEXFMT12 ")", ulS, ulT, lrS});
                 }
@@ -426,7 +460,10 @@ auto RDP::runRdpCommand() -> void {
                             std::tuple{"value", HEXFMT64, value});
                     }
                 }
-                m_tiles[cmd.tile].extent = {ulS, ulT, lrS, cmd.dxt};
+                m_tiles[cmd.tile].extent = {Util::UFixedPoint<10, 2>::fromBits(ulS),
+                                            Util::UFixedPoint<10, 2>::fromBits(ulT),
+                                            Util::UFixedPoint<10, 2>::fromBits(lrS),
+                                            Util::UFixedPoint<10, 2>::fromBits(cmd.dxt)};
                 break;
             }
             case Command::LOAD_TILE: {
@@ -447,13 +484,14 @@ auto RDP::runRdpCommand() -> void {
                 IF_LOG_ENABLED(m_logger) {
                     m_logger->log<Level::MED, Sys::RDP>(
                         std::tuple{"op", "loadTile"},
+                        std::tuple{"tile", "{}", cmd.tile},
                         std::tuple{"rdramAddr", HEXFMT32, rdramBaseAddr},
                         std::tuple{"coords", "(" HEXFMT12 ", " HEXFMT12 "), (" HEXFMT12 ", " HEXFMT12 ")", ulS, ulT, lrS, lrT});
                 }
 
                 for (const auto row : std::views::iota(0, height)) {
-                    auto offset = row * m_tiles[cmd.tile].lineLength;
                     for (const auto word : std::views::iota(0u, m_tiles[cmd.tile].lineLength)) {
+                        auto       offset   = row * word * sizeof(uint64_t);
                         const auto value    = Util::byteswapIfLittleEndian(m_memoryBus->readPhysical<uint64_t>(rdramBaseAddr + offset));
                         const auto tmemAddr = (tmemBaseAddr + offset) & 0xFFF;
                         std::memcpy(m_textureMemory + tmemAddr, &value, sizeof(value));
@@ -466,7 +504,10 @@ auto RDP::runRdpCommand() -> void {
                         offset += sizeof(uint64_t);
                     }
                 }
-                m_tiles[cmd.tile].extent = {ulS, ulT, lrS, lrT};
+                m_tiles[cmd.tile].extent = {Util::UFixedPoint<10, 2>::fromBits(ulS),
+                                            Util::UFixedPoint<10, 2>::fromBits(ulT),
+                                            Util::UFixedPoint<10, 2>::fromBits(lrS),
+                                            Util::UFixedPoint<10, 2>::fromBits(lrT)};
                 break;
             }
             // ignore for now

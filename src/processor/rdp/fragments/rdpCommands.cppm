@@ -1,5 +1,6 @@
 module;
 #include <util/defines.hpp>
+#include <rdp_gfx_backend/gfxBackend.hpp>
 export module RDP:Commands;
 
 import std;
@@ -10,17 +11,20 @@ import Util;
 
 export namespace RDP {
 
-struct TextureFormat {
-    enum Value {
+struct PixelFormat {
+    enum Value : uint8_t {
         RGBA,
         YUV,
         CI,
         IA,
-        I,
+        I
     };
     Value value;
-    constexpr TextureFormat(uint8_t value = 0)
-        : value(static_cast<Value>(std::min(value, static_cast<uint8_t>(Value::I)))) {}
+    constexpr PixelFormat() : value(Value::RGBA) {}
+    constexpr PixelFormat(uint8_t v) : value(static_cast<Value>(std::min(v, uint8_t(4)))) {}
+    constexpr operator uint8_t() const {
+        return static_cast<uint8_t>(value);
+    }
 };
 
 struct PixelSize {
@@ -33,9 +37,9 @@ struct PixelSize {
     }
 };
 
-struct PixelFormat {
-    TextureFormat format;
-    PixelSize     size;
+struct TileFormat {
+    PixelFormat format;
+    PixelSize   size;
 };
 
 struct TextureImage {
@@ -50,11 +54,70 @@ struct Tile {
         Util::UFixedPoint<10, 2> ulT;
         Util::UFixedPoint<10, 2> lrS;
         Util::UFixedPoint<10, 2> lrT;
+
+        constexpr auto width() const -> std::size_t {
+            return static_cast<std::size_t>(1 + (lrS - ulS).integer());
+        }
+
+        constexpr auto height() const -> std::size_t {
+            return static_cast<std::size_t>(1 + (lrT - ulT).integer());
+        }
     };
-    PixelFormat pixelFormat;
-    uint16_t    lineLength;
-    uint16_t    tmemAddress;
-    Extent      extent;
+    TileFormat           format;
+    uint16_t             lineLength;
+    uint16_t             tmemAddress;
+    Extent               extent;
+    ::RDP::SamplerParams s;
+    ::RDP::SamplerParams t;
+
+    constexpr auto params() const -> ::RDP::TileParams {
+        return {
+            .width  = static_cast<uint32_t>(extent.width()),
+            .height = static_cast<uint32_t>(extent.height()),
+            .stride = static_cast<uint32_t>(lineLength * sizeof(uint64_t)),
+            .format = textureFormat(),
+            .s      = s,
+            .t      = t,
+        };
+    }
+
+    constexpr auto textureFormat() const -> ::RDP::TextureFormat {
+        const auto format = this->format.format;
+        const auto size   = this->format.size;
+        using namespace RDP;
+        switch (format) {
+            case PixelFormat::RGBA:
+                switch (size.bitsPerPixel()) {
+                    case 16: return TextureFormat::RGBA16;
+                    case 32: return TextureFormat::RGBA32;
+                    default: return TextureFormat::INVALID;
+                }
+            case PixelFormat::YUV:
+                switch (size.bitsPerPixel()) {
+                    case 16: return TextureFormat::YUV16;
+                    default: return TextureFormat::INVALID;
+                }
+            case PixelFormat::CI:
+                switch (size.bitsPerPixel()) {
+                    case 4: return TextureFormat::CI4;
+                    case 8: return TextureFormat::CI8;
+                    default: return TextureFormat::INVALID;
+                }
+            case PixelFormat::IA:
+                switch (size.bitsPerPixel()) {
+                    case 4: return TextureFormat::IA4;
+                    case 8: return TextureFormat::IA8;
+                    case 16: return TextureFormat::IA16;
+                    default: return TextureFormat::INVALID;
+                }
+            default: // PixelFormat::I
+                switch (size.bitsPerPixel()) {
+                    case 4: return TextureFormat::I4;
+                    case 8: return TextureFormat::I8;
+                    default: return TextureFormat::INVALID;
+                }
+        }
+    }
 };
 
 enum class Command : uint8_t {
@@ -142,9 +205,9 @@ struct FillTriangle {
     uint64_t        : 4;
 
     constexpr auto getTriangle() const -> Util::RenderTriangle {
-        const auto y0 = static_cast<Util::SFixedPoint<16, 16>>(Util::SFixedPoint<12, 2>(yh));
-        const auto y1 = static_cast<Util::SFixedPoint<16, 16>>(Util::SFixedPoint<12, 2>(ym));
-        const auto y2 = static_cast<Util::SFixedPoint<16, 16>>(Util::SFixedPoint<12, 2>(yl));
+        const auto y0 = static_cast<Util::SFixedPoint<16, 16>>(Util::SFixedPoint<12, 2>::fromBits(yh));
+        const auto y1 = static_cast<Util::SFixedPoint<16, 16>>(Util::SFixedPoint<12, 2>::fromBits(ym));
+        const auto y2 = static_cast<Util::SFixedPoint<16, 16>>(Util::SFixedPoint<12, 2>::fromBits(yl));
         const auto x  = [this, y0](Util::SFixedPoint<12, 2> y) {
             const auto xh   = Util::SFixedPoint<12, 16>(xhI, xhF);
             const auto dxdy = Util::SFixedPoint<14, 16>(dxHdyI, dxHdyF);
@@ -257,8 +320,7 @@ struct FillTriangle {
         uint64_t dsDyF : 16;
 
         // input tri is s10.2
-        constexpr auto getTexCoords(const Util::RenderTriangle& tri) const -> Util::RenderTriangle {
-            // TODO add W/perspective coord
+        constexpr auto getTexCoords(const Util::RenderTriangle& tri, bool enablePerspectiveCorrection) const -> Util::RenderTriangle {
             const auto s = Util::SFixedPoint<16, 16>(sI, sF);
             const auto t = Util::SFixedPoint<16, 16>(tI, tF);
             const auto w = Util::SFixedPoint<16, 16>(wI, wF);
@@ -270,25 +332,36 @@ struct FillTriangle {
             const auto dwdx = Util::SFixedPoint<16, 16>(dwDxI, dwDxF);
             const auto dwdy = Util::SFixedPoint<16, 16>(dwDyI, dwDyF);
 
-            const auto st = [this, tri, dsdx, dsdy, dtdx, dtdy, dwdx, dwdy, s, t, w](Util::SFixedPoint<16, 16> x, Util::SFixedPoint<12, 16> y) {
-                const auto dx      = Util::SFixedPoint<12, 16>(x) - Util::SFixedPoint<12, 16>(tri.v0().x);
-                const auto yhFloor = Util::SFixedPoint<12, 2>(tri.v0().y).floor();
-                const auto dy      = Util::SFixedPoint<12, 2>(y) - yhFloor;
+            const auto st = [&, this](Util::SFixedPoint<16, 16> x, Util::SFixedPoint<12, 16> y) -> Util::Point<Util::SFixedPoint<16, 16>> {
+                const auto x0 = tri.v0().x;
+                const auto y0 = tri.v0().y;
 
-                const auto dsx = dsdx * dx;
-                const auto dsy = dsdy * dy;
-                const auto dtx = dtdx * dx;
-                const auto dty = dtdy * dy;
-                const auto dwx = dwdx * dx;
-                const auto dwy = dwdy * dy;
+                const auto dx = x - x0;
+                const auto dy = y - y0.floor();
 
-                return Util::Point{s + dsx + dsy, t + dtx + dty, w + dwx + dwy};
+                const auto dsX = dsdx * dx;
+                const auto dsY = dsdy * dy;
+                const auto dtX = dtdx * dx;
+                const auto dtY = dtdy * dy;
+                const auto dwX = dwdx * dx;
+                const auto dwY = dwdy * dy;
+
+                auto sNorm = Util::SFixedPoint<32, 32>(s);
+                auto tNorm = Util::SFixedPoint<32, 32>(t);
+                if (enablePerspectiveCorrection) {
+                    sNorm = Util::SFixedPoint<32, 32>(static_cast<float>(s) / static_cast<float>(w));
+                    tNorm = Util::SFixedPoint<32, 32>(static_cast<float>(t) / static_cast<float>(w));
+                }
+                const auto sOut = sNorm + dsX + dsY;
+                const auto tOut = tNorm + dtX + dtY;
+                const auto wOut =  Util::SFixedPoint<32, 32>::fromValue(1) + dwX + dwY;
+                return Util::Point{sOut, tOut, wOut};
             };
-            const auto v0 = st(tri.v0().x, tri.v0().y);
-            const auto v1 = st(tri.v1().x, tri.v1().y);
-            const auto v2 = st(tri.v2().x, tri.v2().y);
+            auto s0 = st(tri.v0().x, tri.v0().y);
+            auto s1 = st(tri.v1().x, tri.v1().y);
+            auto s2 = st(tri.v2().x, tri.v2().y);
 
-            return Util::RenderTriangle(v0, v1, v2);
+            return Util::RenderTriangle(s0, s1, s2);
         }
     };
 
@@ -320,29 +393,60 @@ struct TextureRectangle {
     uint64_t s    : 10;
 
     constexpr auto getRectangle() const {
-        const auto ulxF = static_cast<float>(Util::UFixedPoint<10, 2>(ulx));
-        const auto lrxF = static_cast<float>(Util::UFixedPoint<10, 2>(lrx));
-        const auto ulyF = static_cast<float>(Util::UFixedPoint<10, 2>(uly));
-        const auto lryF = static_cast<float>(Util::UFixedPoint<10, 2>(lry));
+        const auto ulxF = static_cast<float>(Util::UFixedPoint<10, 2>::fromBits(ulx));
+        const auto lrxF = static_cast<float>(Util::UFixedPoint<10, 2>::fromBits(lrx));
+        const auto ulyF = static_cast<float>(Util::UFixedPoint<10, 2>::fromBits(uly));
+        const auto lryF = static_cast<float>(Util::UFixedPoint<10, 2>::fromBits(lry));
         const auto v0   = Util::Point(ulxF, ulyF);
         const auto v1   = Util::Point(lrxF, lryF);
         return Util::Rectangle(v0, v1);
     }
 
-    constexpr auto getTriangles() const -> std::array<Util::RenderTriangle, 2> {
-        const auto v0x = static_cast<Util::SFixedPoint<16, 16>>(Util::UFixedPoint<10, 2>(ulx));
-        const auto v1x = static_cast<Util::SFixedPoint<16, 16>>(Util::UFixedPoint<10, 2>(lrx));
-        const auto v0y = static_cast<Util::SFixedPoint<16, 16>>(Util::UFixedPoint<10, 2>(uly));
-        const auto v1y = static_cast<Util::SFixedPoint<16, 16>>(Util::UFixedPoint<10, 2>(lry));
+    constexpr auto getTriangles() const -> std::pair<std::array<Util::RenderTriangle, 2>, std::array<Util::RenderTriangle, 2>> {
+        const auto v0x = static_cast<Util::SFixedPoint<16, 16>>(Util::UFixedPoint<10, 2>::fromBits(ulx));
+        const auto v1x = static_cast<Util::SFixedPoint<16, 16>>(Util::UFixedPoint<10, 2>::fromBits(lrx));
+        const auto v0y = static_cast<Util::SFixedPoint<16, 16>>(Util::UFixedPoint<10, 2>::fromBits(uly));
+        const auto v1y = static_cast<Util::SFixedPoint<16, 16>>(Util::UFixedPoint<10, 2>::fromBits(lry));
 
         const auto v0 = Util::Point(v0x, v0y);
         const auto v1 = Util::Point(v1x, v0y);
         const auto v2 = Util::Point(v0x, v1y);
         const auto v3 = Util::Point(v1x, v1y);
-        return {
+
+        const auto coords = std::array<Util::RenderTriangle, 2>{
             Util::RenderTriangle(v0, v1, v3),
             Util::RenderTriangle(v0, v3, v2),
         };
+
+        const auto v0s = static_cast<Util::SFixedPoint<16, 16>>(Util::SFixedPoint<10, 5>::fromBits(s));
+        const auto v0t = static_cast<Util::SFixedPoint<16, 16>>(Util::SFixedPoint<10, 5>::fromBits(t));
+
+        const auto dsdx = static_cast<Util::SFixedPoint<16, 16>>(Util::SFixedPoint<5, 10>::fromBits(dsDx));
+        const auto dtdy = static_cast<Util::SFixedPoint<16, 16>>(Util::SFixedPoint<5, 10>::fromBits(dtDy));
+
+        const auto st = [this, v0x, v0y, v0s, v0t, dsdx, dtdy](Util::SFixedPoint<16, 16> x, Util::SFixedPoint<16, 16> y) {
+            const auto dx = x - v0x;
+            const auto dy = y - v0y;
+
+            const auto ds = dsdx * dx;
+            const auto dt = dtdy * dy;
+
+            const auto sOut = v0s + ds;
+            const auto tOut = v0t + dt;
+
+            return Util::Point{sOut, tOut};
+        };
+
+        const auto st0 = Util::Point(v0s, v0t);
+        const auto st1 = st(v1.x, v1.y);
+        const auto st2 = st(v2.x, v2.y);
+        const auto st3 = st(v3.x, v3.y);
+
+        const auto texture = std::array<Util::RenderTriangle, 2>{
+            Util::RenderTriangle(st0, st1, st3),
+            Util::RenderTriangle(st0, st3, st2),
+        };
+        return {coords, texture};
     }
 };
 
@@ -379,10 +483,10 @@ struct SetScissor {
     uint32_t             : 2;
 
     constexpr auto getRectangle() const {
-        const auto v0x = static_cast<float>(Util::UFixedPoint<10, 2>(upperLeftX));
-        const auto v1x = static_cast<float>(Util::UFixedPoint<10, 2>(upperLeftY));
-        const auto v0y = static_cast<float>(Util::UFixedPoint<10, 2>(lowerRightX));
-        const auto v1y = static_cast<float>(Util::UFixedPoint<10, 2>(lowerRightY));
+        const auto v0x = static_cast<float>(Util::UFixedPoint<10, 2>::fromBits(upperLeftX));
+        const auto v1x = static_cast<float>(Util::UFixedPoint<10, 2>::fromBits(upperLeftY));
+        const auto v0y = static_cast<float>(Util::UFixedPoint<10, 2>::fromBits(lowerRightX));
+        const auto v1y = static_cast<float>(Util::UFixedPoint<10, 2>::fromBits(lowerRightY));
         const auto v0  = Util::Point(v0x, v0y);
         const auto v1  = Util::Point(v1x, v1y);
         return Util::Rectangle(v0, v1);
@@ -516,20 +620,20 @@ struct FillRectangle {
     uint64_t             : 2;
 
     constexpr auto getRectangle() const {
-        const auto v0x = static_cast<float>(Util::UFixedPoint<10, 2>(upperLeftX));
-        const auto v1x = static_cast<float>(Util::UFixedPoint<10, 2>(upperLeftY));
-        const auto v0y = static_cast<float>(Util::UFixedPoint<10, 2>(lowerRightX));
-        const auto v1y = static_cast<float>(Util::UFixedPoint<10, 2>(lowerRightY));
+        const auto v0x = static_cast<float>(Util::UFixedPoint<10, 2>::fromBits(upperLeftX));
+        const auto v1x = static_cast<float>(Util::UFixedPoint<10, 2>::fromBits(upperLeftY));
+        const auto v0y = static_cast<float>(Util::UFixedPoint<10, 2>::fromBits(lowerRightX));
+        const auto v1y = static_cast<float>(Util::UFixedPoint<10, 2>::fromBits(lowerRightY));
         const auto v0  = Util::Point(v0x, v0y);
         const auto v1  = Util::Point(v1x, v1y);
         return Util::Rectangle(v0, v1);
     }
 
     constexpr auto getTriangles() const -> std::array<Util::RenderTriangle, 2> {
-        const auto v0x = static_cast<Util::SFixedPoint<16, 16>>(Util::UFixedPoint<10, 2>(upperLeftX));
-        const auto v1x = static_cast<Util::SFixedPoint<16, 16>>(Util::UFixedPoint<10, 2>(upperLeftY));
-        const auto v0y = static_cast<Util::SFixedPoint<16, 16>>(Util::UFixedPoint<10, 2>(lowerRightX));
-        const auto v1y = static_cast<Util::SFixedPoint<16, 16>>(Util::UFixedPoint<10, 2>(lowerRightY));
+        const auto v0x = static_cast<Util::SFixedPoint<16, 16>>(Util::UFixedPoint<10, 2>::fromBits(upperLeftX));
+        const auto v1x = static_cast<Util::SFixedPoint<16, 16>>(Util::UFixedPoint<10, 2>::fromBits(upperLeftY));
+        const auto v0y = static_cast<Util::SFixedPoint<16, 16>>(Util::UFixedPoint<10, 2>::fromBits(lowerRightX));
+        const auto v1y = static_cast<Util::SFixedPoint<16, 16>>(Util::UFixedPoint<10, 2>::fromBits(lowerRightY));
 
         const auto v0 = Util::Point(v0x, v0y);
         const auto v1 = Util::Point(v1x, v0y);
@@ -757,17 +861,7 @@ struct SetColorImage {
 
 STD_FORMATTER_ENUM(RDP::Command, [](auto&& e) { return Util::enumName(e).value_or("NOP"); });
 
-STD_FORMATTER_ENUM_NAME(RDP::TextureFormat::Value);
-template <>
-struct std::formatter<RDP::TextureFormat> {
-    constexpr auto parse(std::format_parse_context& ctx) -> std::format_parse_context::iterator {
-        return ctx.begin();
-    }
-
-    constexpr auto format(const RDP::TextureFormat& value, std::format_context& ctx) const {
-        return std::format_to(ctx.out(), "{}", value.value);
-    }
-};
+STD_FORMATTER_ENUM_NAME(RDP::PixelFormat::Value);
 template <>
 struct std::formatter<RDP::PixelFormat> {
     constexpr auto parse(std::format_parse_context& ctx) -> std::format_parse_context::iterator {
@@ -775,6 +869,16 @@ struct std::formatter<RDP::PixelFormat> {
     }
 
     constexpr auto format(const RDP::PixelFormat& value, std::format_context& ctx) const {
+        return std::format_to(ctx.out(), "{}", value.value);
+    }
+};
+template <>
+struct std::formatter<RDP::TileFormat> {
+    constexpr auto parse(std::format_parse_context& ctx) -> std::format_parse_context::iterator {
+        return ctx.begin();
+    }
+
+    constexpr auto format(const RDP::TileFormat& value, std::format_context& ctx) const {
         return std::format_to(ctx.out(), "{}{}", value.format, value.size.bitsPerPixel());
     }
 };

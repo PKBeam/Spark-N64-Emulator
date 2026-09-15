@@ -8,6 +8,11 @@
 #include "gfxBackend.hpp"
 
 namespace RDP {
+struct VulkanTextureFormat {
+    VkFormat           vkFormat;
+    VkComponentMapping swizzle;
+    std::size_t        bytesPerTexel;
+};
 class VulkanBackend : public GfxBackend {
   public:
     struct RenderTarget {
@@ -27,12 +32,20 @@ class VulkanBackend : public GfxBackend {
         RDP::CombineInputs combineInputs;
     };
 
+    struct ShaderTileInfo {
+        std::array<uint32_t, 4> extent;
+        RDP::SamplerParams      s;
+        RDP::SamplerParams      t;
+    };
+    static_assert(sizeof(ShaderTileInfo) == 32);
+
     struct CurrentRenderPass {
-        bool                   active        = false;
-        std::vector<int32_t>   vertexData    = {};
-        uint32_t               primColour    = 0;
-        RdpRenderPassConstants pushConstants = {};
-        auto                   reset() -> void {
+        bool                          active        = false;
+        std::vector<int32_t>          vertexData    = {};
+        uint32_t                      primColour    = 0;
+        RdpRenderPassConstants        pushConstants = {};
+        std::array<ShaderTileInfo, 8> tileParams    = {};
+        auto                          reset() -> void {
             active = false;
             vertexData.clear();
             pushConstants = {};
@@ -59,8 +72,19 @@ class VulkanBackend : public GfxBackend {
     auto createRenderTargets() -> void;
     auto createCmdObjects() -> void;
     auto createPipeline() -> void;
+    auto createDescriptorSetLayout() -> void;
+    auto createDescriptorPool() -> void;
+    auto createFallbackTexture() -> void;
+    auto createDescriptorSet() -> void;
+    auto createTileParamsBuffer() -> void;
 
-    auto addTriangle(const std::byte* vtxBytes) -> void override;
+    auto updateTile(std::size_t      index,
+                    const std::byte* data,
+                    TileParams       params) -> void override;
+    auto addTriangle(uint32_t         tile,
+                     const std::byte* vtxBytes,
+                     const std::byte* shadeBytes = nullptr,
+                     const std::byte* uvBytes    = nullptr) -> void override;
     auto setCombineInputs(const CombineInputs& inputs) -> void override;
     auto startRenderPass() -> void override;
     auto completeRenderFrame() -> void override;
@@ -74,6 +98,8 @@ class VulkanBackend : public GfxBackend {
 
   private:
     constexpr static auto MAX_BUFFERS = 2uz;
+    constexpr static auto NUM_TILES   = 8uz;
+    constexpr static auto TMEM_SIZE   = 4096uz; // RDP TMEM is a fixed 4KB
 
     VkDevice         m_vkDevice           = VK_NULL_HANDLE;
     VkInstance       m_vkInstance         = VK_NULL_HANDLE;
@@ -92,10 +118,29 @@ class VulkanBackend : public GfxBackend {
     void*          m_vertexBufferMapped = nullptr;
     std::size_t    m_vertexBufferSize   = 0;
 
+    VkBuffer       m_tileParamsBuffer       = VK_NULL_HANDLE;
+    VkDeviceMemory m_tileParamsBufferMem    = VK_NULL_HANDLE;
+    void*          m_tileParamsBufferMapped = nullptr;
+
     std::array<RenderTarget, 2> m_renderTargets;
     VkRenderPass                m_renderPass     = VK_NULL_HANDLE;
     VkPipeline                  m_pipeline       = VK_NULL_HANDLE;
     VkPipelineLayout            m_pipelineLayout = VK_NULL_HANDLE;
+
+    struct VulkanTile {
+        VkImage        image     = VK_NULL_HANDLE;
+        VkDeviceMemory imageMem  = VK_NULL_HANDLE;
+        VkImageView    imageView = VK_NULL_HANDLE;
+        VkSampler      sampler   = VK_NULL_HANDLE;
+    };
+    // the currently bound tile's texture, resolved to a native VkFormat (CPU-decoded to
+    // RGBA8 first for palette/sub-byte-packed formats so it can still be hardware-sampled)
+    std::array<VulkanTile, NUM_TILES> m_textures;
+    VulkanTile                        m_fallbackTexture;
+
+    VkDescriptorSetLayout m_textureDescriptorSetLayout = VK_NULL_HANDLE;
+    VkDescriptorPool      m_textureDescriptorPool      = VK_NULL_HANDLE;
+    VkDescriptorSet       m_textureDescriptorSet       = VK_NULL_HANDLE;
 
     VkExtent2D m_extent = {320, 240};
 

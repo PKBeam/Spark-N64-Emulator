@@ -43,9 +43,7 @@ Application::Application(int& argc, char* argv[], RDP::GfxBackend* rdpGfxBackend
     m_vkInst->setLayers({});
 #endif
     m_vkInst->setApiVersion(QVersionNumber(1, 4));
-    m_vkInst->setExtensions(QByteArrayList()
-                            << "VK_EXT_swapchain_colorspace"
-                            << "VK_EXT_conservative_rasterization");
+    m_vkInst->setExtensions(QByteArrayList() << "VK_EXT_swapchain_colorspace");
     if (!m_vkInst->create())
         qFatal("Failed to create Vulkan instance: %d", m_vkInst->errorCode());
     m_app->connect(m_timer, &QTimer::timeout, m_app, [this, &shouldTerminate]() {
@@ -88,8 +86,18 @@ Window::Window(QVulkanInstance* vkInst, RDP::GfxBackend* rdpGfxBackend)
     features13.dynamicRendering      = VK_TRUE;
     features13.synchronization2      = VK_TRUE;
 
+    constinit static auto scalarBlockLayoutFeatures = VkPhysicalDeviceScalarBlockLayoutFeatures{};
+    scalarBlockLayoutFeatures.sType                 = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SCALAR_BLOCK_LAYOUT_FEATURES;
+    scalarBlockLayoutFeatures.scalarBlockLayout     = VK_TRUE;
+
+    constinit static auto storage8BitFeatures = VkPhysicalDevice8BitStorageFeatures{};
+    storage8BitFeatures.sType                       = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_8BIT_STORAGE_FEATURES;
+    storage8BitFeatures.uniformAndStorageBuffer8BitAccess = VK_TRUE;
+
     m_vkWindow->setEnabledFeaturesModifier([this](VkPhysicalDeviceFeatures2& features2) {
-        features13.pNext = features2.pNext;
+        scalarBlockLayoutFeatures.pNext = features2.pNext;
+        storage8BitFeatures.pNext       = &scalarBlockLayoutFeatures;
+        features13.pNext                = &storage8BitFeatures;
         features2.pNext  = &features13;
     });
     m_vkWindow->m_rdpGfxBackend = m_rdpGfxBackend;

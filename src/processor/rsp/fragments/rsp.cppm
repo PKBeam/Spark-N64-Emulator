@@ -230,9 +230,9 @@ auto RSP::runRspInstruction() -> void {
         case UnifiedOpcode::OP_VMUDH: m_exec.executeMultiply<P::CLAMP_SIGNED, P::SIGNED, P::SIGNED, P::ACCUM_SET, P::ACCUM_HI_32, P::Shift(16)>(data); break;
 
         case UnifiedOpcode::OP_VMULF: m_exec.executeMultiply<P::CLAMP_SIGNED, P::SIGNED, P::SIGNED, P::ACCUM_SET, P::ACCUM_HI_32, P::Shift(1), P::ROUND>(data); break;
-        case UnifiedOpcode::OP_VMULU: m_exec.executeMultiply<P::CLAMP_UNSIGNED, P::SIGNED, P::SIGNED, P::ACCUM_SET, P::ACCUM_HI_32, P::Shift(1), P::ROUND>(data); break;
+        case UnifiedOpcode::OP_VMULU: m_exec.executeMultiply<P::CLAMP_UNSIGNED_MACMULU, P::SIGNED, P::SIGNED, P::ACCUM_SET, P::ACCUM_HI_32, P::Shift(1), P::ROUND>(data); break;
         case UnifiedOpcode::OP_VMACF: m_exec.executeMultiply<P::CLAMP_SIGNED, P::SIGNED, P::SIGNED, P::ACCUM_ADD, P::ACCUM_HI_32, P::Shift(1)>(data); break;
-        case UnifiedOpcode::OP_VMACU: m_exec.executeMultiply<P::CLAMP_UNSIGNED, P::SIGNED, P::SIGNED, P::ACCUM_ADD, P::ACCUM_HI_32, P::Shift(1)>(data); break;
+        case UnifiedOpcode::OP_VMACU: m_exec.executeMultiply<P::CLAMP_UNSIGNED_MACMULU, P::SIGNED, P::SIGNED, P::ACCUM_ADD, P::ACCUM_HI_32, P::Shift(1)>(data); break;
 
         case UnifiedOpcode::OP_VAND: m_exec.executeBivariate<P::UNSIGNED>(data, Func::AND); break;
         case UnifiedOpcode::OP_VNAND: m_exec.executeBivariate<P::UNSIGNED>(data, Func::NAND); break;

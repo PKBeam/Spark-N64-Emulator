@@ -93,7 +93,7 @@ enum Accumulator  : uint8_t { ACCUM_NONE, ACCUM_ZERO_EXT, ACCUM_SIGN_EXT };
 enum AccumOut     : uint8_t { ACCUM_HI_32, ACCUM_LO_32 };
 enum CarryIn      : uint8_t { CARRY_IN_NONE, CARRY_IN };
 enum OperandSign  : uint8_t { UNSIGNED, SIGNED };
-enum ResultClamp  : uint8_t { CLAMP_NONE, CLAMP_UNSIGNED, CLAMP_SIGNED };
+enum ResultClamp  : uint8_t { CLAMP_NONE, CLAMP_UNSIGNED, CLAMP_SIGNED, CLAMP_UNSIGNED_MACMULU };
 enum ProductAccum : uint8_t { ACCUM_SET, ACCUM_ADD };
 enum ProductRound : uint8_t { ROUND_NONE, ROUND };
 enum MemoryTypeV  : uint8_t { LOADV, STOREV };
@@ -285,12 +285,17 @@ auto InstructionExecutor::executeMultiply(uint32_t inst) -> void {
 
         const auto accumVal = static_cast<int64_t>(accums[i]);
         auto       out      = accumVal;
+
         if (accumVal > std::numeric_limits<int32_t>::max()) {
             out = std::numeric_limits<VdClampType>::max();
         } else if (accumVal < std::numeric_limits<int32_t>::min()) {
             out = std::numeric_limits<VdClampType>::min();
         } else {
-            if constexpr (AccumOut == Param::ACCUM_HI_32) {
+            if constexpr (VdClamp == Param::CLAMP_UNSIGNED_MACMULU) {
+                if (out < 0) {
+                    out = 0;
+                }
+            } else if constexpr (AccumOut == Param::ACCUM_HI_32) {
                 out >>= 16;
             }
             out &= 0xFFFF;
@@ -496,13 +501,13 @@ auto InstructionExecutor::executeReadAccumulators(uint32_t inst) -> void {
     for (auto i : std::views::iota(0, 8)) {
         switch (static_cast<ISA::VEC_ELEM>(ops.vtElem)) {
             case ISA::VEC_ELEM::e0:
-                vd[i] = accums[i].low;
+                vd[i] = accums[i].high;
                 break;
             case ISA::VEC_ELEM::e1:
                 vd[i] = accums[i].mid;
                 break;
             case ISA::VEC_ELEM::e2:
-                vd[i] = accums[i].high;
+                vd[i] = accums[i].low;
                 break;
             default: throw Util::Error("Invalid element {} for VSAR instruction", static_cast<int>(ops.vtElem));
         }
@@ -537,7 +542,7 @@ template <Param::RecipFunc Func>
 auto InstructionExecutor::executeReciprocalLow(uint32_t inst) -> void {
     const auto ops   = std::bit_cast<ISA::RSP::TypeVS>(inst);
     const auto vt    = m_vprs->readVpr<uint16_t>(ops.vt)[ISA::singleLaneFor(static_cast<ISA::VEC_ELEM>(ops.vtElem))];
-    const auto input = static_cast<int32_t>((m_vprs->readDivIn().value_or(vt >> 15 ? 0xFFFF : 0) << 16) |
+    const auto input = static_cast<int32_t>(m_vprs->readDivIn().value_or(vt >> 15 ? 0xFFFF0000 : 0) |
                                             static_cast<uint32_t>(vt));
 
     auto result = uint32_t();
@@ -546,18 +551,21 @@ auto InstructionExecutor::executeReciprocalLow(uint32_t inst) -> void {
     } else if (input == std::numeric_limits<int16_t>::min()) {
         result = 0xFFFF0000;
     } else {
-        const auto absInput = static_cast<uint32_t>(std::abs(static_cast<int64_t>(input)));
-        const auto shift    = std::countl_zero(absInput);
+        const auto sign = input >> 31;
+        auto       data = static_cast<uint32_t>(input ^ sign);
+        if (input > std::numeric_limits<int16_t>::min()) {
+            data -= static_cast<uint32_t>(sign);
+        }
+        const auto shift = std::countl_zero(data);
         if constexpr (Func == Param::RecipFunc::RECIP) {
-            const auto index = static_cast<uint32_t>(static_cast<uint64_t>(absInput) << (shift + 1)) >> 23; // get 9 bits below first set bit
+            const auto index = static_cast<uint32_t>(static_cast<uint64_t>(data) << (shift + 1)) >> 23; // get 9 bits below first set bit
             result           = ((1u << 16 | RCP_LOOKUP[index]) << 14) >> (31 - shift);
         } else {
-            const auto index = static_cast<uint32_t>(static_cast<uint64_t>(absInput) << shift & 0x7FC00000) >> 22;
-            result           = ((1u << 16 | RSQ_LOOKUP[(index & 0x1FE) | (shift & 1)]) << 14) >> ((31 - shift) >> 1);
+            const auto normalized = static_cast<uint32_t>(static_cast<uint64_t>(data) << shift & 0x7FC00000) >> 22;
+            const auto index      = (normalized >> 1) | ((normalized & 1) ? 0 : 0x100);
+            result                = ((1u << 16 | RSQ_LOOKUP[index]) << 14) >> ((31 - shift) >> 1);
         }
-        if (input < 0) {
-            result = ~result;
-        }
+        result ^= static_cast<uint32_t>(sign);
     }
 
     // read VT into Accumulators
