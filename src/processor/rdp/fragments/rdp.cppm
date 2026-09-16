@@ -28,10 +28,6 @@ struct Colours {
     uint32_t environ;
 };
 
-auto logTriangle(const std::array<int32_t, 9>& triangle) -> void {
-    // Implement logging logic here
-}
-
 template <typename CommandT, std::size_t NumWords>
     requires(sizeof(CommandT) == NumWords * sizeof(uint64_t))
 auto makeCommand(std::deque<uint64_t>& cmds) -> CommandT {
@@ -234,15 +230,9 @@ auto RDP::runRdpCommand() -> void {
             case Command::FILL_TRIANGLE_STZ: {
                 const auto cmdHeader = std::bit_cast<Commands::FillTriangle::Cmd>(static_cast<uint8_t>(cmdType));
 
-                const auto cmd = makeCommand<Commands::FillTriangle, 4>(cmds);
-                const auto tri = cmd.getTriangle();
-                IF_LOG_ENABLED(m_logger) {
-                    m_logger->log<Level::MED, Sys::RDP>(
-                        std::tuple{"op", "drawTriangle"},
-                        std::tuple{"tile", "{}", cmd.tile},
-                        std::tuple{"coords", "{}", tri});
-                }
-                auto shade = Util::RenderTriangle{};
+                const auto cmd   = makeCommand<Commands::FillTriangle, 4>(cmds);
+                auto       tri   = cmd.getTriangle();
+                auto       shade = Util::RenderTriangle{};
                 if (cmdHeader.shade) {
                     const auto shadeCmd = makeCommand<Commands::FillTriangle::Shade, 8>(cmds);
                 }
@@ -250,16 +240,27 @@ auto RDP::runRdpCommand() -> void {
                 auto texCoords = Util::RenderTriangle{};
                 if (cmdHeader.texture) {
                     const auto textureCmd = makeCommand<Commands::FillTriangle::Texture, 8>(cmds);
-                    texCoords             = textureCmd.getTexCoords(tri, m_mode.perspTexEn);
-                    IF_LOG_ENABLED(m_logger) {
-                        m_logger->log<Level::MED, Sys::RDP>(
-                            std::tuple{"op", "triangleTexture"},
-                            std::tuple{"coords", "{}", texCoords});
+                    texCoords             = textureCmd.getTexCoords(tri);
+                    if (!m_mode.perspTexEn) { // no correction - set w to 1
+                        texCoords.data()[2] = TexelW_NoPerspectiveDivide;
+                        texCoords.data()[5] = TexelW_NoPerspectiveDivide;
+                        texCoords.data()[8] = TexelW_NoPerspectiveDivide;
                     }
                 }
                 if (cmdHeader.zbuffer) {
-                    for (auto _ : std::views::iota(0, 2)) {
-                        cmds.pop_front();
+                    const auto depthCmd = makeCommand<Commands::FillTriangle::Depth, 2>(cmds);
+                    depthCmd.setDepth(tri);
+                }
+
+                IF_LOG_ENABLED(m_logger) {
+                    m_logger->log<Level::MED, Sys::RDP>(
+                        std::tuple{"op", "drawTriangle"},
+                        std::tuple{"tile", "{}", cmd.tile},
+                        std::tuple{"coords", "{}", tri});
+                    if (cmdHeader.texture) {
+                        m_logger->log<Level::MED, Sys::RDP>(
+                            std::tuple{"op", "triangleTexture"},
+                            std::tuple{"coords", "{}", texCoords});
                     }
                 }
                 m_tileUsedThisDraw.set(cmd.tile);
@@ -279,8 +280,15 @@ auto RDP::runRdpCommand() -> void {
                 break;
             }
             case Command::TEXTURE_RECTANGLE: {
-                const auto cmd           = makeCommand<Commands::TextureRectangle, 2>(cmds);
-                const auto [coords, uvs] = cmd.getTriangles();
+                const auto cmd     = makeCommand<Commands::TextureRectangle, 2>(cmds);
+                auto [coords, uvs] = cmd.getTriangles();
+                if (!m_mode.perspTexEn) { // no correction - set w to 1
+                    for (auto& uv : uvs) {
+                        uv.data()[2] = TexelW_NoPerspectiveDivide;
+                        uv.data()[5] = TexelW_NoPerspectiveDivide;
+                        uv.data()[8] = TexelW_NoPerspectiveDivide;
+                    }
+                }
                 m_tileUsedThisDraw.set(cmd.tile);
                 m_gfxBackend->addTriangle(cmd.tile, coords[0].bytes(), nullptr, uvs[0].bytes());
                 m_gfxBackend->addTriangle(cmd.tile, coords[1].bytes(), nullptr, uvs[1].bytes());

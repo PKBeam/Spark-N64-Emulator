@@ -80,6 +80,15 @@ constexpr auto sign(T value) -> int {
     return 0;
 }
 
+template <std::integral T>
+constexpr auto shift(T value, int amount) -> T {
+    if (value > 0) {
+        return value << amount;
+    } else {
+        return value >> amount;
+    }
+}
+
 template <typename T>
 struct Point {
     T x;
@@ -175,6 +184,9 @@ static_assert(sizeof(Util::Rectangle<int32_t>) == 2 * sizeof(Util::Point<int32_t
 struct FixedPointZero {};
 constexpr auto Fxp_0 = FixedPointZero{};
 
+struct FixedPointOne {};
+constexpr auto Fxp_1 = FixedPointOne{};
+
 template <bool Signed, std::size_t IntBits, std::size_t FracBits>
     requires(IntBits > 0 && IntBits + FracBits <= 64)
 struct FixedPoint {
@@ -198,6 +210,7 @@ struct FixedPoint {
 
     constexpr FixedPoint() : value(0) {}
     constexpr FixedPoint(FixedPointZero) : value(0) {}
+    constexpr FixedPoint(FixedPointOne) : value(scale) {}
 
     template <std::floating_point F>
     constexpr FixedPoint(F f) : value(static_cast<Type>(f * scale)) {}

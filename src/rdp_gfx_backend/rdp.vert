@@ -29,21 +29,28 @@ layout(set = 0, binding = 8, scalar) uniform TileParams {
 } tileParams;
 
 layout(location = 0) out flat ivec3 out_shade;     
-layout(location = 1) out vec2 out_texCoords; 
+layout(location = 1) out vec3 out_texCoords; 
 layout(location = 2) out flat int out_tile;
+//layout(location = 3) out vec2 dbg_texCoords;
 
 
 void main() {
-    float scale = 0.0000152587890625; // 1/(2^16)
-    vec3 fpos = vec3(in_position) * vec3(scale, scale, 1);
-    gl_Position = vec4((fpos.x / 160) - 1, (fpos.y / 120) - 1, 0, 1.0);
+    float fixedPointScale = 65536.0;
+    float depthScale = 32768.0;
+    vec3 fpos = vec3(in_position) / vec3(fixedPointScale, fixedPointScale, fixedPointScale * depthScale);
+    gl_Position = vec4((fpos.x / 160) - 1, (fpos.y / 120) - 1, /*fpos.z*/ 0.0 , 1.0);
     out_shade = in_shade;
-    ShaderTileInfo tileInfo = tileParams.tiles[in_tile];
-    ivec2 shifts = ivec2(int(tileInfo.sShift), int(tileInfo.tShift));
-    ivec2 shiftedTexCoords = ivec2(
-        shifts.x >= 0 ? in_texCoords.x << uint(shifts.x) : in_texCoords.x >> uint(-shifts.x),
-        shifts.y >= 0 ? in_texCoords.y << uint(shifts.y) : in_texCoords.y >> uint(-shifts.y));
-    ivec2 maskedTexCoords = shiftedTexCoords & ivec2(tileInfo.sMask, tileInfo.tMask);
-    out_texCoords = vec2(maskedTexCoords) * scale;
+    out_texCoords = vec3(in_texCoords) / fixedPointScale;
     out_tile = in_tile;
+
+    // copied from frag shader for debug view of per-vertex texture coordinates
+    //float correction = 1024.0;  
+    //ShaderTileInfo tileInfo = tileParams.tiles[in_tile];
+    //ivec3 fxpPerspTexCoords = ivec3((in_texCoords / in_texCoords.z) * correction * scale);
+    //ivec2 shifts = ivec2(int(tileInfo.sShift), int(tileInfo.tShift));
+    //ivec2 shiftedTexCoords = ivec2(
+    //    shifts.x >= 0 ? fxpPerspTexCoords.x << uint(shifts.x) : fxpPerspTexCoords.x >> uint(-shifts.x),
+    //    shifts.y >= 0 ? fxpPerspTexCoords.y << uint(shifts.y) : fxpPerspTexCoords.y >> uint(-shifts.y));
+    //ivec2 maskedTexCoords = shiftedTexCoords & ivec2(tileInfo.sMask, tileInfo.tMask);
+    //dbg_texCoords = vec2(maskedTexCoords.xy) / scale;
 }

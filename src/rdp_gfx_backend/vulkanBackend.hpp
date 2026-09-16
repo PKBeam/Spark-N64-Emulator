@@ -19,6 +19,9 @@ class VulkanBackend : public GfxBackend {
         VkImage        m_image     = VK_NULL_HANDLE;
         VkDeviceMemory m_mem       = VK_NULL_HANDLE;
         VkImageView    m_imageView = VK_NULL_HANDLE;
+        VkImage        m_depthImage     = VK_NULL_HANDLE;
+        VkDeviceMemory m_depthMem       = VK_NULL_HANDLE;
+        VkImageView    m_depthImageView = VK_NULL_HANDLE;
     };
 
     struct RenderOutput {

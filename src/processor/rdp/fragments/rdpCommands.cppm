@@ -11,6 +11,9 @@ import Util;
 
 export namespace RDP {
 
+// see rdp frag shader for details
+constexpr auto TexelW_NoPerspectiveDivide = Util::SFixedPoint<16, 16>::fromValue(1024);
+
 struct PixelFormat {
     enum Value : uint8_t {
         RGBA,
@@ -320,7 +323,7 @@ struct FillTriangle {
         uint64_t dsDyF : 16;
 
         // input tri is s10.2
-        constexpr auto getTexCoords(const Util::RenderTriangle& tri, bool enablePerspectiveCorrection) const -> Util::RenderTriangle {
+        constexpr auto getTexCoords(const Util::RenderTriangle& tri) const -> Util::RenderTriangle {
             const auto s = Util::SFixedPoint<16, 16>(sI, sF);
             const auto t = Util::SFixedPoint<16, 16>(tI, tF);
             const auto w = Util::SFixedPoint<16, 16>(wI, wF);
@@ -346,15 +349,9 @@ struct FillTriangle {
                 const auto dwX = dwdx * dx;
                 const auto dwY = dwdy * dy;
 
-                auto sNorm = Util::SFixedPoint<32, 32>(s);
-                auto tNorm = Util::SFixedPoint<32, 32>(t);
-                if (enablePerspectiveCorrection) {
-                    sNorm = Util::SFixedPoint<32, 32>(static_cast<float>(s) / static_cast<float>(w));
-                    tNorm = Util::SFixedPoint<32, 32>(static_cast<float>(t) / static_cast<float>(w));
-                }
-                const auto sOut = sNorm + dsX + dsY;
-                const auto tOut = tNorm + dtX + dtY;
-                const auto wOut =  Util::SFixedPoint<32, 32>::fromValue(1) + dwX + dwY;
+                const auto sOut = Util::SFixedPoint<32, 32>(s) + dsX + dsY;
+                const auto tOut = Util::SFixedPoint<32, 32>(t) + dtX + dtY;
+                const auto wOut = Util::SFixedPoint<32, 32>(w) + dwX + dwY;
                 return Util::Point{sOut, tOut, wOut};
             };
             auto s0 = st(tri.v0().x, tri.v0().y);
@@ -374,6 +371,29 @@ struct FillTriangle {
         uint64_t dzdxI : 16;
         uint64_t zF    : 16;
         uint64_t zI    : 16;
+
+        constexpr auto setDepth(Util::RenderTriangle& tri) const {
+            const auto z    = Util::SFixedPoint<16, 16>(zI, zF);
+            const auto dzdx = Util::SFixedPoint<16, 16>(dzdxI, dzdxF);
+            const auto dzdy = Util::SFixedPoint<16, 16>(dzdyI, dzdyF);
+
+            const auto zFor = [&, this](Util::SFixedPoint<16, 16> x, Util::SFixedPoint<12, 16> y) -> Util::SFixedPoint<16, 16> {
+                const auto x0 = tri.v0().x;
+                const auto y0 = tri.v0().y;
+
+                const auto dx = x - x0;
+                const auto dy = y - y0.floor();
+
+                const auto dzX = dzdx * dx;
+                const auto dzY = dzdy * dy;
+
+                const auto zOut = z + dzX + dzY;
+                return zOut;
+            };
+            tri.data()[2] = zFor(tri.v0().x, tri.v0().y);
+            tri.data()[5] = zFor(tri.v1().x, tri.v1().y);
+            tri.data()[8] = zFor(tri.v2().x, tri.v2().y);
+        }
     };
 };
 

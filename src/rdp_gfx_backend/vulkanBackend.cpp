@@ -213,6 +213,9 @@ auto VulkanBackend::destroy() -> void {
         vkDestroyImageView(m_vkDevice, m_renderTargets[i].m_imageView, nullptr);
         vkDestroyImage(m_vkDevice, m_renderTargets[i].m_image, nullptr);
         vkFreeMemory(m_vkDevice, m_renderTargets[i].m_mem, nullptr);
+        vkDestroyImageView(m_vkDevice, m_renderTargets[i].m_depthImageView, nullptr);
+        vkDestroyImage(m_vkDevice, m_renderTargets[i].m_depthImage, nullptr);
+        vkFreeMemory(m_vkDevice, m_renderTargets[i].m_depthMem, nullptr);
         m_renderTargets[i] = {};
     }
     m_vertexBufferSize = 0;
@@ -332,6 +335,59 @@ auto VulkanBackend::createRenderTargets() -> void {
             },
         };
         vkCreateImageView(m_vkDevice, &viewInfo, nullptr, &m_renderTargets[i].m_imageView);
+
+        const auto depthInfo = VkImageCreateInfo{
+            .sType                 = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+            .pNext                 = nullptr,
+            .flags                 = 0,
+            .imageType             = VK_IMAGE_TYPE_2D,
+            .format                = VK_FORMAT_D32_SFLOAT,
+            .extent                = VkExtent3D{.width = m_extent.width, .height = m_extent.height, .depth = 1},
+            .mipLevels             = 1,
+            .arrayLayers           = 1,
+            .samples               = VK_SAMPLE_COUNT_1_BIT,
+            .tiling                = VK_IMAGE_TILING_OPTIMAL,
+            .usage                 = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+            .sharingMode           = VK_SHARING_MODE_EXCLUSIVE,
+            .queueFamilyIndexCount = 0,
+            .pQueueFamilyIndices   = nullptr,
+            .initialLayout         = VK_IMAGE_LAYOUT_UNDEFINED,
+        };
+        vkCreateImage(m_vkDevice, &depthInfo, nullptr, &m_renderTargets[i].m_depthImage);
+
+        VkMemoryRequirements depthMemReq;
+        vkGetImageMemoryRequirements(m_vkDevice, m_renderTargets[i].m_depthImage, &depthMemReq);
+        const auto depthAllocInfo = VkMemoryAllocateInfo{
+            .sType           = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+            .pNext           = nullptr,
+            .allocationSize  = depthMemReq.size,
+            .memoryTypeIndex = findMemoryType(depthMemReq.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT),
+        };
+        vkAllocateMemory(m_vkDevice, &depthAllocInfo, nullptr, &m_renderTargets[i].m_depthMem);
+        vkBindImageMemory(m_vkDevice, m_renderTargets[i].m_depthImage, m_renderTargets[i].m_depthMem, 0);
+
+        const auto depthViewInfo = VkImageViewCreateInfo{
+            .sType      = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+            .pNext      = nullptr,
+            .flags      = 0,
+            .image      = m_renderTargets[i].m_depthImage,
+            .viewType   = VK_IMAGE_VIEW_TYPE_2D,
+            .format     = VK_FORMAT_D32_SFLOAT,
+            .components = VkComponentMapping{
+                .r = VK_COMPONENT_SWIZZLE_IDENTITY,
+                .g = VK_COMPONENT_SWIZZLE_IDENTITY,
+                .b = VK_COMPONENT_SWIZZLE_IDENTITY,
+                .a = VK_COMPONENT_SWIZZLE_IDENTITY,
+            },
+            .subresourceRange = VkImageSubresourceRange{
+                .aspectMask     = VK_IMAGE_ASPECT_DEPTH_BIT,
+                .baseMipLevel   = 0,
+                .levelCount     = 1,
+                .baseArrayLayer = 0,
+                .layerCount     = 1,
+            },
+        };
+        vkCreateImageView(m_vkDevice, &depthViewInfo, nullptr, &m_renderTargets[i].m_depthImageView);
     }
 }
 
@@ -507,9 +563,9 @@ auto VulkanBackend::createFallbackTexture() -> void {
         .magFilter               = VK_FILTER_NEAREST,
         .minFilter               = VK_FILTER_NEAREST,
         .mipmapMode              = VK_SAMPLER_MIPMAP_MODE_NEAREST,
-        .addressModeU            = VK_SAMPLER_ADDRESS_MODE_REPEAT,
-        .addressModeV            = VK_SAMPLER_ADDRESS_MODE_REPEAT,
-        .addressModeW            = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+        .addressModeU            = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+        .addressModeV            = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+        .addressModeW            = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
         .mipLodBias              = 0.0f,
         .anisotropyEnable        = VK_FALSE,
         .maxAnisotropy           = 1.0f,
@@ -902,7 +958,7 @@ auto VulkanBackend::createPipeline() -> void {
         .viewMask                = 0,
         .colorAttachmentCount    = 1,
         .pColorAttachmentFormats = &colourFormat,
-        .depthAttachmentFormat   = VK_FORMAT_UNDEFINED,
+        .depthAttachmentFormat   = VK_FORMAT_D32_SFLOAT,
         .stencilAttachmentFormat = VK_FORMAT_UNDEFINED,
     };
 
@@ -918,14 +974,30 @@ auto VulkanBackend::createPipeline() -> void {
         .pViewportState      = &viewportState,
         .pRasterizationState = &rasterization,
         .pMultisampleState   = &multisampling,
-        .pDepthStencilState  = nullptr,
-        .pColorBlendState    = &blendState,
-        .pDynamicState       = nullptr,
-        .layout              = m_pipelineLayout,
-        .renderPass          = VK_NULL_HANDLE,
-        .subpass             = 0,
-        .basePipelineHandle  = VK_NULL_HANDLE,
-        .basePipelineIndex   = -1,
+        .pDepthStencilState  = [] {
+            static const auto state = VkPipelineDepthStencilStateCreateInfo{
+                 .sType                 = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
+                 .pNext                 = nullptr,
+                 .flags                 = 0,
+                 .depthTestEnable       = VK_TRUE,
+                 .depthWriteEnable      = VK_TRUE,
+                 .depthCompareOp        = VK_COMPARE_OP_LESS_OR_EQUAL,
+                 .depthBoundsTestEnable = VK_FALSE,
+                 .stencilTestEnable     = VK_FALSE,
+                 .front                 = {},
+                 .back                  = {},
+                 .minDepthBounds        = 0.0f,
+                 .maxDepthBounds        = 1.0f,
+            };
+            return &state;
+        }(),
+        .pColorBlendState   = &blendState,
+        .pDynamicState      = nullptr,
+        .layout             = m_pipelineLayout,
+        .renderPass         = VK_NULL_HANDLE,
+        .subpass            = 0,
+        .basePipelineHandle = VK_NULL_HANDLE,
+        .basePipelineIndex  = -1,
     };
 
     vkCreateGraphicsPipelines(m_vkDevice, VK_NULL_HANDLE, 1, &pipelineCreateInfo, nullptr, &m_pipeline);
@@ -989,6 +1061,39 @@ auto VulkanBackend::startRenderPass() -> void {
     };
     vkCmdPipelineBarrier2(m_commandBuffer, &preDepInfo);
 
+    const auto depthBarrier = VkImageMemoryBarrier2{
+        .sType               = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+        .pNext               = nullptr,
+        .srcStageMask        = m_currentRenderPass.active ? VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT : VK_PIPELINE_STAGE_2_NONE,
+        .srcAccessMask       = m_currentRenderPass.active ? VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT : VK_ACCESS_2_NONE,
+        .dstStageMask        = VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT,
+        .dstAccessMask       = VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+        .oldLayout           = m_currentRenderPass.active ? VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL : VK_IMAGE_LAYOUT_UNDEFINED,
+        .newLayout           = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
+        .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        .image               = m_renderTargets[m_renderTargetWriteIndex].m_depthImage,
+        .subresourceRange    = VkImageSubresourceRange{
+               .aspectMask     = VK_IMAGE_ASPECT_DEPTH_BIT,
+               .baseMipLevel   = 0,
+               .levelCount     = 1,
+               .baseArrayLayer = 0,
+               .layerCount     = 1,
+        },
+    };
+    const auto depthDepInfo = VkDependencyInfo{
+        .sType                    = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+        .pNext                    = nullptr,
+        .dependencyFlags          = 0,
+        .memoryBarrierCount       = 0,
+        .pMemoryBarriers          = nullptr,
+        .bufferMemoryBarrierCount = 0,
+        .pBufferMemoryBarriers    = nullptr,
+        .imageMemoryBarrierCount  = 1,
+        .pImageMemoryBarriers     = &depthBarrier,
+    };
+    vkCmdPipelineBarrier2(m_commandBuffer, &depthDepInfo);
+
     const auto colourAttachment = VkRenderingAttachmentInfo{
         .sType              = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
         .pNext              = nullptr,
@@ -1000,6 +1105,18 @@ auto VulkanBackend::startRenderPass() -> void {
         .loadOp             = m_currentRenderPass.active ? VK_ATTACHMENT_LOAD_OP_LOAD : VK_ATTACHMENT_LOAD_OP_CLEAR,
         .storeOp            = VK_ATTACHMENT_STORE_OP_STORE,
         .clearValue         = VkClearValue{.color = {{0.0f, 0.0f, 0.0f, 1.0f}}},
+    };
+    const auto depthAttachment = VkRenderingAttachmentInfo{
+        .sType              = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
+        .pNext              = nullptr,
+        .imageView          = m_renderTargets[m_renderTargetWriteIndex].m_depthImageView,
+        .imageLayout        = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
+        .resolveMode        = VK_RESOLVE_MODE_NONE,
+        .resolveImageView   = VK_NULL_HANDLE,
+        .resolveImageLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+        .loadOp             = m_currentRenderPass.active ? VK_ATTACHMENT_LOAD_OP_LOAD : VK_ATTACHMENT_LOAD_OP_CLEAR,
+        .storeOp            = VK_ATTACHMENT_STORE_OP_STORE,
+        .clearValue         = VkClearValue{.depthStencil = {.depth = 1.0f, .stencil = 0}},
     };
 
     const auto vkRenderingInfo = VkRenderingInfo{
@@ -1014,7 +1131,7 @@ auto VulkanBackend::startRenderPass() -> void {
         .viewMask             = 0,
         .colorAttachmentCount = 1,
         .pColorAttachments    = &colourAttachment,
-        .pDepthAttachment     = nullptr,
+        .pDepthAttachment     = &depthAttachment,
         .pStencilAttachment   = nullptr,
     };
 

@@ -23,7 +23,7 @@ layout(push_constant) uniform RdpRenderPassConstants {
 };
 
 layout(location = 0) in flat ivec3 in_shade;     
-layout(location = 1) in vec2 in_texCoords; 
+layout(location = 1) in vec3 in_texCoords; 
 layout(location = 2) in flat int in_tile; 
 
 layout(set = 0, binding = 0) uniform sampler2D tileTexture0;
@@ -54,15 +54,16 @@ layout(set = 0, binding = 8, scalar) uniform TileParams {
 } tileParams;
 
 vec4 sampleTile(int tile, vec2 coordinates) {
+    const float explicitLod = 0.0;
     switch (tile) {
-        case 0: return texture(tileTexture0, coordinates.xy);
-        case 1: return texture(tileTexture1, coordinates.xy);
-        case 2: return texture(tileTexture2, coordinates.xy);
-        case 3: return texture(tileTexture3, coordinates.xy);
-        case 4: return texture(tileTexture4, coordinates.xy);
-        case 5: return texture(tileTexture5, coordinates.xy);
-        case 6: return texture(tileTexture6, coordinates.xy);
-        case 7: return texture(tileTexture7, coordinates.xy);
+        case 0: return textureLod(tileTexture0, coordinates.xy, explicitLod);
+        case 1: return textureLod(tileTexture1, coordinates.xy, explicitLod);
+        case 2: return textureLod(tileTexture2, coordinates.xy, explicitLod);
+        case 3: return textureLod(tileTexture3, coordinates.xy, explicitLod);
+        case 4: return textureLod(tileTexture4, coordinates.xy, explicitLod);
+        case 5: return textureLod(tileTexture5, coordinates.xy, explicitLod);
+        case 6: return textureLod(tileTexture6, coordinates.xy, explicitLod);
+        case 7: return textureLod(tileTexture7, coordinates.xy, explicitLod);
         default: return vec4(1.0);
     }
 }
@@ -70,7 +71,27 @@ vec4 sampleTile(int tile, vec2 coordinates) {
 layout(location = 0) out vec4 out_colour;
 
 void main() {
-    vec4 textureColor = sampleTile(in_tile, in_texCoords);
+    float fixedPointScale = 65536.0;
+
+    ShaderTileInfo tileInfo = tileParams.tiles[in_tile];
+
+    // RDP takes the s16.16 input and reinterprets it as s10.5.
+    // i.e. real value is 2^11 times bigger than represented in bits.
+    // The RSP microcode prescales the texel coords by 0.5 so the final correction factor we need is 1024.
+    float texelCorrection = 1024.0;
+
+    // apply perspective correction and turn back to fixed-point
+    ivec3 fxpPerspTexCoords = ivec3((in_texCoords / in_texCoords.z) * texelCorrection * fixedPointScale);
+    // then do shift and mask
+    ivec2 shifts = ivec2(int(tileInfo.sShift), int(tileInfo.tShift));
+    ivec2 shiftedTexCoords = ivec2(
+        shifts.x >= 0 ? fxpPerspTexCoords.x << uint(shifts.x) : fxpPerspTexCoords.x >> uint(-shifts.x),
+        shifts.y >= 0 ? fxpPerspTexCoords.y << uint(shifts.y) : fxpPerspTexCoords.y >> uint(-shifts.y));
+    ivec2 maskedTexCoords = shiftedTexCoords & ivec2(tileInfo.sMask, tileInfo.tMask);
+    // convert back to float
+    vec2 scaledTexCoords = vec2(maskedTexCoords.xy) / fixedPointScale;
+
+    vec4 textureColor = sampleTile(in_tile, scaledTexCoords);
 
     out_colour = vec4(textureColor);
 

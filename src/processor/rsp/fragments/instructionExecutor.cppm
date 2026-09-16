@@ -295,7 +295,8 @@ auto InstructionExecutor::executeMultiply(uint32_t inst) -> void {
                 if (out < 0) {
                     out = 0;
                 }
-            } else if constexpr (AccumOut == Param::ACCUM_HI_32) {
+            }
+            if constexpr (AccumOut == Param::ACCUM_HI_32) {
                 out >>= 16;
             }
             out &= 0xFFFF;
