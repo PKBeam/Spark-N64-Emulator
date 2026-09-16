@@ -135,6 +135,14 @@ struct Triangle {
             vertices[i] = static_cast<T>(other.vertices[i]);
         }
     }
+    constexpr auto setZValues(T z1, T z2, T z3) -> void {
+        vertices[2] = z1;
+        vertices[5] = z2;
+        vertices[8] = z3;
+    }
+    constexpr auto setZValues(T z) -> void {
+        setZValues(z, z, z);
+    }
     constexpr auto v0() const -> Point<T> {
         return Point<T>(vertices[0], vertices[1], vertices[2]);
     }

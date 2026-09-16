@@ -363,14 +363,14 @@ struct FillTriangle {
     };
 
     struct Depth {
-        uint64_t dzdyF : 16;
-        uint64_t dzdyI : 16;
-        uint64_t dzdeF : 16;
-        uint64_t dzdeI : 16;
         uint64_t dzdxF : 16;
         uint64_t dzdxI : 16;
         uint64_t zF    : 16;
         uint64_t zI    : 16;
+        uint64_t dzdyF : 16;
+        uint64_t dzdyI : 16;
+        uint64_t dzdeF : 16;
+        uint64_t dzdeI : 16;
 
         constexpr auto setDepth(Util::RenderTriangle& tri) const {
             const auto z    = Util::SFixedPoint<16, 16>(zI, zF);
@@ -390,9 +390,10 @@ struct FillTriangle {
                 const auto zOut = z + dzX + dzY;
                 return zOut;
             };
-            tri.data()[2] = zFor(tri.v0().x, tri.v0().y);
-            tri.data()[5] = zFor(tri.v1().x, tri.v1().y);
-            tri.data()[8] = zFor(tri.v2().x, tri.v2().y);
+            tri.setZValues(
+                zFor(tri.v0().x, tri.v0().y),
+                zFor(tri.v1().x, tri.v1().y),
+                zFor(tri.v2().x, tri.v2().y));
         }
     };
 };

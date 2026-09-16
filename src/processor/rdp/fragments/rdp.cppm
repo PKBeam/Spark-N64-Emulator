@@ -241,10 +241,8 @@ auto RDP::runRdpCommand() -> void {
                 if (cmdHeader.texture) {
                     const auto textureCmd = makeCommand<Commands::FillTriangle::Texture, 8>(cmds);
                     texCoords             = textureCmd.getTexCoords(tri);
-                    if (!m_mode.perspTexEn) { // no correction - set w to 1
-                        texCoords.data()[2] = TexelW_NoPerspectiveDivide;
-                        texCoords.data()[5] = TexelW_NoPerspectiveDivide;
-                        texCoords.data()[8] = TexelW_NoPerspectiveDivide;
+                    if (!m_mode.perspTexEn) {
+                        texCoords.setZValues(TexelW_NoPerspectiveDivide);
                     }
                 }
                 if (cmdHeader.zbuffer) {
@@ -284,9 +282,7 @@ auto RDP::runRdpCommand() -> void {
                 auto [coords, uvs] = cmd.getTriangles();
                 if (!m_mode.perspTexEn) { // no correction - set w to 1
                     for (auto& uv : uvs) {
-                        uv.data()[2] = TexelW_NoPerspectiveDivide;
-                        uv.data()[5] = TexelW_NoPerspectiveDivide;
-                        uv.data()[8] = TexelW_NoPerspectiveDivide;
+                        uv.setZValues(TexelW_NoPerspectiveDivide);
                     }
                 }
                 m_tileUsedThisDraw.set(cmd.tile);
