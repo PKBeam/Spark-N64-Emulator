@@ -35,6 +35,19 @@ export class Memory {
         std::memcpy(m_memory + dst, m_memory + src, sizeof(T));
     }
 
+    auto memcpy(PhysicalAddr dst, PhysicalAddr src, std::size_t size) const -> void {
+        IF_LOG_ENABLED(m_logger) {
+            m_logger->log<Level::HIGH, Sys::PHYS_MEM>(
+                std::tuple{"op", "rw"},
+                std::tuple{"src", HEXFMT32, src},
+                std::tuple{"dst", HEXFMT32, dst},
+                std::tuple{"size", HEXFMT32, size});
+        }
+        for (const auto offset : std::views::iota(0uz, size)) { // workaround: gcc ICE's with a memcpy
+            m_memory[dst + offset] = m_memory[src + offset];
+        }
+    }
+
   private:
     std::shared_ptr<Util::Logger> m_logger;
     std::byte*                    m_memory{};

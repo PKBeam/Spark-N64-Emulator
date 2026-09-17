@@ -67,17 +67,23 @@ struct Tile {
         }
     };
     TileFormat           format;
-    uint16_t             lineLength;
-    uint16_t             tmemAddress;
+    std::size_t          lineSize;
+    std::size_t          tmemAddress;
     Extent               extent;
     ::RDP::SamplerParams s;
     ::RDP::SamplerParams t;
+
+    // RDP stores RGBA32 as split RG16 and BA16. This is a hack to correct the line size.
+    // TODO: need long term solution - games may expect TMEM to be laid out as rgrgbaba?
+    constexpr auto correctedLineSize() const -> std::size_t {
+        return (format.size.bitsPerPixel() == 32 ? 2 : 1) * lineSize;
+    }
 
     constexpr auto params() const -> ::RDP::TileParams {
         return {
             .width  = static_cast<uint32_t>(extent.width()),
             .height = static_cast<uint32_t>(extent.height()),
-            .stride = static_cast<uint32_t>(lineLength * sizeof(uint64_t)),
+            .stride = static_cast<uint32_t>(correctedLineSize()),
             .format = textureFormat(),
             .s      = s,
             .t      = t,
@@ -335,7 +341,7 @@ struct FillTriangle {
             const auto dwdx = Util::SFixedPoint<16, 16>(dwDxI, dwDxF);
             const auto dwdy = Util::SFixedPoint<16, 16>(dwDyI, dwDyF);
 
-            const auto st = [&, this](Util::SFixedPoint<16, 16> x, Util::SFixedPoint<12, 16> y) -> Util::Point<Util::SFixedPoint<16, 16>> {
+            const auto st = [&, this](Util::SFixedPoint<16, 16> x, Util::SFixedPoint<16, 16> y) -> Util::Point<Util::SFixedPoint<16, 16>> {
                 const auto x0 = tri.v0().x;
                 const auto y0 = tri.v0().y;
 
@@ -377,7 +383,7 @@ struct FillTriangle {
             const auto dzdx = Util::SFixedPoint<16, 16>(dzdxI, dzdxF);
             const auto dzdy = Util::SFixedPoint<16, 16>(dzdyI, dzdyF);
 
-            const auto zFor = [&, this](Util::SFixedPoint<16, 16> x, Util::SFixedPoint<12, 16> y) -> Util::SFixedPoint<16, 16> {
+            const auto zFor = [&, this](Util::SFixedPoint<16, 16> x, Util::SFixedPoint<16, 16> y) -> Util::SFixedPoint<16, 16> {
                 const auto x0 = tri.v0().x;
                 const auto y0 = tri.v0().y;
 
@@ -390,10 +396,10 @@ struct FillTriangle {
                 const auto zOut = z + dzX + dzY;
                 return zOut;
             };
-            tri.setZValues(
-                zFor(tri.v0().x, tri.v0().y),
-                zFor(tri.v1().x, tri.v1().y),
-                zFor(tri.v2().x, tri.v2().y));
+            const auto z0 = zFor(tri.v0().x, tri.v0().y);
+            const auto z1 = zFor(tri.v1().x, tri.v1().y);
+            const auto z2 = zFor(tri.v2().x, tri.v2().y);
+            tri.setZValues(z0, z1, z2);
         }
     };
 };
@@ -575,6 +581,14 @@ struct SetOtherModes {
 };
 
 struct LoadTLUT {
+    uint64_t lowerRightT : 12;
+    uint64_t lowerRightS : 12;
+    uint64_t tile        : 3;
+    uint64_t             : 5;
+    uint64_t upperLeftT  : 12;
+    uint64_t upperLeftS  : 12;
+    uint64_t command     : 6;
+    uint64_t             : 2;
 };
 
 struct SetTileSize {

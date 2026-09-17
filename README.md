@@ -11,6 +11,7 @@ Able to boot into Ocarina of Time and render basic triangles with Vulkan.
 
 ![Ocarina of Time - Spinning N64 logo](./data/image1.png)
 ![Ocarina of Time - Title Screen cutscene](./data/image2.png)
+![Ocarina of Time - Title Screen logo](./data/image3.png)
 
 ## Building
 

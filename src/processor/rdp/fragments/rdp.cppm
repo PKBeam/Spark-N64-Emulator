@@ -7,7 +7,7 @@ import std;
 import Interfaces;
 import InterfaceTypes;
 import ISA;
-import Memory;
+import MemoryTypes;
 import RdpControl;
 import Util;
 
@@ -47,12 +47,12 @@ class RDP {
     RDP(std::shared_ptr<Util::Logger> logger,
         ::RDP::Control*               rdpControl,
         Interfaces::MipsInterface*    mipsInterface,
-        Memory::MemoryBus*            memoryBus,
+        Memory::Memory*               memory,
         GfxBackend*                   gfxBackend)
         : m_logger(logger),
           m_rdpControl(rdpControl),
           m_mipsInterface(mipsInterface),
-          m_memoryBus(memoryBus),
+          m_memory(memory),
           m_gfxBackend(gfxBackend),
           m_textureMemory(reinterpret_cast<std::byte*>(std::malloc(TMEM_SIZE))) {};
 
@@ -82,7 +82,7 @@ class RDP {
     std::shared_ptr<Util::Logger> m_logger;
     ::RDP::Control*               m_rdpControl{};
     Interfaces::MipsInterface*    m_mipsInterface{};
-    Memory::MemoryBus*            m_memoryBus{};
+    Memory::Memory*               m_memory{};
     GfxBackend*                   m_gfxBackend{};
     std::byte*                    m_textureMemory{};
 
@@ -197,6 +197,9 @@ auto RDP::runRdpCommand() -> void {
                 std::tuple{"command", "{}", cmdType});
         }
         switch (cmdType) {
+            // No-ops
+            case Command::SYNC_LOAD: [[fallthrough]];
+            case Command::SYNC_TILE: [[fallthrough]];
             case Command::SYNC_PIPE: {
                 flushBackend();
                 cmds.pop_front();
@@ -212,8 +215,7 @@ auto RDP::runRdpCommand() -> void {
                     m_syncCallback();
                 }
                 if (static_cast<int>(m_syncs) == m_terminateAfterSyncs) {
-                    std::println("Reached {} syncs, terminating", m_syncs);
-                    std::terminate();
+                    throw Util::Error("Reached termination condition after {} syncs", m_syncs);
                 }
                 IF_LOG_ENABLED(m_logger) {
                     m_logger->log<Level::HIGH, Sev::INFO, Sys::RDP>("SYNC_FULL at sync {}", m_syncs);
@@ -368,33 +370,32 @@ auto RDP::runRdpCommand() -> void {
             case Command::SET_TILE: {
                 const auto cmd = makeCommand<Commands::SetTile, 1>(cmds);
 
-                const auto tmemAddr = cmd.address * 8;
-                m_tiles[cmd.index]  = Tile{
-                     .format      = {cmd.format, cmd.size},
-                     .lineLength  = cmd.line,
-                     .tmemAddress = static_cast<uint16_t>(tmemAddr),
-                     .extent      = {Util::Fxp_0, Util::Fxp_0, Util::Fxp_0, Util::Fxp_0},
-                     .s =
-                         {
-                             .shift  = static_cast<int8_t>(cmd.shiftS > 10 ? 16 - cmd.shiftS : -static_cast<int>(cmd.shiftS)),
-                             .mirror = static_cast<uint8_t>(cmd.mirrorS),
-                             .clamp  = static_cast<uint8_t>(cmd.clampS),
-                             .mask   = ((cmd.maskS == 0 ? 0xFFFF : ((1u << cmd.maskS) - 1)) << 16) | 0xFFFF,
+                m_tiles[cmd.index] = Tile{
+                    .format      = {cmd.format, cmd.size},
+                    .lineSize    = cmd.line * sizeof(uint64_t),
+                    .tmemAddress = cmd.address * sizeof(uint64_t),
+                    .extent      = {Util::Fxp_0, Util::Fxp_0, Util::Fxp_0, Util::Fxp_0},
+                    .s =
+                        {
+                            .shift  = static_cast<int8_t>(cmd.shiftS > 10 ? 16 - cmd.shiftS : -static_cast<int>(cmd.shiftS)),
+                            .mirror = static_cast<uint8_t>(cmd.mirrorS),
+                            .clamp  = static_cast<uint8_t>(cmd.clampS),
+                            .mask   = ((cmd.maskS == 0 ? 0xFFFF : ((1u << cmd.maskS) - 1)) << 16) | 0xFFFF,
                         },
-                     .t =
-                         {
-                             .shift  = static_cast<int8_t>(cmd.shiftT > 10 ? 16 - cmd.shiftT : -static_cast<int>(cmd.shiftT)),
-                             .mirror = static_cast<uint8_t>(cmd.mirrorT),
-                             .clamp  = static_cast<uint8_t>(cmd.clampT),
-                             .mask   = ((cmd.maskT == 0 ? 0xFFFF : ((1u << cmd.maskT) - 1)) << 16) | 0xFFFF,
+                    .t =
+                        {
+                            .shift  = static_cast<int8_t>(cmd.shiftT > 10 ? 16 - cmd.shiftT : -static_cast<int>(cmd.shiftT)),
+                            .mirror = static_cast<uint8_t>(cmd.mirrorT),
+                            .clamp  = static_cast<uint8_t>(cmd.clampT),
+                            .mask   = ((cmd.maskT == 0 ? 0xFFFF : ((1u << cmd.maskT) - 1)) << 16) | 0xFFFF,
                         },
                 };
                 IF_LOG_ENABLED(m_logger) {
                     m_logger->log<Level::MED, Sys::RDP>(
                         std::tuple{"op", "setTile"},
                         std::tuple{"tile", "{}", cmd.index},
-                        std::tuple{"address", HEXFMT12, tmemAddr},
-                        std::tuple{"lineLength", HEXFMT12, cmd.line},
+                        std::tuple{"address", HEXFMT12, cmd.address * sizeof(uint64_t)},
+                        std::tuple{"lineSize", HEXFMT12, cmd.line * sizeof(uint64_t)},
                         std::tuple{"pixelFormat", "{}", m_tiles[cmd.index].format},
                         std::tuple{"data", HEXFMT64, std::bit_cast<uint64_t>(cmd)});
                 }
@@ -421,14 +422,15 @@ auto RDP::runRdpCommand() -> void {
                 const auto cmd = makeCommand<Commands::SetTextureImage, 1>(cmds);
                 m_textureImage = {
                     .pixelSize  = cmd.size,
-                    .imageWidth = cmd.width,
+                    .imageWidth = static_cast<uint16_t>(cmd.width + 1),
                     .rdramAddr  = cmd.dramAddress,
                 };
                 IF_LOG_ENABLED(m_logger) {
                     m_logger->log<Level::MED, Sys::RDP>(
                         std::tuple{"op", "setTextureImage"},
                         std::tuple{"addr", HEXFMT32, cmd.dramAddress},
-                        std::tuple{"pixelSize", "{}", cmd.size});
+                        std::tuple{"pixelSize", "{}", cmd.size},
+                        std::tuple{"imageWidth", "{}", cmd.width + 1});
                 }
                 break;
             }
@@ -454,7 +456,7 @@ auto RDP::runRdpCommand() -> void {
                 const auto loadSize = (lrS - ulS) * texelSize;
                 for (const auto word : std::views::iota(0uz, loadSize / 8)) {
                     const auto offset   = word * 8;
-                    const auto value    = Util::byteswapIfLittleEndian(m_memoryBus->readPhysical<uint64_t>(rdramBaseAddr + offset));
+                    const auto value    = Util::byteswapIfLittleEndian(m_memory->read<uint64_t>(rdramBaseAddr + offset));
                     const auto tmemAddr = (tmemBaseAddr + offset) & 0xFFF;
                     std::memcpy(m_textureMemory + tmemAddr, &value, sizeof(value));
                     IF_LOG_ENABLED(m_logger) {
@@ -480,38 +482,81 @@ auto RDP::runRdpCommand() -> void {
                 const auto width  = lrS - ulS;
                 const auto height = lrT - ulT;
 
-                const auto tmemBaseAddr  = m_tiles[cmd.tile].tmemAddress;
-                const auto texelSize     = m_textureImage.pixelSize.bytesPerPixel();
+                const auto tmemBaseAddr = m_tiles[cmd.tile].tmemAddress;
+
+                const auto texelSizeBits = m_textureImage.pixelSize.bitsPerPixel();
                 const auto texelOffset   = ulT * m_textureImage.imageWidth + ulS;
-                const auto rdramBaseAddr = m_textureImage.rdramAddr + texelOffset * texelSize;
+                const auto rdramBaseAddr = m_textureImage.rdramAddr + ((texelOffset * texelSizeBits) / 8);
+
+                const auto tmemLineSize = m_tiles[cmd.tile].correctedLineSize();
 
                 IF_LOG_ENABLED(m_logger) {
                     m_logger->log<Level::MED, Sys::RDP>(
                         std::tuple{"op", "loadTile"},
                         std::tuple{"tile", "{}", cmd.tile},
                         std::tuple{"rdramAddr", HEXFMT32, rdramBaseAddr},
-                        std::tuple{"coords", "(" HEXFMT12 ", " HEXFMT12 "), (" HEXFMT12 ", " HEXFMT12 ")", ulS, ulT, lrS, lrT});
+                        std::tuple{"coords", "({}, {}), ({}, {})", ulS & 0xFFF, ulT & 0xFFF, lrS & 0xFFF, lrT & 0xFFF});
                 }
 
+                const auto rdramRowWidth = m_textureImage.imageWidth * texelSizeBits / 8;
+                const auto copySize      = (width * texelSizeBits + 7) / 8;
                 for (const auto row : std::views::iota(0, height)) {
-                    for (const auto word : std::views::iota(0u, m_tiles[cmd.tile].lineLength)) {
-                        auto       offset   = row * word * sizeof(uint64_t);
-                        const auto value    = Util::byteswapIfLittleEndian(m_memoryBus->readPhysical<uint64_t>(rdramBaseAddr + offset));
-                        const auto tmemAddr = (tmemBaseAddr + offset) & 0xFFF;
-                        std::memcpy(m_textureMemory + tmemAddr, &value, sizeof(value));
+                    const auto tmemAddr  = tmemBaseAddr + (row * tmemLineSize);
+                    const auto rdramAddr = rdramBaseAddr + (row * rdramRowWidth);
+                    for (const auto byte : std::views::iota(0uz, copySize)) {
+                        const auto value = std::bit_cast<std::byte>(m_memory->read<uint8_t>(rdramAddr + byte));
                         IF_LOG_ENABLED(m_logger) {
                             m_logger->log<Level::LOW, Sys::RDP>(
                                 std::tuple{"op", "w"},
-                                std::tuple{"addr", HEXFMT12, tmemAddr},
-                                std::tuple{"value", HEXFMT64, value});
+                                std::tuple{"addr", HEXFMT12, tmemAddr + byte},
+                                std::tuple{"value", HEXFMT8, std::bit_cast<uint8_t>(value)});
                         }
-                        offset += sizeof(uint64_t);
+                        m_textureMemory[(tmemAddr + byte) & 0xFFF] = value;
                     }
                 }
                 m_tiles[cmd.tile].extent = {Util::UFixedPoint<10, 2>::fromBits(ulS),
                                             Util::UFixedPoint<10, 2>::fromBits(ulT),
                                             Util::UFixedPoint<10, 2>::fromBits(lrS),
                                             Util::UFixedPoint<10, 2>::fromBits(lrT)};
+                break;
+            }
+            case Command::LOAD_TLUT: {
+                const auto     cmd       = makeCommand<Commands::LoadTLUT, 1>(cmds);
+                const auto     width     = cmd.lowerRightS + 1;
+                constexpr auto texelSize = 2uz; // TLUTs are always 16-bit
+
+                const auto tmemBaseAddr  = m_tiles[cmd.tile].tmemAddress;
+                const auto rdramBaseAddr = m_textureImage.rdramAddr;
+
+                IF_LOG_ENABLED(m_logger) {
+                    m_logger->log<Level::MED, Sys::RDP>(
+                        std::tuple{"op", "loadTLUT"},
+                        std::tuple{"tile", "{}", cmd.tile},
+                        std::tuple{"rdramAddr", HEXFMT32, rdramBaseAddr},
+                        std::tuple{"size", "{}", width});
+                }
+
+                for (const auto texelIndex : std::views::iota(0, width)) {
+                    const auto rdramOffset = texelIndex * texelSize;
+                    const auto tmemOffset  = 4 * rdramOffset;
+                    const auto tmemAddr    = (tmemBaseAddr + tmemOffset) & 0xFFF;
+                    const auto rdramAddr   = rdramBaseAddr + rdramOffset;
+
+                    const auto texel = Util::byteswapIfLittleEndian(m_memory->read<uint16_t>(rdramAddr));
+                    for (const auto i : std::views::iota(0, 4)) {
+                        std::memcpy(m_textureMemory + tmemAddr + i * texelSize, &texel, texelSize);
+                    }
+                    IF_LOG_ENABLED(m_logger) {
+                        m_logger->log<Level::LOW, Sys::RDP>(
+                            std::tuple{"op", "w"},
+                            std::tuple{"addr", HEXFMT12, tmemAddr},
+                            std::tuple{"value", HEXFMT16, texel});
+                    }
+                }
+                m_tiles[cmd.tile].extent = {Util::UFixedPoint<10, 2>::fromBits(cmd.upperLeftS),
+                                            Util::UFixedPoint<10, 2>::fromBits(cmd.upperLeftT),
+                                            Util::UFixedPoint<10, 2>::fromBits(cmd.lowerRightS),
+                                            Util::UFixedPoint<10, 2>::fromBits(cmd.lowerRightT)};
                 break;
             }
             // ignore for now
@@ -526,17 +571,11 @@ auto RDP::runRdpCommand() -> void {
                 break;
             }
             case Command::SET_COLOR_IMAGE: [[fallthrough]];
-            case Command::SET_DEPTH_IMAGE: [[fallthrough]];
-            case Command::LOAD_TLUT:
+            case Command::SET_DEPTH_IMAGE:
                 cmds.pop_front();
                 IF_LOG_ENABLED(m_logger) {
                     m_logger->log<Level::MED, Sev::WARNING, Sys::RDP>("Ignoring command {}", cmdType);
                 }
-                break;
-            // No-ops
-            case Command::SYNC_LOAD: [[fallthrough]];
-            case Command::SYNC_TILE:
-                cmds.pop_front();
                 break;
             default:
                 throw Util::Error("RDP unimplemented command {}", cmdType);

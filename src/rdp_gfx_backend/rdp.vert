@@ -38,7 +38,7 @@ void main() {
     float fixedPointScale = 65536.0;
     float depthScale = 32704.0;
     vec3 fpos = vec3(in_position) / vec3(fixedPointScale, fixedPointScale, fixedPointScale * depthScale);
-    gl_Position = vec4((fpos.x / 160) - 1, (fpos.y / 120) - 1, /*fpos.z*/ 0.0 , 1.0);
+    gl_Position = vec4((fpos.x / 160) - 1, (fpos.y / 120) - 1, fpos.z < 0.1 ? -1 : fpos.z, 1.0);
     out_shade = in_shade;
     out_texCoords = vec3(in_texCoords) / fixedPointScale;
     out_tile = in_tile;
