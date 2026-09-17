@@ -809,38 +809,38 @@ auto VulkanBackend::createPipeline() -> void {
 
     const auto bindingDescription = VkVertexInputBindingDescription{
         .binding   = 0,
-        .stride    = 10 * sizeof(int32_t),
+        .stride    = 11 * sizeof(int32_t),
         .inputRate = VK_VERTEX_INPUT_RATE_VERTEX,
     };
 
     const auto attributeDescriptions = std::array<VkVertexInputAttributeDescription, 4>{
-        // position
+        // tile
         VkVertexInputAttributeDescription{
             .location = 0,
             .binding  = 0,
-            .format   = VK_FORMAT_R32G32B32_SINT,
+            .format   = VK_FORMAT_R32_SINT,
             .offset   = 0,
         },
-        // color
+        // position
         VkVertexInputAttributeDescription{
             .location = 1,
             .binding  = 0,
             .format   = VK_FORMAT_R32G32B32_SINT,
-            .offset   = 3 * sizeof(int32_t),
+            .offset   = sizeof(uint32_t),
         },
         // UV texture coordinates
         VkVertexInputAttributeDescription{
             .location = 2,
             .binding  = 0,
             .format   = VK_FORMAT_R32G32B32_SINT,
-            .offset   = 6 * sizeof(int32_t),
+            .offset   = 4 * sizeof(int32_t),
         },
-        // tile
+        // color
         VkVertexInputAttributeDescription{
             .location = 3,
             .binding  = 0,
-            .format   = VK_FORMAT_R32_SINT,
-            .offset   = 9 * sizeof(int32_t),
+            .format   = VK_FORMAT_R32G32B32A32_SINT,
+            .offset   = 7 * sizeof(int32_t),
         },
     };
 
@@ -913,9 +913,9 @@ auto VulkanBackend::createPipeline() -> void {
     };
 
     const auto blendAttachment = VkPipelineColorBlendAttachmentState{
-        .blendEnable         = VK_FALSE,
-        .srcColorBlendFactor = VK_BLEND_FACTOR_ONE,
-        .dstColorBlendFactor = VK_BLEND_FACTOR_ZERO,
+        .blendEnable         = VK_TRUE,
+        .srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA,
+        .dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
         .colorBlendOp        = VK_BLEND_OP_ADD,
         .srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE,
         .dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO,
@@ -931,7 +931,7 @@ auto VulkanBackend::createPipeline() -> void {
         .logicOp         = VK_LOGIC_OP_COPY,
         .attachmentCount = 1,
         .pAttachments    = &blendAttachment,
-        .blendConstants  = {0.0f, 0.0f, 0.0f, 0.0f},
+        .blendConstants  = {1.0f, 1.0f, 1.0f, .0f},
     };
 
     const auto pushRange = VkPushConstantRange{
@@ -1741,19 +1741,21 @@ auto VulkanBackend::addTriangle(uint32_t         tile,
         m_currentRenderPass.vertexData.insert(
             m_currentRenderPass.vertexData.end(),
             {
+                static_cast<int32_t>(tile),
+
                 vtxs[i * 3],
                 vtxs[i * 3 + 1],
                 vtxs[i * 3 + 2],
-
-                shades ? shades[i * 3] : 0,
-                shades ? shades[i * 3 + 1] : 0,
-                shades ? shades[i * 3 + 2] : 0,
 
                 uvs ? uvs[i * 3] : 0,
                 uvs ? uvs[i * 3 + 1] : 0,
                 uvs ? uvs[i * 3 + 2] : 0,
 
-                static_cast<int32_t>(tile),
+                // RGBA
+                shades ? shades[i * 3] : 0,
+                shades ? shades[i * 3 + 1] : 0,
+                shades ? shades[i * 3 + 2] : 0,
+                shades ? shades[i * 3 + 3] : 0,
             });
     }
 }

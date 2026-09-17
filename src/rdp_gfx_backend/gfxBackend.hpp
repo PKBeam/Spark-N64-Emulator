@@ -37,22 +37,58 @@ struct TileParams {
 };
 
 struct CombineInputs {
-    struct Components {
-        int32_t a;
-        int32_t b;
-        int32_t c;
-        int32_t d;
+    enum class Source : uint8_t {
+        ZERO = 0,
+        ONE,
+        NOISE,
+
+        COMBINED,
+        COMBINED_ALPHA,
+
+        TEX0,
+        TEX0_ALPHA,
+
+        TEX1,
+        TEX1_ALPHA,
+
+        PRIMITIVE,
+        PRIMITIVE_ALPHA,
+
+        SHADE,
+        SHADE_ALPHA,
+
+        ENVIRONMENT,
+        ENVIRONMENT_ALPHA,
+
+        LOD_FRACTION,
+        PRIM_LOD_FRAC,
+
+        CENTER,
+        SCALE,
+        K4,
+        K5,
     };
-    struct UsePrevious { // semantically boolean; u32 used for Vulkan shaders
-        uint32_t a;
-        uint32_t b;
-        uint32_t c;
-        uint32_t d;
+    static_assert(static_cast<uint8_t>(Source::K5) == 20);
+
+    struct Uniform {
+        uint32_t primitive;
+        uint32_t environment;
+        uint32_t lodFraction;
+        uint32_t primLodFrac;
+        uint32_t scale;
+        uint32_t center;
+        uint32_t k4;
+        uint32_t k5;
     };
-    Components  rgba0;
-    Components  rgba1;
-    UsePrevious usePreviousRgb;
-    UsePrevious usePreviousAlpha;
+    struct Select {
+        Source a;
+        Source b;
+        Source c;
+        Source d;
+    };
+    Uniform uniform;
+    Select  rgb[2];
+    Select  alpha[2];
 };
 
 class GfxBackend {

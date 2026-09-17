@@ -4,27 +4,35 @@
 #extension GL_EXT_shader_explicit_arithmetic_types_int8 : require
 
 layout(push_constant) uniform RdpRenderPassConstants {
-    int  in_rgba0A; 
-    int  in_rgba0B; 
-    int  in_rgba0C; 
-    int  in_rgba0D; 
-    int  in_rgba1A; 
-    int  in_rgba1B; 
-    int  in_rgba1C; 
-    int  in_rgba1D; 
-    uint in_usePrevRgbA;
-    uint in_usePrevRgbB;
-    uint in_usePrevRgbC;
-    uint in_usePrevRgbD;
-    uint in_usePrevAlphaA;
-    uint in_usePrevAlphaB;
-    uint in_usePrevAlphaC;
-    uint in_usePrevAlphaD;
+    uint     in_primitive;
+    uint     in_environment;
+    uint     in_lodFraction;
+    uint     in_primLodFrac;
+    uint     in_scale;
+    uint     in_center;
+    uint     in_k4;
+    uint     in_k5;
+    uint8_t  in_rgb_0_a; 
+    uint8_t  in_rgb_0_b; 
+    uint8_t  in_rgb_0_c; 
+    uint8_t  in_rgb_0_d; 
+    uint8_t  in_rgb_1_a; 
+    uint8_t  in_rgb_1_b; 
+    uint8_t  in_rgb_1_c; 
+    uint8_t  in_rgb_1_d;
+    uint8_t  in_alpha_0_a; 
+    uint8_t  in_alpha_0_b; 
+    uint8_t  in_alpha_0_c; 
+    uint8_t  in_alpha_0_d; 
+    uint8_t  in_alpha_1_a; 
+    uint8_t  in_alpha_1_b; 
+    uint8_t  in_alpha_1_c; 
+    uint8_t  in_alpha_1_d;
 };
 
-layout(location = 0) in flat ivec3 in_shade;     
+layout(location = 0) in flat int in_tile; 
 layout(location = 1) in vec3 in_texCoords; 
-layout(location = 2) in flat int in_tile; 
+layout(location = 2) in vec4 in_shade;     
 
 layout(set = 0, binding = 0) uniform sampler2D tileTexture0;
 layout(set = 0, binding = 1) uniform sampler2D tileTexture1;
@@ -91,34 +99,47 @@ void main() {
     // convert back to float
     vec2 scaledTexCoords = vec2(maskedTexCoords.xy) / fixedPointScale;
 
-    vec4 textureColor = sampleTile(in_tile, scaledTexCoords);
+    vec4 textureColor0 = sampleTile(in_tile, scaledTexCoords);
+    vec4 textureColor1 = sampleTile((in_tile + 1) % 8, scaledTexCoords);
 
-    out_colour = vec4(textureColor);
+   // out_colour = vec4(textureColor0);
 
-    //vec4 rgba0A = unpackUnorm4x8(in_rgba0A).wzyx;
-    //vec4 rgba0B = unpackUnorm4x8(in_rgba0B).wzyx;
-    //vec4 rgba0C = unpackUnorm4x8(in_rgba0C).wzyx;
-    //vec4 rgba0D = unpackUnorm4x8(in_rgba0D).wzyx;
-    //vec4 rgba1A = unpackUnorm4x8(in_rgba1A).wzyx;
-    //vec4 rgba1B = unpackUnorm4x8(in_rgba1B).wzyx;
-    //vec4 rgba1C = unpackUnorm4x8(in_rgba1C).wzyx;
-    //vec4 rgba1D = unpackUnorm4x8(in_rgba1D).wzyx;
-//
-    //// RGB
-    //vec3 rgb0 = (rgba0A.xyz - rgba0B.xyz) * rgba0C.xyz + rgba0D.xyz;
-    //vec3 in_rgb1A = in_usePrevRgbA * rgb0 + (1 - in_usePrevRgbA) * rgba1A.xyz;
-    //vec3 in_rgb1B = in_usePrevRgbB * rgb0 + (1 - in_usePrevRgbB) * rgba1B.xyz;
-    //vec3 in_rgb1C = in_usePrevRgbC * rgb0 + (1 - in_usePrevRgbC) * rgba1C.xyz;
-    //vec3 in_rgb1D = in_usePrevRgbD * rgb0 + (1 - in_usePrevRgbD) * rgba1D.xyz;
-    //vec3 rgb1 = (in_rgb1A - in_rgb1B) * in_rgb1C + in_rgb1D;
-//
-    //// Alpha
-    //float alpha0 = (rgba0A.w - rgba0B.w) * rgba0C.w + rgba0D.w;
-    //float in_alpha1A = in_usePrevAlphaA * alpha0 + (1 - in_usePrevAlphaA) * rgba1A.w;
-    //float in_alpha1B = in_usePrevAlphaB * alpha0 + (1 - in_usePrevAlphaB) * rgba1B.w;
-    //float in_alpha1C = in_usePrevAlphaC * alpha0 + (1 - in_usePrevAlphaC) * rgba1C.w;
-    //float in_alpha1D = in_usePrevAlphaD * alpha0 + (1 - in_usePrevAlphaD) * rgba1D.w;
-    //float alpha1 = (in_alpha1A - in_alpha1B) * in_alpha1C + in_alpha1D;
-    //
-    //out_colour = vec4(rgb1, alpha1);
+    vec4 combineInputs[21];
+    combineInputs[0] = vec4(0);
+    combineInputs[1] = vec4(256);
+    combineInputs[2] = vec4(32);
+
+    combineInputs[3] = vec4(0); 
+    combineInputs[4] = vec4(combineInputs[3].w);
+    combineInputs[5] = textureColor0;
+    combineInputs[6] = vec4(combineInputs[5].w);
+    combineInputs[7] = textureColor1;
+    combineInputs[8] = vec4(combineInputs[7].w);
+    combineInputs[9] = unpackUnorm4x8(in_primitive);
+    combineInputs[10] = vec4(combineInputs[9].w);
+    combineInputs[11] = in_shade;
+    combineInputs[12] = vec4(combineInputs[11].w);
+    combineInputs[13] = unpackUnorm4x8(in_environment);
+    combineInputs[14] = vec4(combineInputs[13].w);
+
+    combineInputs[15] = unpackUnorm4x8(in_lodFraction);
+    combineInputs[16] = unpackUnorm4x8(in_primLodFrac);
+    
+    // TODO chroma key
+    combineInputs[17] = vec4(1);
+    combineInputs[18] = vec4(1);
+    combineInputs[19] = vec4(1);
+    combineInputs[20] = vec4(1);
+
+    vec3 rgb0 = (combineInputs[in_rgb_0_a].xyz - combineInputs[in_rgb_0_b].xyz) * combineInputs[in_rgb_0_c].xyz + combineInputs[in_rgb_0_d].xyz;
+    float alpha0 = (combineInputs[in_alpha_0_a].w - combineInputs[in_alpha_0_b].w) * combineInputs[in_alpha_0_c].w + combineInputs[in_alpha_0_d].w;
+
+    // update combined
+    combineInputs[3] = vec4(rgb0, alpha0);
+    combineInputs[9]  = vec4(combineInputs[3].w);
+
+    vec3 rgb1 = (combineInputs[in_rgb_1_a].xyz - combineInputs[in_rgb_1_b].xyz) * combineInputs[in_rgb_1_c].xyz + combineInputs[in_rgb_1_d].xyz;
+    float alpha1 = (combineInputs[in_alpha_1_a].w - combineInputs[in_alpha_1_b].w) * combineInputs[in_alpha_1_c].w + combineInputs[in_alpha_1_d].w;
+
+    out_colour = vec4(rgb1, alpha1);
 }

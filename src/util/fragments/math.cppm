@@ -91,22 +91,33 @@ constexpr auto shift(T value, int amount) -> T {
 
 template <typename T>
 struct Point {
-    T x;
-    T y;
-    T z;
-    constexpr Point(T a, T b, T c = T()) : x(a), y(b), z(c) {}
+    std::array<T, 3> coords{};
+    constexpr Point(T a = T(), T b = T(), T c = T()) : coords{a, b, c} {}
     template <typename U>
         requires(std::is_convertible_v<U, T>)
     constexpr Point(const Point<U>& other) {
-        x = static_cast<T>(other.x);
-        y = static_cast<T>(other.y);
-        z = static_cast<T>(other.z);
+        coords[0] = static_cast<T>(other.coords[0]);
+        coords[1] = static_cast<T>(other.coords[1]);
+        coords[2] = static_cast<T>(other.coords[2]);
+    }
+    constexpr auto x() const -> T {
+        return coords[0];
+    }
+    constexpr auto y() const -> T {
+        return coords[1];
+    }
+    constexpr auto z() const -> T {
+        return coords[2];
     }
     constexpr auto operator*(T k) -> Point<T> {
-        return Point(x * k, y * k, z * k);
+        return Point(x() * k, y() * k, z() * k);
     }
     constexpr auto operator/(T k) -> Point<T> {
-        return Point(x / k, y / k, z / k);
+        return Point(x() / k, y() / k, z() / k);
+    }
+    template <typename Self>
+    constexpr auto bytes(this Self&& self) {
+        return reinterpret_cast<const std::byte*>(self.coords.data());
     }
 };
 static_assert(sizeof(Util::Point<int32_t>) == 3 * sizeof(int32_t));
@@ -118,15 +129,15 @@ struct Triangle {
     constexpr Triangle() : vertices{} {
     }
     constexpr Triangle(Point<T> a, Point<T> b, Point<T> c) {
-        vertices[0] = a.x;
-        vertices[1] = a.y;
-        vertices[2] = a.z;
-        vertices[3] = b.x;
-        vertices[4] = b.y;
-        vertices[5] = b.z;
-        vertices[6] = c.x;
-        vertices[7] = c.y;
-        vertices[8] = c.z;
+        vertices[0] = a.x();
+        vertices[1] = a.y();
+        vertices[2] = a.z();
+        vertices[3] = b.x();
+        vertices[4] = b.y();
+        vertices[5] = b.z();
+        vertices[6] = c.x();
+        vertices[7] = c.y();
+        vertices[8] = c.z();
     }
     template <typename U>
         requires(std::is_convertible_v<U, T>)
@@ -182,8 +193,8 @@ struct Rectangle {
     constexpr Rectangle(Point<T> a, Point<T> b) : v0(a), v1(b) {}
     constexpr auto triangles() const -> std::pair<Triangle<T>, Triangle<T>> {
         return {
-            Triangle<T>(v0, Point<T>(v0.x, v1.y), v1),
-            Triangle<T>(v0, Point<T>(v1.x, v0.y), v1),
+            Triangle<T>(v0, Point<T>(v0.x(), v1.y()), v1),
+            Triangle<T>(v0, Point<T>(v1.x(), v0.y()), v1),
         };
     }
 };
@@ -339,7 +350,7 @@ struct std::formatter<Util::Point<T>> {
     }
 
     constexpr auto format(const Util::Point<T>& point, std::format_context& ctx) const {
-        return std::format_to(ctx.out(), "(" SPIXFMT ", " SPIXFMT ", " SPIXFMT ")", static_cast<float>(point.x), static_cast<float>(point.y), static_cast<float>(point.z));
+        return std::format_to(ctx.out(), "(" SPIXFMT ", " SPIXFMT ", " SPIXFMT ")", static_cast<float>(point.x()), static_cast<float>(point.y()), static_cast<float>(point.z()));
     }
 };
 

@@ -129,6 +129,77 @@ struct Tile {
     }
 };
 
+namespace CombineModeInputs {
+// clang-format off
+    enum class Base : uint8_t {
+        COMBINED    [[=^^CombineInputs::Source::COMBINED]],
+        TEX0        [[=^^CombineInputs::Source::TEX0]],
+        TEX1        [[=^^CombineInputs::Source::TEX1]],
+        PRIMITIVE   [[=^^CombineInputs::Source::PRIMITIVE]],
+        SHADE       [[=^^CombineInputs::Source::SHADE]],
+        ENVIRONMENT [[=^^CombineInputs::Source::ENVIRONMENT]],
+        ONE         [[=^^CombineInputs::Source::ONE]],
+        ZERO        [[=^^CombineInputs::Source::ZERO]],
+    };
+
+    enum class RgbA : uint8_t {
+        COMBINED    [[=^^CombineInputs::Source::COMBINED]],
+        TEX0        [[=^^CombineInputs::Source::TEX0]],
+        TEX1        [[=^^CombineInputs::Source::TEX1]],
+        PRIMITIVE   [[=^^CombineInputs::Source::PRIMITIVE]],
+        SHADE       [[=^^CombineInputs::Source::SHADE]],
+        ENVIRONMENT [[=^^CombineInputs::Source::ENVIRONMENT]],
+        ONE         [[=^^CombineInputs::Source::ONE]],
+        NOISE       [[=^^CombineInputs::Source::NOISE]],
+        ZERO        [[=^^CombineInputs::Source::ZERO]],
+    };
+    using AlphaA = Base;
+    enum class RgbB : uint8_t {
+        COMBINED    [[=^^CombineInputs::Source::COMBINED]],
+        TEX0        [[=^^CombineInputs::Source::TEX0]],
+        TEX1        [[=^^CombineInputs::Source::TEX1]],
+        PRIMITIVE   [[=^^CombineInputs::Source::PRIMITIVE]],
+        SHADE       [[=^^CombineInputs::Source::SHADE]],
+        ENVIRONMENT [[=^^CombineInputs::Source::ENVIRONMENT]],
+        CENTER      [[=^^CombineInputs::Source::CENTER]],
+        K4          [[=^^CombineInputs::Source::K4]],
+        ZERO        [[=^^CombineInputs::Source::ZERO]],
+    };
+    using AlphaB = Base;
+    enum class RgbC : uint8_t {
+        COMBINED            [[=^^CombineInputs::Source::COMBINED]],
+        TEX0                [[=^^CombineInputs::Source::TEX0]],
+        TEX1                [[=^^CombineInputs::Source::TEX1]],
+        PRIMITIVE           [[=^^CombineInputs::Source::PRIMITIVE]],
+        SHADE               [[=^^CombineInputs::Source::SHADE]],
+        ENVIRONMENT         [[=^^CombineInputs::Source::ENVIRONMENT]],
+        SCALE               [[=^^CombineInputs::Source::SCALE]],
+        COMBINED_ALPHA      [[=^^CombineInputs::Source::COMBINED_ALPHA]],
+        TEX0_ALPHA          [[=^^CombineInputs::Source::TEX0_ALPHA]],
+        TEX1_ALPHA          [[=^^CombineInputs::Source::TEX1_ALPHA]],
+        PRIMITIVE_ALPHA     [[=^^CombineInputs::Source::PRIMITIVE_ALPHA]],
+        SHADE_ALPHA         [[=^^CombineInputs::Source::SHADE_ALPHA]],
+        ENVIRONMENT_ALPHA   [[=^^CombineInputs::Source::ENVIRONMENT_ALPHA]],
+        LOD_FRACTION        [[=^^CombineInputs::Source::LOD_FRACTION]],
+        PRIM_LOD_FRAC       [[=^^CombineInputs::Source::PRIM_LOD_FRAC]],
+        K5                  [[=^^CombineInputs::Source::K5]],
+        ZERO                [[=^^CombineInputs::Source::ZERO]],
+    };
+    enum class AlphaC : uint8_t {
+        LOD_FRACTION    [[=^^CombineInputs::Source::LOD_FRACTION]],
+        TEX0            [[=^^CombineInputs::Source::TEX0]],
+        TEX1            [[=^^CombineInputs::Source::TEX1]],
+        PRIMITIVE       [[=^^CombineInputs::Source::PRIMITIVE]],
+        SHADE           [[=^^CombineInputs::Source::SHADE]],
+        ENVIRONMENT     [[=^^CombineInputs::Source::ENVIRONMENT]],
+        PRIM_LOD_FRAC   [[=^^CombineInputs::Source::PRIM_LOD_FRAC]],
+        ZERO            [[=^^CombineInputs::Source::ZERO]]
+    };
+    using RgbD   = Base;
+    using AlphaD = Base;
+// clang-format on
+} // namespace CombineModeInputs
+
 enum class Command : uint8_t {
     FILL_TRIANGLE = 0x08,
     FILL_TRIANGLE_Z,
@@ -285,6 +356,49 @@ struct FillTriangle {
         uint64_t dbDyF : 16;
         uint64_t dgDyF : 16;
         uint64_t drDyF : 16;
+
+        constexpr auto getShade(const Util::RenderTriangle& tri) const -> Util::Point<std::array<Util::SFixedPoint<16, 16>, 4>> {
+            const auto r = Util::SFixedPoint<9, 16>(rI, rF);
+            const auto g = Util::SFixedPoint<9, 16>(gI, gF);
+            const auto b = Util::SFixedPoint<9, 16>(bI, bF);
+            const auto a = Util::SFixedPoint<9, 16>(aI, aF);
+
+            const auto drdx = Util::SFixedPoint<16, 16>(drDxI, drDxF);
+            const auto dgdx = Util::SFixedPoint<16, 16>(dgDxI, dgDxF);
+            const auto dbdx = Util::SFixedPoint<16, 16>(dbDxI, dbDxF);
+            const auto dadx = Util::SFixedPoint<16, 16>(daDxI, daDxF);
+
+            const auto drdy = Util::SFixedPoint<16, 16>(drDyI, drDyF);
+            const auto dgdy = Util::SFixedPoint<16, 16>(dgDyI, dgDyF);
+            const auto dbdy = Util::SFixedPoint<16, 16>(dbDyI, dbDyF);
+            const auto dady = Util::SFixedPoint<16, 16>(daDyI, daDyF);
+
+            const auto rgba = [&, this](Util::SFixedPoint<16, 16> x, Util::SFixedPoint<16, 16> y) -> std::array<Util::SFixedPoint<16, 16>, 4> {
+                const auto x0 = tri.v0().x();
+                const auto y0 = tri.v0().y();
+
+                const auto dx = x - x0;
+                const auto dy = y - y0.floor();
+
+                const auto dr = drdx * dx + drdy * dy;
+                const auto dg = dgdx * dx + dgdy * dy;
+                const auto db = dbdx * dx + dbdy * dy;
+                const auto da = dadx * dx + dady * dy;
+
+                const auto rOut = Util::SFixedPoint<32, 32>(r) + dr;
+                const auto gOut = Util::SFixedPoint<32, 32>(g) + dg;
+                const auto bOut = Util::SFixedPoint<32, 32>(b) + db;
+                const auto aOut = Util::SFixedPoint<32, 32>(a) + da;
+
+                return {rOut, gOut, bOut, aOut};
+            };
+
+            const auto shade0 = rgba(tri.v0().x(), tri.v0().y());
+            const auto shade1 = rgba(tri.v1().x(), tri.v1().y());
+            const auto shade2 = rgba(tri.v2().x(), tri.v2().y());
+
+            return Util::Point{shade0, shade1, shade2};
+        }
     };
 
     struct Texture {
@@ -328,7 +442,6 @@ struct FillTriangle {
         uint64_t dtDyF : 16;
         uint64_t dsDyF : 16;
 
-        // input tri is s10.2
         constexpr auto getTexCoords(const Util::RenderTriangle& tri) const -> Util::RenderTriangle {
             const auto s = Util::SFixedPoint<16, 16>(sI, sF);
             const auto t = Util::SFixedPoint<16, 16>(tI, tF);
@@ -342,8 +455,8 @@ struct FillTriangle {
             const auto dwdy = Util::SFixedPoint<16, 16>(dwDyI, dwDyF);
 
             const auto st = [&, this](Util::SFixedPoint<16, 16> x, Util::SFixedPoint<16, 16> y) -> Util::Point<Util::SFixedPoint<16, 16>> {
-                const auto x0 = tri.v0().x;
-                const auto y0 = tri.v0().y;
+                const auto x0 = tri.v0().x();
+                const auto y0 = tri.v0().y();
 
                 const auto dx = x - x0;
                 const auto dy = y - y0.floor();
@@ -360,9 +473,9 @@ struct FillTriangle {
                 const auto wOut = Util::SFixedPoint<32, 32>(w) + dwX + dwY;
                 return Util::Point{sOut, tOut, wOut};
             };
-            auto s0 = st(tri.v0().x, tri.v0().y);
-            auto s1 = st(tri.v1().x, tri.v1().y);
-            auto s2 = st(tri.v2().x, tri.v2().y);
+            auto s0 = st(tri.v0().x(), tri.v0().y());
+            auto s1 = st(tri.v1().x(), tri.v1().y());
+            auto s2 = st(tri.v2().x(), tri.v2().y());
 
             return Util::RenderTriangle(s0, s1, s2);
         }
@@ -384,8 +497,8 @@ struct FillTriangle {
             const auto dzdy = Util::SFixedPoint<16, 16>(dzdyI, dzdyF);
 
             const auto zFor = [&, this](Util::SFixedPoint<16, 16> x, Util::SFixedPoint<16, 16> y) -> Util::SFixedPoint<16, 16> {
-                const auto x0 = tri.v0().x;
-                const auto y0 = tri.v0().y;
+                const auto x0 = tri.v0().x();
+                const auto y0 = tri.v0().y();
 
                 const auto dx = x - x0;
                 const auto dy = y - y0.floor();
@@ -396,9 +509,9 @@ struct FillTriangle {
                 const auto zOut = z + dzX + dzY;
                 return zOut;
             };
-            const auto z0 = zFor(tri.v0().x, tri.v0().y);
-            const auto z1 = zFor(tri.v1().x, tri.v1().y);
-            const auto z2 = zFor(tri.v2().x, tri.v2().y);
+            const auto z0 = zFor(tri.v0().x(), tri.v0().y());
+            const auto z1 = zFor(tri.v1().x(), tri.v1().y());
+            const auto z2 = zFor(tri.v2().x(), tri.v2().y());
             tri.setZValues(z0, z1, z2);
         }
     };
@@ -465,9 +578,9 @@ struct TextureRectangle {
         };
 
         const auto st0 = Util::Point(v0s, v0t);
-        const auto st1 = st(v1.x, v1.y);
-        const auto st2 = st(v2.x, v2.y);
-        const auto st3 = st(v3.x, v3.y);
+        const auto st1 = st(v1.x(), v1.y());
+        const auto st2 = st(v2.x(), v2.y());
+        const auto st3 = st(v3.x(), v3.y());
 
         const auto texture = std::array<Util::RenderTriangle, 2>{
             Util::RenderTriangle(st0, st1, st3),
@@ -731,139 +844,49 @@ struct SetEnvironmentColor {
 };
 
 struct SetCombineMode {
-    uint64_t alphaD1 : 3;
-    uint64_t alphaB1 : 3;
-    uint64_t rgbD1   : 3;
-    uint64_t alphaD0 : 3;
-    uint64_t alphaB0 : 3;
-    uint64_t rgbD0   : 3;
-    uint64_t alphaC1 : 3;
-    uint64_t alphaA1 : 3;
-    uint64_t rgbB1   : 4;
-    uint64_t rgbB0   : 4;
-    uint64_t rgbC1   : 5;
-    uint64_t rgbA1   : 4;
-    uint64_t alphaC0 : 3;
-    uint64_t alphaA0 : 3;
-    uint64_t rgbC0   : 5;
-    uint64_t rgbA0   : 4;
-    uint64_t command : 6;
-    uint64_t         : 2;
+    // clang-format off
+    //                  [[   Enum Type                     alpha/rgb              cycle   a/b/c/d component       ]]
+    uint64_t alphaD1    [[=^^CombineModeInputs::AlphaD, =^^CombineInputs::alpha, =1uz, =^^CombineInputs::Select::d]] : 3;
+    uint64_t alphaB1    [[=^^CombineModeInputs::AlphaB, =^^CombineInputs::alpha, =1uz, =^^CombineInputs::Select::b]] : 3;
+    uint64_t rgbD1      [[=^^CombineModeInputs::RgbD,   =^^CombineInputs::rgb,   =1uz, =^^CombineInputs::Select::d]] : 3;
+    uint64_t alphaD0    [[=^^CombineModeInputs::AlphaD, =^^CombineInputs::alpha, =0uz, =^^CombineInputs::Select::d]] : 3;
+    uint64_t alphaB0    [[=^^CombineModeInputs::AlphaB, =^^CombineInputs::alpha, =0uz, =^^CombineInputs::Select::b]] : 3;
+    uint64_t rgbD0      [[=^^CombineModeInputs::RgbD,   =^^CombineInputs::rgb,   =0uz, =^^CombineInputs::Select::d]] : 3;
+    uint64_t alphaC1    [[=^^CombineModeInputs::AlphaC, =^^CombineInputs::alpha, =1uz, =^^CombineInputs::Select::c]] : 3;
+    uint64_t alphaA1    [[=^^CombineModeInputs::AlphaA, =^^CombineInputs::alpha, =1uz, =^^CombineInputs::Select::a]] : 3;
+    uint64_t rgbB1      [[=^^CombineModeInputs::RgbB,   =^^CombineInputs::rgb,   =1uz, =^^CombineInputs::Select::b]] : 4;
+    uint64_t rgbB0      [[=^^CombineModeInputs::RgbB,   =^^CombineInputs::rgb,   =0uz, =^^CombineInputs::Select::b]] : 4;
+    uint64_t rgbC1      [[=^^CombineModeInputs::RgbC,   =^^CombineInputs::rgb,   =1uz, =^^CombineInputs::Select::c]] : 5;
+    uint64_t rgbA1      [[=^^CombineModeInputs::RgbA,   =^^CombineInputs::rgb,   =1uz, =^^CombineInputs::Select::a]] : 4;
+    uint64_t alphaC0    [[=^^CombineModeInputs::AlphaC, =^^CombineInputs::alpha, =0uz, =^^CombineInputs::Select::c]] : 3;
+    uint64_t alphaA0    [[=^^CombineModeInputs::AlphaA, =^^CombineInputs::alpha, =0uz, =^^CombineInputs::Select::a]] : 3;
+    uint64_t rgbC0      [[=^^CombineModeInputs::RgbC,   =^^CombineInputs::rgb,   =0uz, =^^CombineInputs::Select::c]] : 5;
+    uint64_t rgbA0      [[=^^CombineModeInputs::RgbA,   =^^CombineInputs::rgb,   =0uz, =^^CombineInputs::Select::a]] : 4;
+    uint64_t command                                     : 6;
+    uint64_t                                             : 2;
+    // clang-format on
 
-    struct Inputs {
-        constexpr static uint64_t Combined = -1;
-
-        uint32_t tex0 = 0xFFFFFFFF; // TODO
-        uint32_t tex1 = 0xFFFFFFFF; // TODO
-        uint32_t primitive;
-        uint32_t shade = 0xFFFFFFFF; // TODO
-        uint32_t environment;
-        uint32_t one   = 0xFFFFFFFF;
-        uint32_t zero  = 0;
-        uint32_t noise = 0; // TODO?
-        uint32_t combinedAlpha;
-        uint32_t tex0Alpha;
-        uint32_t tex1Alpha;
-        uint32_t primitiveAlpha;
-        uint32_t shadeAlpha;
-        uint32_t environmentAlpha;
-        uint32_t lodFraction;
-        uint32_t primLodFrac;
-        uint32_t scale;
-        uint32_t center;
-        uint32_t k4;
-        uint32_t k5;
-
-        template <typename E>
-        constexpr auto inputFor(E value) -> uint64_t {
-            template for (constexpr auto e : Util::staticEnumeratorsOf(^^E)) {
-                constexpr auto enumValue = std::meta::extract<E>(e);
-                if (value == enumValue) {
-                    if constexpr (std::meta::annotations_of(e).empty()) {
-                        return Inputs::Combined;
-                    } else {
-                        constexpr auto field = std::meta::extract<std::meta::info>(Util::annotationOf(e));
-                        const auto     value = this->[:field:];
-                        if constexpr (std::meta::display_string_of(^^E).contains("Alpha")) {
-                            return value & 0xFF; // clear RGB
-                        } else {
-                            return value & 0xFFFFFF00; // clear alpha
-                        }
+    constexpr auto getSelects() -> CombineInputs {
+        auto result = CombineInputs();
+        template for (constexpr auto member : Util::nonstaticDataMembersOf(^^SetCombineMode)) {
+            constexpr auto anns = Util::staticAnnotationsOf(member);
+            if constexpr (!anns.empty()) {
+                constexpr auto E       = std::meta::extract<std::meta::info>(anns[0]);
+                constexpr auto channel = std::meta::extract<std::meta::info>(anns[1]);
+                constexpr auto cycle   = std::meta::extract<std::size_t>(anns[2]);
+                constexpr auto abcd    = std::meta::extract<std::meta::info>(anns[3]);
+                template for (constexpr auto e : Util::staticEnumeratorsOf(E)) {
+                    const auto value = this->[:member:];
+                    if (value == static_cast<uint64_t>(std::meta::extract<typename[:E:]>(e))) {
+                        constexpr auto selectMember        = std::meta::extract<std::meta::info>(Util::annotationOf(e));
+                        const auto     source              = static_cast<CombineInputs::Source>([:selectMember:]);
+                        result.[:channel:][cycle].[:abcd:] = source;
                     }
                 }
             }
-            return 0;
         }
-    };
-
-    // clang-format off
-    enum class Base : uint8_t {
-        COMBINED,
-        TEX0        [[=^^Inputs::tex0]],
-        TEX1        [[=^^Inputs::tex1]],
-        PRIMITIVE   [[=^^Inputs::primitive]],
-        SHADE       [[=^^Inputs::shade]],
-        ENVIRONMENT [[=^^Inputs::environment]],
-        ONE         [[=^^Inputs::one]],
-        ZERO        [[=^^Inputs::zero]],
-    };
-
-    enum class RgbA : uint8_t {
-        COMBINED,
-        TEX0        [[=^^Inputs::tex0]],
-        TEX1        [[=^^Inputs::tex1]],
-        PRIMITIVE   [[=^^Inputs::primitive]],
-        SHADE       [[=^^Inputs::shade]],
-        ENVIRONMENT [[=^^Inputs::environment]],
-        ONE         [[=^^Inputs::one]],
-        NOISE       [[=^^Inputs::noise]],
-        ZERO        [[=^^Inputs::zero]],
-    };
-    using AlphaA = Base;
-    enum class RgbB : uint8_t {
-        COMBINED,
-        TEX0        [[=^^Inputs::tex0]],
-        TEX1        [[=^^Inputs::tex1]],
-        PRIMITIVE   [[=^^Inputs::primitive]],
-        SHADE       [[=^^Inputs::shade]],
-        ENVIRONMENT [[=^^Inputs::environment]],
-        CENTER      [[=^^Inputs::center]],
-        K4          [[=^^Inputs::k4]],
-        ZERO        [[=^^Inputs::zero]],
-    };
-    using AlphaB = Base;
-    enum class RgbC : uint8_t {
-        COMBINED,
-        TEX0                [[=^^Inputs::tex0]],
-        TEX1                [[=^^Inputs::tex1]],
-        PRIMITIVE           [[=^^Inputs::primitive]],
-        SHADE               [[=^^Inputs::shade]],
-        ENVIRONMENT         [[=^^Inputs::environment]],
-        SCALE               [[=^^Inputs::scale]],
-        COMBINED_ALPHA      [[=^^Inputs::combinedAlpha]],
-        TEX0_ALPHA          [[=^^Inputs::tex0Alpha]],
-        TEX1_ALPHA          [[=^^Inputs::tex1Alpha]],
-        PRIMITIVE_ALPHA     [[=^^Inputs::primitiveAlpha]],
-        SHADE_ALPHA         [[=^^Inputs::shadeAlpha]],
-        ENVIRONMENT_ALPHA   [[=^^Inputs::environmentAlpha]],
-        LOD_FRACTION        [[=^^Inputs::lodFraction]],
-        PRIM_LOD_FRAC       [[=^^Inputs::primLodFrac]],
-        K5                  [[=^^Inputs::k5]],
-        ZERO                [[=^^Inputs::zero]],
-    };
-    enum class AlphaC : uint8_t {
-        LOD_FRACTION    [[=^^Inputs::lodFraction]],
-        TEX0            [[=^^Inputs::tex0]],
-        TEX1            [[=^^Inputs::tex1]],
-        PRIMITIVE       [[=^^Inputs::primitive]],
-        SHADE           [[=^^Inputs::shade]],
-        ENVIRONMENT     [[=^^Inputs::environment]],
-        PRIM_LOD_FRAC   [[=^^Inputs::primLodFrac]],
-        ZERO            [[=^^Inputs::zero]]
-    };
-    using RgbD   = Base;
-    using AlphaD = Base;
-    // clang-format on
+        return result;
+    }
 };
 
 struct SetTextureImage {

@@ -5,10 +5,10 @@
 
 // all s16.16
 
-layout(location = 0) in ivec3 in_position;
-layout(location = 1) in ivec3 in_shade;
+layout(location = 0) in int in_tile;
+layout(location = 1) in ivec3 in_position;
 layout(location = 2) in ivec3 in_texCoords;
-layout(location = 3) in int in_tile;
+layout(location = 3) in ivec4 in_shade;
 
 struct ShaderTileInfo {
     uvec4 extent;
@@ -28,18 +28,17 @@ layout(set = 0, binding = 8, scalar) uniform TileParams {
     ShaderTileInfo tiles[8];
 } tileParams;
 
-layout(location = 0) out flat ivec3 out_shade;     
+layout(location = 0) out flat int out_tile;
 layout(location = 1) out vec3 out_texCoords; 
-layout(location = 2) out flat int out_tile;
-//layout(location = 3) out vec2 dbg_texCoords;
+layout(location = 2) out vec4 out_shade;
 
 
 void main() {
     float fixedPointScale = 65536.0;
     float depthScale = 32704.0;
     vec3 fpos = vec3(in_position) / vec3(fixedPointScale, fixedPointScale, fixedPointScale * depthScale);
-    gl_Position = vec4((fpos.x / 160) - 1, (fpos.y / 120) - 1, fpos.z < 0.1 ? -1 : fpos.z, 1.0);
-    out_shade = in_shade;
+    gl_Position = vec4((fpos.x / 160) - 1, (fpos.y / 120) - 1, fpos.z, 1.0);
+    out_shade = vec4(in_shade) / fixedPointScale;
     out_texCoords = vec3(in_texCoords) / fixedPointScale;
     out_tile = in_tile;
 

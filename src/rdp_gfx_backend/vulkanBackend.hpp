@@ -16,9 +16,9 @@ struct VulkanTextureFormat {
 class VulkanBackend : public GfxBackend {
   public:
     struct RenderTarget {
-        VkImage        m_image     = VK_NULL_HANDLE;
-        VkDeviceMemory m_mem       = VK_NULL_HANDLE;
-        VkImageView    m_imageView = VK_NULL_HANDLE;
+        VkImage        m_image          = VK_NULL_HANDLE;
+        VkDeviceMemory m_mem            = VK_NULL_HANDLE;
+        VkImageView    m_imageView      = VK_NULL_HANDLE;
         VkImage        m_depthImage     = VK_NULL_HANDLE;
         VkDeviceMemory m_depthMem       = VK_NULL_HANDLE;
         VkImageView    m_depthImageView = VK_NULL_HANDLE;
@@ -48,7 +48,8 @@ class VulkanBackend : public GfxBackend {
         uint32_t                      primColour    = 0;
         RdpRenderPassConstants        pushConstants = {};
         std::array<ShaderTileInfo, 8> tileParams    = {};
-        auto                          reset() -> void {
+
+        auto reset() -> void {
             active = false;
             vertexData.clear();
             pushConstants = {};

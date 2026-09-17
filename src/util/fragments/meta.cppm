@@ -31,6 +31,10 @@ consteval auto staticMembersOf(std::meta::info i) {
     return std::define_static_array(std::meta::members_of(i, privilegedContext()));
 }
 
+consteval auto nonstaticDataMembersOf(std::meta::info i) {
+    return std::define_static_array(std::meta::nonstatic_data_members_of(i, privilegedContext()));
+}
+
 consteval auto annotationOf(std::meta::info i) {
     return std::meta::annotations_of(i).front();
 }

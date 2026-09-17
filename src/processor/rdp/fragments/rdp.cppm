@@ -76,7 +76,6 @@ class RDP {
     }
 
   private:
-    auto makeCombinerInputs() -> ::RDP::CombineInputs;
     auto flushBackend() -> void;
 
     std::shared_ptr<Util::Logger> m_logger;
@@ -96,66 +95,24 @@ class RDP {
 
     std::bitset<8> m_tileUsedThisDraw{};
 
-    Commands::SetCombineMode         m_combineMode{};
-    Commands::SetCombineMode::Inputs m_combineInputs{};
-    Commands::SetOtherModes          m_mode{};
-    uint32_t                         m_blend{};
-    uint32_t                         m_fog{};
-    uint32_t                         m_fill{};
+    Commands::SetCombineMode m_combineMode{};
+    CombineInputs::Uniform   m_combineInputs{};
+    Commands::SetOtherModes  m_mode{};
+    uint32_t                 m_blend{};
+    uint32_t                 m_fog{};
+    uint32_t                 m_fill{};
 };
 
-auto RDP::makeCombinerInputs() -> ::RDP::CombineInputs {
-    using Combine         = Commands::SetCombineMode;
-    const bool is1Cycle   = m_mode.cycleType == Commands::SetOtherModes::CYCLE_1;
-    const auto isCombined = [is1Cycle](auto input) {
-        return !is1Cycle && input == Combine::Inputs::Combined;
-    };
-    const auto rgbA0   = m_combineInputs.inputFor(static_cast<Combine::RgbA>(m_combineMode.rgbA0));
-    const auto rgbB0   = m_combineInputs.inputFor(static_cast<Combine::RgbB>(m_combineMode.rgbB0));
-    const auto rgbC0   = m_combineInputs.inputFor(static_cast<Combine::RgbC>(m_combineMode.rgbC0));
-    const auto rgbD0   = m_combineInputs.inputFor(static_cast<Combine::RgbD>(m_combineMode.rgbD0));
-    const auto rgbA1   = m_combineInputs.inputFor(static_cast<Combine::RgbA>(m_combineMode.rgbA1));
-    const auto rgbB1   = m_combineInputs.inputFor(static_cast<Combine::RgbB>(m_combineMode.rgbB1));
-    const auto rgbC1   = m_combineInputs.inputFor(static_cast<Combine::RgbC>(m_combineMode.rgbC1));
-    const auto rgbD1   = m_combineInputs.inputFor(static_cast<Combine::RgbD>(m_combineMode.rgbD1));
-    const auto alphaA0 = m_combineInputs.inputFor(static_cast<Combine::AlphaA>(m_combineMode.alphaA0));
-    const auto alphaB0 = m_combineInputs.inputFor(static_cast<Combine::AlphaB>(m_combineMode.alphaB0));
-    const auto alphaC0 = m_combineInputs.inputFor(static_cast<Combine::AlphaC>(m_combineMode.alphaC0));
-    const auto alphaD0 = m_combineInputs.inputFor(static_cast<Combine::AlphaD>(m_combineMode.alphaD0));
-    const auto alphaA1 = m_combineInputs.inputFor(static_cast<Combine::AlphaA>(m_combineMode.alphaA1));
-    const auto alphaB1 = m_combineInputs.inputFor(static_cast<Combine::AlphaB>(m_combineMode.alphaB1));
-    const auto alphaC1 = m_combineInputs.inputFor(static_cast<Combine::AlphaC>(m_combineMode.alphaC1));
-    const auto alphaD1 = m_combineInputs.inputFor(static_cast<Combine::AlphaD>(m_combineMode.alphaD1));
-    const auto inputs  = ::RDP::CombineInputs{
-         .rgba0 = {
-             .a = is1Cycle ? 0 : static_cast<int32_t>(rgbA0 | alphaA0),
-             .b = is1Cycle ? 0 : static_cast<int32_t>(rgbB0 | alphaB0),
-             .c = is1Cycle ? 0 : static_cast<int32_t>(rgbC0 | alphaC0),
-             .d = is1Cycle ? 0 : static_cast<int32_t>(rgbD0 | alphaD0),
-        },
-         .rgba1 = {
-             .a = static_cast<int32_t>(rgbA1 | alphaA1),
-             .b = static_cast<int32_t>(rgbB1 | alphaB1),
-             .c = static_cast<int32_t>(rgbC1 | alphaC1),
-             .d = static_cast<int32_t>(rgbD1 | alphaD1),
-        },
-         .usePreviousRgb = {
-             .a = isCombined(rgbA1),
-             .b = isCombined(rgbB1),
-             .c = isCombined(rgbC1),
-             .d = isCombined(rgbD1),
-        },
-         .usePreviousAlpha = {
-             .a = isCombined(alphaA1),
-             .b = isCombined(alphaB1),
-             .c = isCombined(alphaC1),
-             .d = isCombined(alphaD1),
-        }};
-    return inputs;
-}
-
 auto RDP::flushBackend() -> void {
-    const auto inputs = makeCombinerInputs();
+    auto inputs = m_combineMode.getSelects();
+    if (m_mode.cycleType != Commands::SetOtherModes::CYCLE_2) {
+        // no-op the first cycle
+        inputs.rgb[0].c   = CombineInputs::Source::ZERO;
+        inputs.alpha[0].c = CombineInputs::Source::ZERO;
+        inputs.rgb[0].d   = CombineInputs::Source::ZERO;
+        inputs.alpha[0].d = CombineInputs::Source::ZERO;
+    }
+    inputs.uniform = m_combineInputs;
     m_gfxBackend->setCombineInputs(inputs);
     for (auto tileIndex = 0uz; tileIndex < m_tileUsedThisDraw.size(); ++tileIndex) {
         if (!m_tileUsedThisDraw[tileIndex]) {
@@ -201,12 +158,10 @@ auto RDP::runRdpCommand() -> void {
             case Command::SYNC_LOAD: [[fallthrough]];
             case Command::SYNC_TILE: [[fallthrough]];
             case Command::SYNC_PIPE: {
-                flushBackend();
                 cmds.pop_front();
                 break;
             }
             case Command::SYNC_FULL: {
-                flushBackend();
                 m_gfxBackend->completeRenderFrame();
                 m_mipsInterface->setInterrupt<^^Interfaces::MI_INTERRUPT::dp>(true);
                 m_syncs++;
@@ -234,9 +189,10 @@ auto RDP::runRdpCommand() -> void {
 
                 const auto cmd   = makeCommand<Commands::FillTriangle, 4>(cmds);
                 auto       tri   = cmd.getTriangle();
-                auto       shade = Util::RenderTriangle{};
+                auto       shade = Util::Point<std::array<Util::SFixedPoint<16, 16>, 4>>{};
                 if (cmdHeader.shade) {
                     const auto shadeCmd = makeCommand<Commands::FillTriangle::Shade, 8>(cmds);
+                    shade               = shadeCmd.getShade(tri);
                 }
 
                 auto texCoords = Util::RenderTriangle{};
@@ -265,6 +221,7 @@ auto RDP::runRdpCommand() -> void {
                 }
                 m_tileUsedThisDraw.set(cmd.tile);
                 m_gfxBackend->addTriangle(cmd.tile, tri.bytes(), shade.bytes(), texCoords.bytes());
+                flushBackend();
                 break;
             }
             case Command::FILL_RECTANGLE: {
@@ -272,6 +229,7 @@ auto RDP::runRdpCommand() -> void {
                 const auto tris = cmd.getTriangles(); // todo fill optimisation in vk
                 // m_gfxBackend->addTriangle(tris[0].bytes(), nullptr, nullptr, 0);
                 // m_gfxBackend->addTriangle(tris[1].bytes(), nullptr, nullptr, 0);
+                // flushBackend();
                 IF_LOG_ENABLED(m_logger) {
                     m_logger->log<Level::MED, Sys::RDP>(
                         std::tuple{"op", "drawRectangle"},
@@ -290,6 +248,7 @@ auto RDP::runRdpCommand() -> void {
                 m_tileUsedThisDraw.set(cmd.tile);
                 m_gfxBackend->addTriangle(cmd.tile, coords[0].bytes(), nullptr, uvs[0].bytes());
                 m_gfxBackend->addTriangle(cmd.tile, coords[1].bytes(), nullptr, uvs[1].bytes());
+                flushBackend();
                 IF_LOG_ENABLED(m_logger) {
                     m_logger->log<Level::MED, Sys::RDP>(
                         std::tuple{"op", "drawRectangle"},
