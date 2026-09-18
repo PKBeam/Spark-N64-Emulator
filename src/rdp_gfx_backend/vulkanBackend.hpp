@@ -124,7 +124,7 @@ class VulkanBackend : public GfxBackend {
     std::mutex      m_callbackMutex;
 
     FrameCompleteCallback m_frameCompleteCallback = nullptr;
-    void*                 m_frameCompleteUserData  = nullptr;
+    void*                 m_frameCompleteUserData = nullptr;
 
     auto notifyFrameComplete() -> void;
 

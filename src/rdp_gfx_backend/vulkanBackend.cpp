@@ -1257,9 +1257,9 @@ auto VulkanBackend::completeRenderFrame() -> void {
 }
 
 auto VulkanBackend::setFrameCompleteCallback(FrameCompleteCallback callback, void* userData) -> void {
-    auto lock                 = std::lock_guard<std::mutex>(m_callbackMutex);
-    m_frameCompleteCallback   = callback;
-    m_frameCompleteUserData   = userData;
+    auto lock               = std::lock_guard<std::mutex>(m_callbackMutex);
+    m_frameCompleteCallback = callback;
+    m_frameCompleteUserData = userData;
 }
 
 auto VulkanBackend::notifyFrameComplete() -> void {

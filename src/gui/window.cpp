@@ -93,10 +93,10 @@ auto Application::quit() -> void {
 }
 
 Window::Window(QVulkanInstance* vkInst, RDP::GfxBackend* rdpGfxBackend)
-        : m_vkInst(vkInst),
-            m_rdpGfxBackend(rdpGfxBackend),
-            m_vkWindow(new VkWindow()),
-            m_frameCallbackWindow(new QPointer<VkWindow>(m_vkWindow)) {
+    : m_vkInst(vkInst),
+      m_rdpGfxBackend(rdpGfxBackend),
+      m_vkWindow(new VkWindow()),
+      m_frameCallbackWindow(new QPointer<VkWindow>(m_vkWindow)) {
 
     m_vkWindow->QWindow::setFlags(Qt::Window | Qt::WindowTitleHint | Qt::WindowSystemMenuHint |
                                   Qt::WindowMinimizeButtonHint | Qt::WindowMaximizeButtonHint | Qt::WindowCloseButtonHint);

@@ -3,15 +3,15 @@
 A Nintendo 64 emulator written in modern C++.
 
 This is an educational project.  
-The goal is to implement an emulator capable of playing retail games at full speed.
+The goal is to eventually implement an emulator capable of playing retail games at full speed with reasonable visual accuracy.
 
 ## Current Status
 
-Able to boot into Ocarina of Time and render basic triangles with Vulkan.
+Able to boot into a game and perform basic rendering with Vulkan.
 
-![Ocarina of Time - Spinning N64 logo](./data/image1.png)
-![Ocarina of Time - Title Screen cutscene](./data/image2.png)
-![Ocarina of Time - Title Screen logo](./data/image3.png)
+![Ocarina of Time - Spinning N64 logo](./data/image1.jpg)
+![Ocarina of Time - Title Screen cutscene](./data/image2.jpg)
+![Ocarina of Time - Title Screen logo](./data/image3.jpg)
 
 ## Building
 
