@@ -80,6 +80,7 @@ Window::Window(QVulkanInstance* vkInst, RDP::GfxBackend* rdpGfxBackend)
                                   Qt::WindowMinimizeButtonHint | Qt::WindowMaximizeButtonHint | Qt::WindowCloseButtonHint);
     m_vkWindow->setTitle("spark");
     m_vkWindow->setMinimumSize({320, 240});
+    m_vkWindow->setDeviceExtensions(QByteArrayList() << VK_EXT_CONSERVATIVE_RASTERIZATION_EXTENSION_NAME);
 
     constinit static auto features13 = VkPhysicalDeviceVulkan13Features{};
     features13.sType                 = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;

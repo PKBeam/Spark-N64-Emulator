@@ -40,7 +40,7 @@ class VulkanBackend : public GfxBackend {
         RDP::SamplerParams      s;
         RDP::SamplerParams      t;
     };
-    static_assert(sizeof(ShaderTileInfo) == 32);
+    static_assert(sizeof(ShaderTileInfo) == 40);
 
     struct CurrentRenderPass {
         bool                          active        = false;
@@ -143,6 +143,7 @@ class VulkanBackend : public GfxBackend {
     // RGBA8 first for palette/sub-byte-packed formats so it can still be hardware-sampled)
     std::array<VulkanTile, NUM_TILES> m_textures;
     VulkanTile                        m_fallbackTexture;
+    std::vector<std::byte>            m_textureMemory;
 
     VkDescriptorSetLayout m_textureDescriptorSetLayout = VK_NULL_HANDLE;
     VkDescriptorPool      m_textureDescriptorPool      = VK_NULL_HANDLE;

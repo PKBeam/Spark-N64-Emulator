@@ -346,6 +346,7 @@ auto RDP::runRdpCommand() -> void {
                             .mirror = static_cast<uint8_t>(cmd.mirrorS),
                             .clamp  = static_cast<uint8_t>(cmd.clampS),
                             .mask   = ((cmd.maskS == 0 ? 0xFFFF : ((1u << cmd.maskS) - 1)) << 16) | 0xFFFF,
+                            .offset = 0,
                         },
                     .t =
                         {
@@ -353,6 +354,7 @@ auto RDP::runRdpCommand() -> void {
                             .mirror = static_cast<uint8_t>(cmd.mirrorT),
                             .clamp  = static_cast<uint8_t>(cmd.clampT),
                             .mask   = ((cmd.maskT == 0 ? 0xFFFF : ((1u << cmd.maskT) - 1)) << 16) | 0xFFFF,
+                            .offset = 0,
                         },
                 };
                 IF_LOG_ENABLED(m_logger) {
@@ -374,7 +376,9 @@ auto RDP::runRdpCommand() -> void {
                     .lrS = Util::UFixedPoint<10, 2>::fromBits(cmd.lowerRightS),
                     .lrT = Util::UFixedPoint<10, 2>::fromBits(cmd.lowerRightT),
                 };
-                m_tiles[cmd.index].extent = extent;
+                m_tiles[cmd.index].extent   = extent;
+                m_tiles[cmd.index].s.offset = Util::UFixedPoint<16, 16>(extent.ulS).bits();
+                m_tiles[cmd.index].t.offset = Util::UFixedPoint<16, 16>(extent.ulT).bits();
                 IF_LOG_ENABLED(m_logger) {
                     m_logger->log<Level::MED, Sys::RDP>(
                         std::tuple{"op", "setTileSize"},

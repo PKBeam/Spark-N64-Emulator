@@ -34,12 +34,6 @@ static auto nativeFormatFor(TextureFormat format) -> std::optional<VulkanTexture
                 .swizzle       = VkComponentMapping{.r = VK_COMPONENT_SWIZZLE_R, .g = VK_COMPONENT_SWIZZLE_R, .b = VK_COMPONENT_SWIZZLE_R, .a = VK_COMPONENT_SWIZZLE_G},
                 .bytesPerTexel = 2,
             };
-        case TextureFormat::IA8:
-            return VulkanTextureFormat{
-                .vkFormat      = VK_FORMAT_R4G4_UNORM_PACK8,
-                .swizzle       = VkComponentMapping{.r = VK_COMPONENT_SWIZZLE_R, .g = VK_COMPONENT_SWIZZLE_R, .b = VK_COMPONENT_SWIZZLE_R, .a = VK_COMPONENT_SWIZZLE_G},
-                .bytesPerTexel = 1,
-            };
         case TextureFormat::I8:
             return VulkanTextureFormat{
                 .vkFormat      = VK_FORMAT_R8_UNORM,
@@ -53,10 +47,11 @@ static auto nativeFormatFor(TextureFormat format) -> std::optional<VulkanTexture
 
 // resolves palette (CI4/CI8), sub-byte-packed (IA4/I4), and YUV16 formats to plain RGBA8
 // on the CPU so the result can still be sampled (and bilinear-filtered) natively
-static auto decodeToRGBA32(const TileParams& params,
-                           const std::byte*  texelData,
-                           TextureFormat     paletteFormat,
-                           const std::byte*  paletteData) -> std::vector<std::byte> {
+static auto decodeToRGBA32(std::vector<std::byte>& textureMemory,
+                           const TileParams&       params,
+                           const std::byte*        texelData,
+                           TextureFormat           paletteFormat,
+                           const std::byte*        paletteData) -> void {
     const auto readUint4 = [&](const std::byte* data, uint32_t x, uint32_t y) -> uint8_t {
         const auto byte = static_cast<uint8_t>(data[y * params.stride + x / 2]);
         return (x % 2 == 0) ? (byte >> 4) : (byte & 0xF);
@@ -90,8 +85,7 @@ static auto decodeToRGBA32(const TileParams& params,
         }
     };
 
-    auto out = std::vector<std::byte>{};
-    out.reserve(params.width * params.height * 4uz);
+    textureMemory.clear();
     for (const auto y : std::views::iota(0u, params.height)) {
         for (const auto x : std::views::iota(0u, params.width)) {
             auto rgba = std::array<uint8_t, 4>{0, 0, 0, 255};
@@ -111,6 +105,13 @@ static auto decodeToRGBA32(const TileParams& params,
                     rgba                 = {intensity, intensity, intensity, alpha};
                     break;
                 }
+                case TextureFormat::IA8: {
+                    const auto texel     = static_cast<uint8_t>(texelData[y * params.stride + x]);
+                    const auto intensity = static_cast<uint8_t>((texel >> 4) * 17);
+                    const auto alpha     = static_cast<uint8_t>((texel & 0xF) * 17);
+                    rgba                 = {intensity, intensity, intensity, alpha};
+                    break;
+                }
                 case TextureFormat::I4: {
                     const auto nibble    = readUint4(texelData, x, y);
                     const auto intensity = static_cast<uint8_t>(nibble << 4);
@@ -127,11 +128,10 @@ static auto decodeToRGBA32(const TileParams& params,
                     break;
             }
             for (const auto component : rgba) {
-                out.push_back(std::byte{component});
+                textureMemory.push_back(std::byte{component});
             }
         }
     }
-    return out;
 }
 
 auto VulkanBackend::init(
@@ -568,8 +568,8 @@ auto VulkanBackend::createFallbackTexture() -> void {
         .sType                   = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
         .pNext                   = nullptr,
         .flags                   = 0,
-        .magFilter               = VK_FILTER_NEAREST,
-        .minFilter               = VK_FILTER_NEAREST,
+        .magFilter               = VK_FILTER_LINEAR,
+        .minFilter               = VK_FILTER_LINEAR,
         .mipmapMode              = VK_SAMPLER_MIPMAP_MODE_NEAREST,
         .addressModeU            = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
         .addressModeV            = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
@@ -892,9 +892,17 @@ auto VulkanBackend::createPipeline() -> void {
         .pScissors     = &scissor,
     };
 
+    const auto conservativeRasterization = VkPipelineRasterizationConservativeStateCreateInfoEXT{
+        .sType                            = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_CONSERVATIVE_STATE_CREATE_INFO_EXT,
+        .pNext                            = nullptr,
+        .flags                            = 0,
+        .conservativeRasterizationMode    = VK_CONSERVATIVE_RASTERIZATION_MODE_OVERESTIMATE_EXT,
+        .extraPrimitiveOverestimationSize = 0.0f,
+    };
+
     const auto rasterization = VkPipelineRasterizationStateCreateInfo{
         .sType                   = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
-        .pNext                   = nullptr,
+        .pNext                   = &conservativeRasterization,
         .flags                   = 0,
         .depthClampEnable        = VK_FALSE,
         .rasterizerDiscardEnable = VK_FALSE,
@@ -1467,23 +1475,34 @@ auto VulkanBackend::updateTile(std::size_t      index,
          .b = VK_COMPONENT_SWIZZLE_IDENTITY,
          .a = VK_COMPONENT_SWIZZLE_IDENTITY,
     };
-    auto pixels = std::vector<std::byte>{};
 
     if (const auto native = nativeFormatFor(params.format)) {
         vkFormat = native->vkFormat;
         swizzle  = native->swizzle;
-        pixels.resize(static_cast<std::size_t>(params.width) * params.height * native->bytesPerTexel);
+        m_textureMemory.resize(static_cast<std::size_t>(params.width) * params.height * native->bytesPerTexel);
         for (const auto y : std::views::iota(0u, params.height)) {
             const auto rowBytes = static_cast<std::size_t>(params.width) * native->bytesPerTexel;
-            const auto dst      = pixels.data() + y * rowBytes;
+            const auto dst      = m_textureMemory.data() + y * rowBytes;
             const auto src      = texelData + y * params.stride;
             std::memcpy(dst, src, rowBytes);
+            if (std::endian::native == std::endian::little && native->bytesPerTexel == 2) {
+                const auto texels = reinterpret_cast<uint16_t*>(dst);
+                for (const auto x : std::views::iota(0u, params.width)) {
+                    texels[x] = std::byteswap(texels[x]);
+                }
+            } else if (std::endian::native == std::endian::little && native->bytesPerTexel == 4) {
+                const auto texels = reinterpret_cast<uint32_t*>(dst);
+                for (const auto x : std::views::iota(0u, params.width)) {
+                    texels[x] = std::byteswap(texels[x]);
+                }
+            }
         }
     } else {
-        pixels = decodeToRGBA32(params,
-                                texelData,
-                                paletteFormat,
-                                paletteData);
+        decodeToRGBA32(m_textureMemory,
+                       params,
+                       texelData,
+                       paletteFormat,
+                       paletteData);
     }
     vkDestroySampler(m_vkDevice, m_textures[index].sampler, nullptr);
     m_textures[index].sampler = VK_NULL_HANDLE;
@@ -1528,8 +1547,8 @@ auto VulkanBackend::updateTile(std::size_t      index,
         .sType                   = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
         .pNext                   = nullptr,
         .flags                   = 0,
-        .magFilter               = VK_FILTER_NEAREST,
-        .minFilter               = VK_FILTER_NEAREST,
+        .magFilter               = VK_FILTER_LINEAR,
+        .minFilter               = VK_FILTER_LINEAR,
         .mipmapMode              = VK_SAMPLER_MIPMAP_MODE_NEAREST,
         .addressModeU            = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
         .addressModeV            = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
@@ -1550,7 +1569,7 @@ auto VulkanBackend::updateTile(std::size_t      index,
         .sType                 = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
         .pNext                 = nullptr,
         .flags                 = 0,
-        .size                  = pixels.size(),
+        .size                  = m_textureMemory.size(),
         .usage                 = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
         .sharingMode           = VK_SHARING_MODE_EXCLUSIVE,
         .queueFamilyIndexCount = 0,
@@ -1572,8 +1591,8 @@ auto VulkanBackend::updateTile(std::size_t      index,
     vkBindBufferMemory(m_vkDevice, stagingBuffer, stagingMemory, 0);
 
     void* stagingMapped = nullptr;
-    vkMapMemory(m_vkDevice, stagingMemory, 0, pixels.size(), 0, &stagingMapped);
-    std::memcpy(stagingMapped, pixels.data(), pixels.size());
+    vkMapMemory(m_vkDevice, stagingMemory, 0, m_textureMemory.size(), 0, &stagingMapped);
+    std::memcpy(stagingMapped, m_textureMemory.data(), m_textureMemory.size());
     vkUnmapMemory(m_vkDevice, stagingMemory);
 
     vkResetCommandBuffer(m_commandBuffer, 0);

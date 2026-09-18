@@ -50,11 +50,13 @@ struct ShaderTileInfo {
     uint8_t sClamp;
     uint8_t sPadding_;
     uint    sMask;
+    uint    sOffset;
     int8_t  tShift;
     uint8_t tMirror;
     uint8_t tClamp;
     uint8_t tPadding_;
     uint    tMask;
+    uint    tOffset;
 };
 
 layout(set = 0, binding = 8, scalar) uniform TileParams {
@@ -95,19 +97,19 @@ void main() {
     ivec2 shiftedTexCoords = ivec2(
         shifts.x >= 0 ? fxpPerspTexCoords.x << uint(shifts.x) : fxpPerspTexCoords.x >> uint(-shifts.x),
         shifts.y >= 0 ? fxpPerspTexCoords.y << uint(shifts.y) : fxpPerspTexCoords.y >> uint(-shifts.y));
-    ivec2 maskedTexCoords = shiftedTexCoords & ivec2(tileInfo.sMask, tileInfo.tMask);
+
+    ivec2 tileOffsetTexCoords = shiftedTexCoords - ivec2(tileInfo.sOffset, tileInfo.tOffset);
+    ivec2 maskedTexCoords = tileOffsetTexCoords & ivec2(tileInfo.sMask, tileInfo.tMask);
     // convert back to float
     vec2 scaledTexCoords = vec2(maskedTexCoords.xy) / fixedPointScale;
 
     vec4 textureColor0 = sampleTile(in_tile, scaledTexCoords);
     vec4 textureColor1 = sampleTile((in_tile + 1) % 8, scaledTexCoords);
 
-   // out_colour = vec4(textureColor0);
-
     vec4 combineInputs[21];
     combineInputs[0] = vec4(0);
-    combineInputs[1] = vec4(256);
-    combineInputs[2] = vec4(32);
+    combineInputs[1] = vec4(1.0);
+    combineInputs[2] = vec4(0.5);
 
     combineInputs[3] = vec4(0); 
     combineInputs[4] = vec4(combineInputs[3].w);
@@ -117,7 +119,7 @@ void main() {
     combineInputs[8] = vec4(combineInputs[7].w);
     combineInputs[9] = unpackUnorm4x8(in_primitive);
     combineInputs[10] = vec4(combineInputs[9].w);
-    combineInputs[11] = in_shade;
+    combineInputs[11] = vec4(0.5); // TODO in_shade / 256.0;
     combineInputs[12] = vec4(combineInputs[11].w);
     combineInputs[13] = unpackUnorm4x8(in_environment);
     combineInputs[14] = vec4(combineInputs[13].w);
@@ -136,10 +138,11 @@ void main() {
 
     // update combined
     combineInputs[3] = vec4(rgb0, alpha0);
-    combineInputs[9]  = vec4(combineInputs[3].w);
+    combineInputs[4]  = vec4(combineInputs[3].w);
 
     vec3 rgb1 = (combineInputs[in_rgb_1_a].xyz - combineInputs[in_rgb_1_b].xyz) * combineInputs[in_rgb_1_c].xyz + combineInputs[in_rgb_1_d].xyz;
     float alpha1 = (combineInputs[in_alpha_1_a].w - combineInputs[in_alpha_1_b].w) * combineInputs[in_alpha_1_c].w + combineInputs[in_alpha_1_d].w;
 
     out_colour = vec4(rgb1, alpha1);
+   // out_colour = vec4(textureColor0);
 }

@@ -24,8 +24,9 @@ struct SamplerParams {
     uint8_t  clamp;
     uint8_t  padding_ = 0;
     uint32_t mask;
+    uint32_t offset;
 };
-static_assert(sizeof(SamplerParams) == 8);
+static_assert(sizeof(SamplerParams) == 12);
 
 struct TileParams {
     uint32_t      width;

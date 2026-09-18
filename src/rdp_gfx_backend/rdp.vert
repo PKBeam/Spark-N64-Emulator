@@ -17,11 +17,13 @@ struct ShaderTileInfo {
     uint8_t sClamp;
     uint8_t sPadding_;
     uint    sMask;
+    uint    sOffset;
     int8_t  tShift;
     uint8_t tMirror;
     uint8_t tClamp;
     uint8_t tPadding_;
     uint    tMask;
+    uint    tOffset;
 };
 
 layout(set = 0, binding = 8, scalar) uniform TileParams {
