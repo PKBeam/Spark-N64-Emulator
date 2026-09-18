@@ -2,6 +2,8 @@ module;
 #include <QCoreApplication>
 #include <QGuiApplication>
 #include <QLoggingCategory>
+#include <QMetaObject>
+#include <QPointer>
 #include <QTimer>
 #include <QVulkanWindow>
 #include <QVulkanDeviceFunctions>
@@ -21,6 +23,23 @@ class VkWindow : public QVulkanWindow {
 
     RDP::GfxBackend* m_rdpGfxBackend;
 };
+
+namespace {
+auto requestWindowUpdate(void* userData) -> void {
+    const auto window = *static_cast<QPointer<VkWindow>*>(userData);
+    if (!window) {
+        return;
+    }
+    QMetaObject::invokeMethod(
+        window.data(),
+        [window]() {
+            if (window) {
+                window->requestUpdate();
+            }
+        },
+        Qt::QueuedConnection);
+}
+} // namespace
 
 auto VkWindow::createRenderer() -> QVulkanWindowRenderer* {
     auto vkBackend = dynamic_cast<RDP::VulkanBackend*>(m_rdpGfxBackend);
@@ -74,7 +93,10 @@ auto Application::quit() -> void {
 }
 
 Window::Window(QVulkanInstance* vkInst, RDP::GfxBackend* rdpGfxBackend)
-    : m_vkInst(vkInst), m_rdpGfxBackend(rdpGfxBackend), m_vkWindow(new VkWindow()) {
+        : m_vkInst(vkInst),
+            m_rdpGfxBackend(rdpGfxBackend),
+            m_vkWindow(new VkWindow()),
+            m_frameCallbackWindow(new QPointer<VkWindow>(m_vkWindow)) {
 
     m_vkWindow->QWindow::setFlags(Qt::Window | Qt::WindowTitleHint | Qt::WindowSystemMenuHint |
                                   Qt::WindowMinimizeButtonHint | Qt::WindowMaximizeButtonHint | Qt::WindowCloseButtonHint);
@@ -107,9 +129,12 @@ Window::Window(QVulkanInstance* vkInst, RDP::GfxBackend* rdpGfxBackend)
         features2.pNext                     = &features13;
     });
     m_vkWindow->m_rdpGfxBackend = m_rdpGfxBackend;
+    static_cast<RDP::VulkanBackend*>(m_rdpGfxBackend)->setFrameCompleteCallback(requestWindowUpdate, m_frameCallbackWindow);
 }
 
 Window::~Window() {
+    static_cast<RDP::VulkanBackend*>(m_rdpGfxBackend)->setFrameCompleteCallback(nullptr, nullptr);
+    delete static_cast<QPointer<VkWindow>*>(m_frameCallbackWindow);
     m_vkWindow->setVulkanInstance(nullptr);
     delete m_vkWindow;
 }

@@ -20,6 +20,8 @@ import Memory;
 import MemoryTypes;
 import Util;
 
+constexpr auto MIN_RSP_CYCLES_BEFORE_VI_INTERRUPT = 1'000'000uz;
+
 namespace CycleRatios { // how many times to tick each component per main loop iteration
 constexpr auto CPU      = 3uz;
 constexpr auto RSP      = 2uz;
@@ -209,8 +211,12 @@ constexpr auto Emulator::loadRom(std::filesystem::path path) -> void {
 }
 
 constexpr auto Emulator::runCycle() -> void {
+    static auto rspCycles = 0uz;
     try {
-        processViInterrupt();
+        if (rspCycles >= MIN_RSP_CYCLES_BEFORE_VI_INTERRUPT) {
+            processViInterrupt();
+            rspCycles = 0uz;
+        }
 
         for (auto _ : std::views::iota(0uz, CycleRatios::CPU)) {
             m_cpu->runCpuInstruction();
@@ -226,6 +232,7 @@ constexpr auto Emulator::runCycle() -> void {
             m_rsp->runRspInstruction();
             m_rdp->runRdpCommand();
         }
+        rspCycles += CycleRatios::RSP;
     } catch (const Util::Error& e) {
         std::println("A fatal exception occurred @\n"
                      "    RDP sync: {}\n"

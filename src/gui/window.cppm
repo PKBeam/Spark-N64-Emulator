@@ -26,6 +26,7 @@ class Window {
     QVulkanInstance* m_vkInst;
     RDP::GfxBackend* m_rdpGfxBackend;
     VkWindow*        m_vkWindow;
+    void*            m_frameCallbackWindow;
 };
 
 class Application {

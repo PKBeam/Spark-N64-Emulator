@@ -96,6 +96,9 @@ class VulkanBackend : public GfxBackend {
     auto completeRenderFrame() -> void override;
     auto getRenderOutput() -> RenderOutput;
 
+    using FrameCompleteCallback = void (*)(void*);
+    auto setFrameCompleteCallback(FrameCompleteCallback callback, void* userData) -> void;
+
     auto queueMutex() -> std::mutex& {
         return m_queueMutex;
     }
@@ -118,6 +121,12 @@ class VulkanBackend : public GfxBackend {
     VkFence         m_renderFence   = VK_NULL_HANDLE;
     std::mutex      m_resourceMutex;
     std::mutex      m_queueMutex; // todo find a better home for this
+    std::mutex      m_callbackMutex;
+
+    FrameCompleteCallback m_frameCompleteCallback = nullptr;
+    void*                 m_frameCompleteUserData  = nullptr;
+
+    auto notifyFrameComplete() -> void;
 
     VkBuffer       m_vertexBuffer       = VK_NULL_HANDLE;
     VkDeviceMemory m_vertexBufferMem    = VK_NULL_HANDLE;

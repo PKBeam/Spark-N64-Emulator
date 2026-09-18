@@ -896,7 +896,7 @@ auto VulkanBackend::createPipeline() -> void {
         .sType                            = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_CONSERVATIVE_STATE_CREATE_INFO_EXT,
         .pNext                            = nullptr,
         .flags                            = 0,
-        .conservativeRasterizationMode    = VK_CONSERVATIVE_RASTERIZATION_MODE_OVERESTIMATE_EXT,
+        .conservativeRasterizationMode    = VK_CONSERVATIVE_RASTERIZATION_MODE_DISABLED_EXT,
         .extraPrimitiveOverestimationSize = 0.0f,
     };
 
@@ -1237,20 +1237,42 @@ auto VulkanBackend::startRenderPass(RenderOptions options) -> void {
 }
 
 auto VulkanBackend::completeRenderFrame() -> void {
-    auto lock = std::lock_guard<std::mutex>(m_resourceMutex);
-    if (!m_initialized || !m_currentRenderPass.active) {
-        return;
+    {
+        auto lock = std::lock_guard<std::mutex>(m_resourceMutex);
+        if (!m_initialized || !m_currentRenderPass.active) {
+            return;
+        }
+
+        m_renderTargetReadIndex.store(m_renderTargetWriteIndex, std::memory_order_release);
+        m_renderTargetWriteIndex   = (m_renderTargetWriteIndex + 1) % m_renderTargets.size();
+        m_currentRenderPass.active = false;
+
+        // if (!m_renderedAtLeastOnce) {
+        //     auto lock = std::lock_guard<std::mutex>(m_queueMutex);
+        //     dumpToFile();
+        // }
+        m_renderedAtLeastOnce = true;
     }
+    notifyFrameComplete();
+}
 
-    m_renderTargetReadIndex.store(m_renderTargetWriteIndex, std::memory_order_release);
-    m_renderTargetWriteIndex   = (m_renderTargetWriteIndex + 1) % m_renderTargets.size();
-    m_currentRenderPass.active = false;
+auto VulkanBackend::setFrameCompleteCallback(FrameCompleteCallback callback, void* userData) -> void {
+    auto lock                 = std::lock_guard<std::mutex>(m_callbackMutex);
+    m_frameCompleteCallback   = callback;
+    m_frameCompleteUserData   = userData;
+}
 
-    // if (!m_renderedAtLeastOnce) {
-    //     auto lock = std::lock_guard<std::mutex>(m_queueMutex);
-    //     dumpToFile();
-    // }
-    m_renderedAtLeastOnce = true;
+auto VulkanBackend::notifyFrameComplete() -> void {
+    auto callback = FrameCompleteCallback{};
+    auto userData = static_cast<void*>(nullptr);
+    {
+        auto lock = std::lock_guard<std::mutex>(m_callbackMutex);
+        callback  = m_frameCompleteCallback;
+        userData  = m_frameCompleteUserData;
+    }
+    if (callback) {
+        callback(userData);
+    }
 }
 
 auto VulkanBackend::dumpToFile() -> void {
@@ -1485,13 +1507,8 @@ auto VulkanBackend::updateTile(std::size_t      index,
             const auto dst      = m_textureMemory.data() + y * rowBytes;
             const auto src      = texelData + y * params.stride;
             std::memcpy(dst, src, rowBytes);
-            if (std::endian::native == std::endian::little && native->bytesPerTexel == 2) {
+            if (std::endian::native == std::endian::little && params.format == TextureFormat::RGBA16) {
                 const auto texels = reinterpret_cast<uint16_t*>(dst);
-                for (const auto x : std::views::iota(0u, params.width)) {
-                    texels[x] = std::byteswap(texels[x]);
-                }
-            } else if (std::endian::native == std::endian::little && native->bytesPerTexel == 4) {
-                const auto texels = reinterpret_cast<uint32_t*>(dst);
                 for (const auto x : std::views::iota(0u, params.width)) {
                     texels[x] = std::byteswap(texels[x]);
                 }

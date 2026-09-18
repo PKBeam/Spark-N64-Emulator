@@ -304,7 +304,6 @@ auto VulkanRenderer::startNextFrame() -> void {
             auto lock = std::lock_guard<std::mutex>(m_rdpBackend->queueMutex());
             m_window->frameReady();
         }
-        m_window->requestUpdate();
         return;
     }
 
@@ -454,7 +453,6 @@ auto VulkanRenderer::startNextFrame() -> void {
         auto lock = std::lock_guard<std::mutex>(m_rdpBackend->queueMutex());
         m_window->frameReady();
     }
-    m_window->requestUpdate();
 }
 
 auto VulkanRenderer::renderNothing(VkImage swapImage, VkImageView swapView) -> void {
