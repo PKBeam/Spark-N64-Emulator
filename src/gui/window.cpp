@@ -90,15 +90,20 @@ Window::Window(QVulkanInstance* vkInst, RDP::GfxBackend* rdpGfxBackend)
     scalarBlockLayoutFeatures.sType                 = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SCALAR_BLOCK_LAYOUT_FEATURES;
     scalarBlockLayoutFeatures.scalarBlockLayout     = VK_TRUE;
 
-    constinit static auto storage8BitFeatures = VkPhysicalDevice8BitStorageFeatures{};
-    storage8BitFeatures.sType                       = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_8BIT_STORAGE_FEATURES;
+    constinit static auto storage8BitFeatures             = VkPhysicalDevice8BitStorageFeatures{};
+    storage8BitFeatures.sType                             = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_8BIT_STORAGE_FEATURES;
     storage8BitFeatures.uniformAndStorageBuffer8BitAccess = VK_TRUE;
 
+    constinit static auto extendedDynamicState2Features = VkPhysicalDeviceExtendedDynamicState2FeaturesEXT{};
+    extendedDynamicState2Features.sType                 = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_2_FEATURES_EXT;
+    extendedDynamicState2Features.extendedDynamicState2 = VK_TRUE;
+
     m_vkWindow->setEnabledFeaturesModifier([this](VkPhysicalDeviceFeatures2& features2) {
-        scalarBlockLayoutFeatures.pNext = features2.pNext;
-        storage8BitFeatures.pNext       = &scalarBlockLayoutFeatures;
-        features13.pNext                = &storage8BitFeatures;
-        features2.pNext  = &features13;
+        scalarBlockLayoutFeatures.pNext     = features2.pNext;
+        storage8BitFeatures.pNext           = &scalarBlockLayoutFeatures;
+        extendedDynamicState2Features.pNext = &storage8BitFeatures;
+        features13.pNext                    = &extendedDynamicState2Features;
+        features2.pNext                     = &features13;
     });
     m_vkWindow->m_rdpGfxBackend = m_rdpGfxBackend;
 }

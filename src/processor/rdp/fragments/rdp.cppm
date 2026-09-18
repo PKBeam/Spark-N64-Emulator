@@ -122,8 +122,10 @@ auto RDP::flushBackend() -> void {
         const auto& tile = m_tiles[tileIndex];
         m_gfxBackend->updateTile(
             tileIndex,
+            tile.params(),
             m_textureMemory + tile.tmemAddress,
-            tile.params());
+            m_mode.tlutType ? TextureFormat::IA16 : TextureFormat::RGBA16,
+            m_textureMemory + 0x800);
         IF_LOG_ENABLED(m_logger) {
             m_logger->log<Level::MED, Sys::RDP>(
                 std::tuple{"op", "flushTile"},
@@ -134,7 +136,10 @@ auto RDP::flushBackend() -> void {
                 std::tuple{"format", "{}", tile.format});
         }
     }
-    m_gfxBackend->startRenderPass();
+    m_gfxBackend->startRenderPass(RenderOptions{
+        .depthTestEnable  = m_mode.zCompareEn,
+        .depthWriteEnable = m_mode.zUpdateEn,
+    });
     m_tileUsedThisDraw.reset();
 }
 
@@ -331,9 +336,10 @@ auto RDP::runRdpCommand() -> void {
 
                 m_tiles[cmd.index] = Tile{
                     .format      = {cmd.format, cmd.size},
+                    .extent      = {Util::Fxp_0, Util::Fxp_0, Util::Fxp_0, Util::Fxp_0},
                     .lineSize    = cmd.line * sizeof(uint64_t),
                     .tmemAddress = cmd.address * sizeof(uint64_t),
-                    .extent      = {Util::Fxp_0, Util::Fxp_0, Util::Fxp_0, Util::Fxp_0},
+                    .subPalette  = cmd.palette,
                     .s =
                         {
                             .shift  = static_cast<int8_t>(cmd.shiftS > 10 ? 16 - cmd.shiftS : -static_cast<int>(cmd.shiftS)),
@@ -481,7 +487,7 @@ auto RDP::runRdpCommand() -> void {
             }
             case Command::LOAD_TLUT: {
                 const auto     cmd       = makeCommand<Commands::LoadTLUT, 1>(cmds);
-                const auto     width     = cmd.lowerRightS + 1;
+                const auto     width     = ((cmd.lowerRightS >> 2) - (cmd.upperLeftS >> 2)) + 1;
                 constexpr auto texelSize = 2uz; // TLUTs are always 16-bit
 
                 const auto tmemBaseAddr  = m_tiles[cmd.tile].tmemAddress;
@@ -509,7 +515,7 @@ auto RDP::runRdpCommand() -> void {
                         m_logger->log<Level::LOW, Sys::RDP>(
                             std::tuple{"op", "w"},
                             std::tuple{"addr", HEXFMT12, tmemAddr},
-                            std::tuple{"value", HEXFMT16, texel});
+                            std::tuple{"value", HEXFMT16, Util::byteswapIfLittleEndian(texel)});
                     }
                 }
                 m_tiles[cmd.tile].extent = {Util::UFixedPoint<10, 2>::fromBits(cmd.upperLeftS),

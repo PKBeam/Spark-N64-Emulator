@@ -1,7 +1,7 @@
 #include <ranges>
 #include <cstring>
 #include <optional>
-#include <print>
+#include <bit>
 #include <span>
 #include <vector>
 #include <util/vkUtil.hpp>
@@ -53,65 +53,73 @@ static auto nativeFormatFor(TextureFormat format) -> std::optional<VulkanTexture
 
 // resolves palette (CI4/CI8), sub-byte-packed (IA4/I4), and YUV16 formats to plain RGBA8
 // on the CPU so the result can still be sampled (and bilinear-filtered) natively
-static auto decodeToRgba8(std::span<const std::byte> data,
-                          TextureFormat              format,
-                          uint32_t                   width,
-                          uint32_t                   height,
-                          uint32_t                   stride) -> std::vector<std::byte> {
-    const auto decodeRgba16 = [](uint16_t texel) -> std::array<uint8_t, 4> {
-        const auto r = static_cast<uint8_t>((texel >> 11) & 0x1F);
-        const auto g = static_cast<uint8_t>((texel >> 6) & 0x1F);
-        const auto b = static_cast<uint8_t>((texel >> 1) & 0x1F);
-        const auto a = static_cast<uint8_t>(texel & 0x1);
-        return {
-            static_cast<uint8_t>(r << 3 | r >> 2),
-            static_cast<uint8_t>(g << 3 | g >> 2),
-            static_cast<uint8_t>(b << 3 | b >> 2),
-            static_cast<uint8_t>(a * 255),
-        };
-    };
-    const auto readByte   = [&](uint32_t addr) { return std::to_integer<uint8_t>(data[addr]); };
-    const auto readNibble = [&](uint32_t x, uint32_t y) -> uint8_t {
-        const auto byte = readByte(y * stride + x / 2);
+static auto decodeToRGBA32(const TileParams& params,
+                           const std::byte*  texelData,
+                           TextureFormat     paletteFormat,
+                           const std::byte*  paletteData) -> std::vector<std::byte> {
+    const auto readUint4 = [&](const std::byte* data, uint32_t x, uint32_t y) -> uint8_t {
+        const auto byte = static_cast<uint8_t>(data[y * params.stride + x / 2]);
         return (x % 2 == 0) ? (byte >> 4) : (byte & 0xF);
     };
+    const auto readUint8 = [&](const std::byte* data, uint32_t x, uint32_t y) -> uint8_t {
+        return static_cast<uint8_t>(data[y * params.stride + x]);
+    };
     const auto lookupPalette = [&](uint8_t index) -> std::array<uint8_t, 4> {
-        return {255, 255, 255, 255};
-        // const auto entry = paletteAddress + index * 2;
-        // const auto texel = static_cast<uint16_t>(readByte(entry) << 8 | readByte(entry + 1));
-        // return decodeRgba16(texel);
+        auto texel = (reinterpret_cast<const uint16_t*>(paletteData))[index * 4];
+        if (std::endian::native == std::endian::little) {
+            texel = std::byteswap(texel);
+        }
+
+        if (paletteFormat == TextureFormat::RGBA16) {
+            const auto r = static_cast<uint8_t>((texel >> 11) & 0x1F);
+            const auto g = static_cast<uint8_t>((texel >> 6) & 0x1F);
+            const auto b = static_cast<uint8_t>((texel >> 1) & 0x1F);
+            const auto a = static_cast<uint8_t>(texel & 0x1);
+            return {
+                static_cast<uint8_t>(r << 3 | r >> 2),
+                static_cast<uint8_t>(g << 3 | g >> 2),
+                static_cast<uint8_t>(b << 3 | b >> 2),
+                static_cast<uint8_t>(a * 255),
+            };
+        } else if (paletteFormat == TextureFormat::IA16) {
+            const auto i = static_cast<uint8_t>(texel >> 8);
+            const auto a = static_cast<uint8_t>(texel & 0xFF);
+            return {i, i, i, a};
+        } else [[unlikely]] {
+            throw std::runtime_error("Unsupported palette format");
+        }
     };
 
     auto out = std::vector<std::byte>{};
-    out.reserve(static_cast<std::size_t>(width) * height * 4);
-    for (const auto y : std::views::iota(0u, height)) {
-        for (const auto x : std::views::iota(0u, width)) {
+    out.reserve(params.width * params.height * 4uz);
+    for (const auto y : std::views::iota(0u, params.height)) {
+        for (const auto x : std::views::iota(0u, params.width)) {
             auto rgba = std::array<uint8_t, 4>{0, 0, 0, 255};
-            switch (format) {
+            switch (params.format) {
                 case TextureFormat::CI4: {
-                    rgba = lookupPalette(readNibble(x, y));
+                    rgba = lookupPalette((params.subPalette << 4) | readUint4(texelData, x, y));
                     break;
                 }
                 case TextureFormat::CI8: {
-                    rgba = lookupPalette(readByte(y * stride + x));
+                    rgba = lookupPalette(readUint8(texelData, x, y));
                     break;
                 }
                 case TextureFormat::IA4: {
-                    const auto nibble    = readNibble(x, y);
-                    const auto intensity = static_cast<uint8_t>(((nibble >> 1) & 0x7) * 255 / 7);
-                    const auto alpha     = static_cast<uint8_t>((nibble & 0x1) * 255);
+                    const auto nibble    = readUint4(texelData, x, y);
+                    const auto intensity = static_cast<uint8_t>((nibble >> 1) * 255 / 7);
+                    const auto alpha     = static_cast<uint8_t>((nibble & 1) * 255);
                     rgba                 = {intensity, intensity, intensity, alpha};
                     break;
                 }
                 case TextureFormat::I4: {
-                    const auto nibble    = readNibble(x, y);
-                    const auto intensity = static_cast<uint8_t>(nibble * 17);
+                    const auto nibble    = readUint4(texelData, x, y);
+                    const auto intensity = static_cast<uint8_t>(nibble << 4);
                     rgba                 = {intensity, intensity, intensity, intensity};
                     break;
                 }
                 case TextureFormat::YUV16: {
-                    // simplified luma-only decode; proper YUV->RGB conversion is TODO
-                    const auto luma = readByte(y * stride + x * 2);
+                    // TODO proper YUV->RGB conversion
+                    const auto luma = readUint8(texelData, 2 * x, y);
                     rgba            = {luma, luma, luma, 255};
                     break;
                 }
@@ -962,6 +970,15 @@ auto VulkanBackend::createPipeline() -> void {
         .stencilAttachmentFormat = VK_FORMAT_UNDEFINED,
     };
 
+    const auto dynamicStates    = std::array<VkDynamicState, 1>{VK_DYNAMIC_STATE_DEPTH_WRITE_ENABLE_EXT};
+    const auto dynamicStateInfo = VkPipelineDynamicStateCreateInfo{
+        .sType             = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
+        .pNext             = nullptr,
+        .flags             = 0,
+        .dynamicStateCount = static_cast<uint32_t>(dynamicStates.size()),
+        .pDynamicStates    = dynamicStates.data(),
+    };
+
     const auto pipelineCreateInfo = VkGraphicsPipelineCreateInfo{
         .sType               = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
         .pNext               = &renderingCreateInfo,
@@ -992,7 +1009,7 @@ auto VulkanBackend::createPipeline() -> void {
             return &state;
         }(),
         .pColorBlendState   = &blendState,
-        .pDynamicState      = nullptr,
+        .pDynamicState      = &dynamicStateInfo,
         .layout             = m_pipelineLayout,
         .renderPass         = VK_NULL_HANDLE,
         .subpass            = 0,
@@ -1005,7 +1022,7 @@ auto VulkanBackend::createPipeline() -> void {
     vkDestroyShaderModule(m_vkDevice, fragShaderModule, nullptr);
 }
 
-auto VulkanBackend::startRenderPass() -> void {
+auto VulkanBackend::startRenderPass(RenderOptions options) -> void {
     auto lock = std::lock_guard<std::mutex>(m_resourceMutex);
     if (!m_initialized || m_currentRenderPass.vertexData.empty()) {
         return;
@@ -1143,7 +1160,11 @@ auto VulkanBackend::startRenderPass() -> void {
     auto offset = VkDeviceSize{0};
     vkCmdBindVertexBuffers(m_commandBuffer, 0, 1, &m_vertexBuffer, &offset);
     vkCmdPushConstants(m_commandBuffer, m_pipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(RdpRenderPassConstants), &m_currentRenderPass.pushConstants);
+    vkCmdSetDepthTestEnable(m_commandBuffer, options.depthTestEnable ? VK_TRUE : VK_FALSE);
+    vkCmdSetDepthWriteEnable(m_commandBuffer, options.depthWriteEnable ? VK_TRUE : VK_FALSE);
     vkCmdDraw(m_commandBuffer, m_currentRenderPass.vertexData.size() / 10, 1, 0, 0);
+    vkCmdSetDepthTestEnable(m_commandBuffer, VK_TRUE);
+    vkCmdSetDepthWriteEnable(m_commandBuffer, VK_TRUE);
     vkCmdEndRendering(m_commandBuffer);
 
     const auto postBarrier = VkImageMemoryBarrier2{
@@ -1422,8 +1443,10 @@ auto VulkanBackend::getRenderOutput() -> RenderOutput {
 }
 
 auto VulkanBackend::updateTile(std::size_t      index,
-                               const std::byte* data,
-                               TileParams       params) -> void {
+                               TileParams       params,
+                               const std::byte* texelData,
+                               TextureFormat    paletteFormat,
+                               const std::byte* paletteData) -> void {
     auto lock = std::lock_guard<std::mutex>(m_resourceMutex);
     if (!m_initialized || index >= NUM_TILES || params.width == 0 || params.height == 0) {
         return;
@@ -1453,11 +1476,14 @@ auto VulkanBackend::updateTile(std::size_t      index,
         for (const auto y : std::views::iota(0u, params.height)) {
             const auto rowBytes = static_cast<std::size_t>(params.width) * native->bytesPerTexel;
             const auto dst      = pixels.data() + y * rowBytes;
-            const auto src      = data + y * params.stride;
+            const auto src      = texelData + y * params.stride;
             std::memcpy(dst, src, rowBytes);
         }
     } else {
-        pixels = decodeToRgba8(std::span(data, params.stride * params.height), params.format, params.width, params.height, params.stride);
+        pixels = decodeToRGBA32(params,
+                                texelData,
+                                paletteFormat,
+                                paletteData);
     }
     vkDestroySampler(m_vkDevice, m_textures[index].sampler, nullptr);
     m_textures[index].sampler = VK_NULL_HANDLE;

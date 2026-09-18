@@ -67,9 +67,10 @@ struct Tile {
         }
     };
     TileFormat           format;
+    Extent               extent;
     std::size_t          lineSize;
     std::size_t          tmemAddress;
-    Extent               extent;
+    uint8_t              subPalette;
     ::RDP::SamplerParams s;
     ::RDP::SamplerParams t;
 
@@ -81,12 +82,13 @@ struct Tile {
 
     constexpr auto params() const -> ::RDP::TileParams {
         return {
-            .width  = static_cast<uint32_t>(extent.width()),
-            .height = static_cast<uint32_t>(extent.height()),
-            .stride = static_cast<uint32_t>(correctedLineSize()),
-            .format = textureFormat(),
-            .s      = s,
-            .t      = t,
+            .width      = static_cast<uint32_t>(extent.width()),
+            .height     = static_cast<uint32_t>(extent.height()),
+            .stride     = static_cast<uint32_t>(correctedLineSize()),
+            .format     = textureFormat(),
+            .s          = s,
+            .t          = t,
+            .subPalette = subPalette,
         };
     }
 

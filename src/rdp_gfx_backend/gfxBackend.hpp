@@ -34,6 +34,7 @@ struct TileParams {
     TextureFormat format;
     SamplerParams s;
     SamplerParams t;
+    uint8_t       subPalette;
 };
 
 struct CombineInputs {
@@ -91,6 +92,11 @@ struct CombineInputs {
     Select  alpha[2];
 };
 
+struct RenderOptions {
+    bool depthTestEnable  = true;
+    bool depthWriteEnable = true;
+};
+
 class GfxBackend {
   public:
     virtual auto completeRenderFrame() -> void = 0;
@@ -98,15 +104,17 @@ class GfxBackend {
     // caller's TMEM (tmemBytes must point at the full, currently-live TMEM contents);
     // paletteAddress is only used for the CI4/CI8 formats
     virtual auto updateTile(std::size_t      index,
-                            const std::byte* data,
-                            TileParams       params) -> void = 0;
+                            TileParams       params,
+                            const std::byte* texelData,
+                            TextureFormat    paletteFormat,
+                            const std::byte* paletteData = nullptr) -> void = 0;
     // these apply per-render pass
     virtual auto addTriangle(uint32_t         tile,
                              const std::byte* vtxBytes,
                              const std::byte* shadeBytes,
                              const std::byte* uvBytes) -> void         = 0;
     virtual auto setCombineInputs(const CombineInputs& inputs) -> void = 0;
-    virtual auto startRenderPass() -> void                             = 0;
+    virtual auto startRenderPass(RenderOptions options) -> void        = 0;
 
     virtual ~GfxBackend() = default;
 };

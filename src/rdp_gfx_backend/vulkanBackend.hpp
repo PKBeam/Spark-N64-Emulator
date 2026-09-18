@@ -83,14 +83,16 @@ class VulkanBackend : public GfxBackend {
     auto createTileParamsBuffer() -> void;
 
     auto updateTile(std::size_t      index,
-                    const std::byte* data,
-                    TileParams       params) -> void override;
+                    TileParams       params,
+                    const std::byte* texelData,
+                    TextureFormat    paletteFormat,
+                    const std::byte* paletteData) -> void override;
     auto addTriangle(uint32_t         tile,
                      const std::byte* vtxBytes,
                      const std::byte* shadeBytes = nullptr,
                      const std::byte* uvBytes    = nullptr) -> void override;
     auto setCombineInputs(const CombineInputs& inputs) -> void override;
-    auto startRenderPass() -> void override;
+    auto startRenderPass(RenderOptions options) -> void override;
     auto completeRenderFrame() -> void override;
     auto getRenderOutput() -> RenderOutput;
 
