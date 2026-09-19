@@ -19,3 +19,14 @@ add_custom_command(
         ${CMAKE_SOURCE_DIR}/data $<TARGET_FILE_DIR:n64emu>/data
     COMMENT "Copying data directory to build output"
 )
+
+set(SHADER_SOURCES "$<TARGET_FILE_DIR:gui>/../window.vert.spv" "$<TARGET_FILE_DIR:gui>/../window.frag.spv" "$<TARGET_FILE_DIR:rdp_gfx_backend>/../rdp.vert.spv" "$<TARGET_FILE_DIR:rdp_gfx_backend>/../rdp.frag.spv")
+
+foreach(SHADER_SOURCE IN LISTS SHADER_SOURCES)
+    add_custom_command(
+        TARGET n64emu POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy
+            ${SHADER_SOURCE} $<TARGET_FILE_DIR:n64emu>/
+        COMMENT "Copying shader: [${SHADER_SOURCE}] to build output"
+    )
+endforeach()

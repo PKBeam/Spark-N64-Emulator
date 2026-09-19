@@ -26,6 +26,8 @@ endif()
 
 project(n64emu LANGUAGES CXX)
 
+set(CMAKE_CONFIGURATION_TYPES "Debug;Release;RelWithDebInfo;Profiling" CACHE STRING "Supported build types" FORCE)
+
 set(CXX_COMPILE_OPTIONS
     -freflection
     -Wall
@@ -44,44 +46,37 @@ set(CXX_COMPILE_OPTIONS
     -fvar-tracking-assignments
 )
 
-set(CXX_LINK_OPTIONS)
+set(CXX_LINK_OPTIONS
+    "-Wl,--allow-multiple-definition") # 'import std;' causes issues with multiple definitions with GCC
 
 set(CMAKE_CXX_STANDARD 26)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CXX_SCAN_FOR_MODULES ON)
 set(CXX_MODULE_STD ON)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-set(CMAKE_CONFIGURATION_TYPES "Debug;Release;RelWithDebInfo;MinSizeRel" CACHE STRING "Supported build types" FORCE)
-if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
-    set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
-endif()
+set(CMAKE_CONFIGURATION_TYPES "Debug;Release;RelWithDebInfo;Profiling" CACHE STRING "Supported build types" FORCE)
+set(CMAKE_CXX_FLAGS_PROFILING "${CMAKE_CXX_FLAGS_RELWITHDEBINFO} -pg -fno-omit-frame-pointer")
 
 # workaround to allow std::meta in the std module 
 set(CMAKE_CXX_FLAGS "-freflection ${CMAKE_CXX_FLAGS}")
 
-# TODO cross platform compatibility
-set(CMAKE_CXX_COMPILER "/usr/bin/g++-16")
-
 # Add sanitisers to Debug builds
-if(CMAKE_BUILD_TYPE)
-    string(TOUPPER ${CMAKE_BUILD_TYPE} BUILD_TYPE_UPPER)
-    if(BUILD_TYPE_UPPER STREQUAL "DEBUG")
-        add_compile_options(-fsanitize=address -fsanitize=undefined -fno-omit-frame-pointer)
-        add_link_options(-fsanitize=address -fsanitize=undefined)
-    endif()
+if(UNIX)
+add_compile_options(
+    "$<$<CONFIG:Debug>:-fsanitize=address;-fsanitize=undefined;-fno-omit-frame-pointer>"
+)
+add_link_options(
+    "$<$<CONFIG:Debug>:-fsanitize=address;-fsanitize=undefined>"
+)
 endif()
+add_compile_definitions(
+    "$<$<CONFIG:Debug>:ENABLE_LOGS;ENABLE_VK_VALIDATION;DETERMINISTIC_VI_INTERRUPTS>"
+    "$<$<CONFIG:RelWithDebInfo>:ENABLE_LOGS;ENABLE_VK_VALIDATION>"
+)
 
 find_package(Vulkan REQUIRED COMPONENTS glslc)
 find_package(Qt6 REQUIRED COMPONENTS Gui)
 
-if(ENABLE_LOGS)
-    add_compile_definitions(ENABLE_LOGS)
-endif()
-if(DETERMINISTIC_VI_INTERRUPTS)
-    add_compile_definitions(DETERMINISTIC_VI_INTERRUPTS)
-endif()
-if(ENABLE_VK_VALIDATION)
-    add_compile_definitions(ENABLE_VK_VALIDATION)
-endif()
 add_subdirectory(src)

@@ -14,3 +14,4 @@ rom_initial_1mib.txt
 *.a
 *.so
 *.exe
+.qt/

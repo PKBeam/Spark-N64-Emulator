@@ -199,7 +199,11 @@ int main(int argc, char* argv[]) {
     auto emulator    = Emulator(config);
     auto app         = GUI::Application(argc, argv, emulator.getRdpGfxBackend(), g_shouldTerminate);
     g_emulatorThread = std::jthread([&emulator](std::stop_token stopToken) {
+#if defined(__linux__)
         emulator.loadRom("/home/pkbeam/Legend of Zelda, The - Ocarina of Time (USA).z64");
+#elif defined(_WIN32)
+        emulator.loadRom("D:\\Emulation\\Nintendo 64\\Legend of Zelda, The - Ocarina of Time (USA).z64");
+#endif
         while (!stopToken.stop_requested()) {
             emulator.runCycle();
         }
@@ -214,8 +218,9 @@ int main(int argc, char* argv[]) {
 #endif
     std::signal(Util::SigInt, signalHandler);
     std::signal(Util::SigTerm, signalHandler);
+#if defined(__linux__)
     std::signal(Util::SigTstp, signalHandler);
-
+#endif
     auto code = app.run();
     g_emulatorThread.request_stop();
     g_emulatorThread.join();

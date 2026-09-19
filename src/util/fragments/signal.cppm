@@ -10,6 +10,8 @@ enum Signal {
     SigInt  = SIGINT,
     SigSegv = SIGSEGV,
     SigTerm = SIGTERM,
+#if defined(__linux__)
     SigTstp = SIGTSTP
+#endif
 };
 } // namespace Util

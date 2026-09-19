@@ -1,5 +1,5 @@
 #!/usr/bin/bash
-cd ../build/profiling/src
+cd ../build/linux/src/Profiling
 QT_QPA_PLATFORM=xcb sudo perf record --call-graph dwarf ./n64emu --num-rdp-syncs=500
 sudo perf script > out.perf
 sudo perf report --stdio > perfreport.txt

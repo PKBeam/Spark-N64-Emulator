@@ -2,72 +2,79 @@
     "version": 8,
     "configurePresets": [
         {
-            "name": "debug",
-            "displayName": "Debug",
-            "generator": "Ninja",
-            "binaryDir": "${sourceDir}/build/debug",
+            "name": "base",
+            "hidden": true,
+            "generator": "Ninja Multi-Config"
+        },
+        {
+            "name": "linux",
+            "displayName": "Linux",
+            "generator": "Ninja Multi-Config",
+            "binaryDir": "${sourceDir}/build/linux",
             "cacheVariables": {
-                "CMAKE_CXX_COMPILER": "/usr/bin/g++-16",
-                "CMAKE_BUILD_TYPE": "Debug",
-                "CMAKE_EXPORT_COMPILE_COMMANDS": "OFF",
-                "DETERMINISTIC_VI_INTERRUPTS": "ON",
-                "ENABLE_LOGS": "ON",
-                "ENABLE_VK_VALIDATION": "ON"
+                "CMAKE_CXX_COMPILER": "/usr/bin/g++-16"
             }
         },
         {
-            "name": "release",
-            "displayName": "Release",
-            "generator": "Ninja",
-            "binaryDir": "${sourceDir}/build/release",
+            "name": "windows",
+            "displayName": "Windows",
+            "generator": "Ninja Multi-Config",
+            "binaryDir": "${sourceDir}/build/windows",
             "cacheVariables": {
-                "CMAKE_CXX_COMPILER": "/usr/bin/g++-16",
-                "CMAKE_BUILD_TYPE": "Release",
-                "CMAKE_EXPORT_COMPILE_COMMANDS": "OFF"
-            }
-        },
-        {
-            "name": "reldeb",
-            "displayName": "RelWithDebInfo",
-            "generator": "Ninja",
-            "binaryDir": "${sourceDir}/build/reldeb",
-            "cacheVariables": {
-                "CMAKE_CXX_COMPILER": "/usr/bin/g++-16",
-                "CMAKE_BUILD_TYPE": "RelWithDebInfo",
-                "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
-                "DETERMINISTIC_VI_INTERRUPTS": "ON",
-                "ENABLE_LOGS": "ON",
-                "ENABLE_VK_VALIDATION": "ON"
-            }
-        },
-        {
-            "name": "profiling",
-            "displayName": "Profiling",
-            "generator": "Ninja",
-            "binaryDir": "${sourceDir}/build/profiling",
-            "cacheVariables": {
-                "CMAKE_CXX_COMPILER": "/usr/bin/g++-16",
-                "CMAKE_BUILD_TYPE": "RelWithDebInfo",
-                "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+                "CMAKE_CXX_COMPILER": "C:\\msys64\\ucrt64\\bin\\g++.exe",
+                "CMAKE_PREFIX_PATH": "C:\\msys64\\ucrt64",
+                "CMAKE_MAKE_PROGRAM": "C:\\msys64\\ucrt64\\bin\\ninja.exe"
             }
         }
     ],
     "buildPresets": [
         {
-            "name": "debug",
-            "configurePreset": "debug"
+            "name": "Debug-Windows",
+            "displayName": "Debug",
+            "configuration": "Debug",
+            "configurePreset": "windows"
         },
         {
-            "name": "release",
-            "configurePreset": "release"
+            "name": "Release-Windows",
+            "displayName": "Release",
+            "configuration": "Release",
+            "configurePreset": "windows"
         },
         {
-            "name": "reldeb",
-            "configurePreset": "reldeb"
+            "name": "RelWithDebInfo-Windows",
+            "displayName": "RelWithDebInfo",
+            "configuration": "RelWithDebInfo",
+            "configurePreset": "windows"
         },
         {
-            "name": "profiling",
-            "configurePreset": "profiling"
+            "name": "Profiling-Windows",
+            "displayName": "Profiling",
+            "configuration": "Profiling",
+            "configurePreset": "windows"
+        },
+        {
+            "name": "Debug-Linux",
+            "displayName": "Debug",
+            "configuration": "Debug",
+            "configurePreset": "linux"
+        },
+        {
+            "name": "Release-Linux",
+            "displayName": "Release",
+            "configuration": "Release",
+            "configurePreset": "linux"
+        },
+        {
+            "name": "RelWithDebInfo-Linux",
+            "displayName": "RelWithDebInfo",
+            "configuration": "RelWithDebInfo",
+            "configurePreset": "linux"
+        },
+        {
+            "name": "Profiling-Linux",
+            "displayName": "Profiling",
+            "configuration": "Profiling",
+            "configurePreset": "linux"
         }
     ]
 }

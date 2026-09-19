@@ -1,5 +1,6 @@
 module;
 #include <util/defines.hpp>
+#include <util/file.hpp>
 export module Rom:File;
 
 import std;

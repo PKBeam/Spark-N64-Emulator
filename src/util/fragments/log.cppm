@@ -1,7 +1,7 @@
 module;
-import std;
 export module Util:Log;
 
+import std;
 import :Types;
 
 using namespace std::string_view_literals;
@@ -72,7 +72,7 @@ class Logger {
     auto setFilter(std::vector<Sys> sys) -> void;
 
     template <typename... Args>
-    auto print(const char* fmt, Args... obj) -> void;
+    auto print(std::format_string<Args...> fmt, Args... obj) -> void;
 
     template <Logger::Level Level, Logger::Sys Sys = Logger::Sys::NONE, Tuple_c... Args>
     auto log(Args... args) -> void;
@@ -82,7 +82,7 @@ class Logger {
     // auto log(T obj) -> void;
 
     template <Logger::Level Level, Logger::Severity Sev, Logger::Sys Sys = Logger::Sys::NONE, typename... Args>
-    auto log(const char* fmt, Args... obj) -> void;
+    auto log(std::format_string<Args...> fmt, Args... obj) -> void;
 
     auto flush() -> void;
 
@@ -136,11 +136,11 @@ auto Logger::flush() -> void {
 }
 
 template <typename... Args>
-auto Logger::print(const char* fmt, Args... args) -> void {
+auto Logger::print(std::format_string<Args...> fmt, Args... args) -> void {
     if (!m_enabled) {
         return;
     }
-    std::println(m_file, std::runtime_format(fmt), args...);
+    std::println(m_file, fmt, std::forward<Args>(args)...);
 }
 
 template <Logger::Level Level, Logger::Sys Sys, Tuple_c... Args>
@@ -180,11 +180,11 @@ auto Logger::log(Args... args) -> void {
 }
 
 template <Logger::Level Level, Logger::Severity Sev, Logger::Sys Sys, typename... Args>
-auto Logger::log(const char* fmt, Args... args) -> void {
+auto Logger::log(std::format_string<Args...> fmt, Args... args) -> void {
     if (!m_enabled || Level < m_level || (!m_sys.empty() && !std::ranges::contains(m_sys, Sys))) {
         return;
     }
-    const auto str    = std::format(std::runtime_format(fmt), args...);
+    const auto str    = std::format(fmt, std::forward<Args>(args)...);
     const auto outStr = [&]() {
         if constexpr (Sys != Logger::Sys::NONE) {
             return std::format(
