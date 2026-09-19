@@ -1,10 +1,9 @@
 #pragma once
-#include <filesystem>
 #include <cstddef>
 
 namespace Util {
 
-auto memMapFile(std::filesystem::path path) -> std::byte*;
-auto memUnmapFile(std::filesystem::path path, std::byte* ptr) -> void;
+auto memMapFile(const char* path) -> std::byte*;
+auto memUnmapFile(const char* path, std::byte* ptr) -> void;
 
 } // namespace Util
