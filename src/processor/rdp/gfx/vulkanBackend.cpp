@@ -257,10 +257,10 @@ auto VulkanBackend::addTriangle(uint32_t         tile,
                 uvs ? uvs[i * 3 + 2] : 0,
 
                 // RGBA
-                shades ? shades[i * 3] : 0,
-                shades ? shades[i * 3 + 1] : 0,
-                shades ? shades[i * 3 + 2] : 0,
-                shades ? shades[i * 3 + 3] : 0,
+                shades ? shades[i * 4] : 0,
+                shades ? shades[i * 4 + 1] : 0,
+                shades ? shades[i * 4 + 2] : 0,
+                shades ? shades[i * 4 + 3] : 0,
             });
     }
 }
