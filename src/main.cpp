@@ -1,5 +1,5 @@
 #define sstr(s) std::define_static_string(s)
-#include <rdp_gfx_backend/gfxBackend.hpp>
+#include <processor/rdp/gfx/gfxBackend.hpp>
 
 import std;
 import Emulator;

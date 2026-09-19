@@ -8,9 +8,7 @@
 #include <QVulkanFunctions>
 #include <QFile>
 
-#include "vkUtil.hpp"
-
-#include <rdp_gfx_backend/vulkanBackend.hpp>
+#include <processor/rdp/gfx/vulkanBackend.hpp>
 
 namespace GUI {
 

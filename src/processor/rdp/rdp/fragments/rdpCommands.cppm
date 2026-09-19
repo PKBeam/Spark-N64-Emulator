@@ -1,6 +1,6 @@
 module;
 #include <util/defines.hpp>
-#include <rdp_gfx_backend/gfxBackend.hpp>
+#include <processor/rdp/gfx/gfxBackend.hpp>
 export module RDP:Commands;
 
 import std;

@@ -3,7 +3,6 @@ add_subdirectory(interfaces)
 add_subdirectory(memory)
 add_subdirectory(processor)
 add_subdirectory(rom)
-add_subdirectory(rdp_gfx_backend)
 add_subdirectory(gui)
 add_subdirectory(util)
 

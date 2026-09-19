@@ -1,6 +1,6 @@
 module;
 #include <atomic>
-#include <rdp_gfx_backend/gfxBackend.hpp>
+#include <processor/rdp/gfx/gfxBackend.hpp>
 export module Gui;
 
 extern "C++" { // Forward declarations for Qt types
