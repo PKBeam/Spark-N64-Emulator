@@ -15,12 +15,16 @@ target_include_directories(gui PUBLIC ${CMAKE_SOURCE_DIR}/src)
 target_link_libraries(gui PUBLIC rdp_gfx_backend util Vulkan::Vulkan Qt6::Gui)
 
 set(SHADER_SOURCES "window.vert" "window.frag")
+set(SHADER_OUTPUTS)
 foreach(SHADER_SOURCE IN LISTS SHADER_SOURCES)
-get_filename_component(SHADER_NAME ${CMAKE_CURRENT_SOURCE_DIR}/${SHADER_SOURCE} NAME_WE)
-  add_custom_target(gui_gfx_shaders_${SHADER_SOURCE} ALL
-    COMMAND Vulkan::glslc ${CMAKE_CURRENT_SOURCE_DIR}/${SHADER_SOURCE} -o ${CMAKE_CURRENT_BINARY_DIR}/../${SHADER_SOURCE}.spv  --target-env=vulkan1.4
+  set(SHADER_OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/../${SHADER_SOURCE}.spv")
+  add_custom_command(
+    OUTPUT "${SHADER_OUTPUT}"
+    COMMAND Vulkan::glslc ${CMAKE_CURRENT_SOURCE_DIR}/${SHADER_SOURCE} -o ${CMAKE_CURRENT_BINARY_DIR}/../${SHADER_SOURCE}.spv --target-env=vulkan1.4
     COMMENT "Compiling GLSL shader: [${SHADER_SOURCE}]"
-    SOURCES ${SHADER_SOURCE}
-    BYPRODUCTS "${CMAKE_CURRENT_BINARY_DIR}/../${SHADER_SOURCE}.spv"
+    DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/${SHADER_SOURCE}"
   )
+  list(APPEND SHADER_OUTPUTS "${SHADER_OUTPUT}")
 endforeach()
+add_custom_target(gui_gfx_shaders ALL DEPENDS ${SHADER_OUTPUTS})
+add_dependencies(gui gui_gfx_shaders)

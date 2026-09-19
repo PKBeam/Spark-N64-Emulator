@@ -119,7 +119,7 @@ void main() {
     combineInputs[8] = vec4(combineInputs[7].w);
     combineInputs[9] = unpackUnorm4x8(in_primitive);
     combineInputs[10] = vec4(combineInputs[9].w);
-    combineInputs[11] = vec4(0.5); // TODO in_shade / 256.0;
+    combineInputs[11] = in_shade / 256.0;
     combineInputs[12] = vec4(combineInputs[11].w);
     combineInputs[13] = unpackUnorm4x8(in_environment);
     combineInputs[14] = vec4(combineInputs[13].w);

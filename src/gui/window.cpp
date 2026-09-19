@@ -1,4 +1,6 @@
 module;
+// Must be included before any Qt Vulkan headers, which define VK_NO_PROTOTYPES and would otherwise hide the C API declarations.
+#include <vulkan/vulkan.h>
 #include <QCoreApplication>
 #include <QGuiApplication>
 #include <QLoggingCategory>
@@ -109,24 +111,21 @@ Window::Window(QVulkanInstance* vkInst, RDP::GfxBackend* rdpGfxBackend)
     features13.dynamicRendering      = VK_TRUE;
     features13.synchronization2      = VK_TRUE;
 
-    constinit static auto scalarBlockLayoutFeatures = VkPhysicalDeviceScalarBlockLayoutFeatures{};
-    scalarBlockLayoutFeatures.sType                 = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SCALAR_BLOCK_LAYOUT_FEATURES;
-    scalarBlockLayoutFeatures.scalarBlockLayout     = VK_TRUE;
-
-    constinit static auto storage8BitFeatures             = VkPhysicalDevice8BitStorageFeatures{};
-    storage8BitFeatures.sType                             = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_8BIT_STORAGE_FEATURES;
-    storage8BitFeatures.uniformAndStorageBuffer8BitAccess = VK_TRUE;
+    constinit static auto features12             = VkPhysicalDeviceVulkan12Features{};
+    features12.sType                             = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
+    features12.shaderInt8                        = VK_TRUE;
+    features12.uniformAndStorageBuffer8BitAccess = VK_TRUE;
+    features12.storagePushConstant8              = VK_TRUE;
+    features12.scalarBlockLayout                 = VK_TRUE;
 
     constinit static auto extendedDynamicState2Features = VkPhysicalDeviceExtendedDynamicState2FeaturesEXT{};
     extendedDynamicState2Features.sType                 = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_2_FEATURES_EXT;
     extendedDynamicState2Features.extendedDynamicState2 = VK_TRUE;
 
     m_vkWindow->setEnabledFeaturesModifier([this](VkPhysicalDeviceFeatures2& features2) {
-        scalarBlockLayoutFeatures.pNext     = features2.pNext;
-        storage8BitFeatures.pNext           = &scalarBlockLayoutFeatures;
-        extendedDynamicState2Features.pNext = &storage8BitFeatures;
-        features13.pNext                    = &extendedDynamicState2Features;
-        features2.pNext                     = &features13;
+        features2.pNext  = &features12;
+        features12.pNext = &features13;
+        features13.pNext = &extendedDynamicState2Features;
     });
     m_vkWindow->m_rdpGfxBackend = m_rdpGfxBackend;
     static_cast<RDP::VulkanBackend*>(m_rdpGfxBackend)->setFrameCompleteCallback(requestWindowUpdate, m_frameCallbackWindow);

@@ -174,8 +174,11 @@ constexpr auto Emulator::processViInterrupt() -> void {
 #if defined(DETERMINISTIC_VI_INTERRUPTS)
     m_videoInterface->tick(CycleRatios::VI_DEBUG);
 #else
-    if (m_videoInterface->getInterrupt()) {
+    static auto rspCycles = 0uz;
+    rspCycles += CycleRatios::RSP;
+    if (m_videoInterface->getInterrupt() && rspCycles >= MIN_RSP_CYCLES_BEFORE_VI_INTERRUPT) {
         m_mipsInterface->setInterrupt<^^Interfaces::MI_INTERRUPT::vi>(true); // must be set synchronously
+        rspCycles = 0uz;
     }
 #endif
 }
@@ -211,12 +214,8 @@ constexpr auto Emulator::loadRom(std::filesystem::path path) -> void {
 }
 
 constexpr auto Emulator::runCycle() -> void {
-    static auto rspCycles = 0uz;
     try {
-        if (rspCycles >= MIN_RSP_CYCLES_BEFORE_VI_INTERRUPT) {
-            processViInterrupt();
-            rspCycles = 0uz;
-        }
+        processViInterrupt();
 
         for (auto _ : std::views::iota(0uz, CycleRatios::CPU)) {
             m_cpu->runCpuInstruction();
@@ -232,7 +231,6 @@ constexpr auto Emulator::runCycle() -> void {
             m_rsp->runRspInstruction();
             m_rdp->runRdpCommand();
         }
-        rspCycles += CycleRatios::RSP;
     } catch (const Util::Error& e) {
         std::println("A fatal exception occurred @\n"
                      "    RDP sync: {}\n"
