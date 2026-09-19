@@ -225,6 +225,7 @@ auto RDP::runRdpCommand() -> void {
                     }
                 }
                 m_tileUsedThisDraw.set(cmd.tile);
+                m_tileUsedThisDraw.set((cmd.tile + 1) % 8);
                 m_gfxBackend->addTriangle(cmd.tile, tri.bytes(), shade.bytes(), texCoords.bytes());
                 flushBackend();
                 break;
@@ -251,6 +252,7 @@ auto RDP::runRdpCommand() -> void {
                     }
                 }
                 m_tileUsedThisDraw.set(cmd.tile);
+                m_tileUsedThisDraw.set((cmd.tile + 1) % 8);
                 m_gfxBackend->addTriangle(cmd.tile, coords[0].bytes(), nullptr, uvs[0].bytes());
                 m_gfxBackend->addTriangle(cmd.tile, coords[1].bytes(), nullptr, uvs[1].bytes());
                 flushBackend();
