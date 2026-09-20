@@ -1,8 +1,11 @@
-#include <ranges>
+#include <bit>
 #include <cstring>
 #include <optional>
-#include <bit>
+#include <print>
+#include <ranges>
 #include <vector>
+#define XXH_INLINE_ALL
+#include <xxhash.h>
 #include <util/vkUtil.hpp>
 #include "vulkanBackend.hpp"
 
@@ -141,90 +144,104 @@ auto VulkanBackend::updateTile(std::size_t      index,
     if (!m_initialized || index >= NUM_TILES || params.width == 0 || params.height == 0) {
         return;
     }
+
     m_currentRenderPass.tileParams[index] = ShaderTileInfo{
         .extent = {params.width, params.height, params.stride, static_cast<uint32_t>(params.format)},
         .s      = params.s,
         .t      = params.t,
     };
 
-    VK_TRY(vkWaitForFences(m_device.device, 1, &m_renderFence, VK_TRUE, UINT64_MAX));
-    VK_TRY(vkResetFences(m_device.device, 1, &m_renderFence));
+    auto textureHash = XXH3_64bits(texelData, static_cast<size_t>(params.height) * params.stride);
+    auto paletteHash = (paletteData == nullptr) ? 0 : XXH3_64bits(paletteData, 8 * (params.format == TextureFormat::CI4 ? 16 : 256));
+    // TODO sampler params cache?
+    auto cacheKey = TextureCacheKey{
+        .info = {
+            .width  = static_cast<uint8_t>(params.width),
+            .height = static_cast<uint8_t>(params.height),
+        },
+        .data = {
+            .textureHash = textureHash,
+            .paletteHash = paletteHash,
+        },
+    };
+    if (!m_textureCache.contains(cacheKey)) {
+        VK_TRY(vkWaitForFences(m_device.device, 1, &m_renderFence, VK_TRUE, UINT64_MAX));
+        VK_TRY(vkResetFences(m_device.device, 1, &m_renderFence));
 
-    auto vkFormat = VK_FORMAT_R8G8B8A8_UNORM;
-    auto swizzle  = Util::VK::Defaults::ComponentMapping;
+        auto vkFormat = VK_FORMAT_R8G8B8A8_UNORM;
+        auto swizzle  = Util::VK::Defaults::ComponentMapping;
 
-    if (const auto native = nativeFormatFor(params.format)) {
-        vkFormat = native->vkFormat;
-        swizzle  = native->swizzle;
-        m_textureMemory.resize(static_cast<std::size_t>(params.width) * params.height * native->bytesPerTexel);
-        for (const auto y : std::views::iota(0u, params.height)) {
-            const auto rowBytes = static_cast<std::size_t>(params.width) * native->bytesPerTexel;
-            const auto dst      = m_textureMemory.data() + y * rowBytes;
-            const auto src      = texelData + y * params.stride;
-            std::memcpy(dst, src, rowBytes);
-            if (std::endian::native == std::endian::little && params.format == TextureFormat::RGBA16) {
-                const auto texels = reinterpret_cast<uint16_t*>(dst);
-                for (const auto x : std::views::iota(0u, params.width)) {
-                    texels[x] = std::byteswap(texels[x]);
+        if (const auto native = nativeFormatFor(params.format)) {
+            vkFormat = native->vkFormat;
+            swizzle  = native->swizzle;
+            m_textureMemory.resize(static_cast<std::size_t>(params.width) * params.height * native->bytesPerTexel);
+            for (const auto y : std::views::iota(0u, params.height)) {
+                const auto rowBytes = static_cast<std::size_t>(params.width) * native->bytesPerTexel;
+                const auto dst      = m_textureMemory.data() + y * rowBytes;
+                const auto src      = texelData + y * params.stride;
+                std::memcpy(dst, src, rowBytes);
+                if (std::endian::native == std::endian::little && params.format == TextureFormat::RGBA16) {
+                    const auto texels = reinterpret_cast<uint16_t*>(dst);
+                    for (const auto x : std::views::iota(0u, params.width)) {
+                        texels[x] = std::byteswap(texels[x]);
+                    }
                 }
             }
+        } else {
+            decodeToRGBA32(m_textureMemory,
+                           params,
+                           texelData,
+                           paletteFormat,
+                           paletteData);
         }
-    } else {
-        decodeToRGBA32(m_textureMemory,
-                       params,
-                       texelData,
-                       paletteFormat,
-                       paletteData);
+
+        const auto image       = createTextureImage(m_device, vkFormat, params.width, params.height, swizzle);
+        const auto samplerInfo = Util::VK::Defaults::SamplerCreateInfo;
+        auto       texture     = Util::VK::AllocatedTexture(m_device);
+        texture.init(samplerInfo, image);
+
+        m_tileStagingBuffer.realloc(m_textureMemory.size(), VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
+        std::memcpy(m_tileStagingBuffer.ptr, m_textureMemory.data(), m_textureMemory.size());
+
+        Util::VK::resetCommandBuffer(m_commandBuffer);
+
+        Util::VK::addPipelineBarrier(m_commandBuffer,
+                                     Util::VK::makeImageMemoryBarrier(
+                                         texture.image,
+                                         VK_PIPELINE_STAGE_2_NONE,
+                                         VK_ACCESS_2_NONE,
+                                         VK_PIPELINE_STAGE_2_COPY_BIT,
+                                         VK_ACCESS_2_TRANSFER_WRITE_BIT,
+                                         VK_IMAGE_LAYOUT_UNDEFINED,
+                                         VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                                         VK_IMAGE_ASPECT_COLOR_BIT));
+        Util::VK::cmdCopyBufferToImage(m_commandBuffer, m_tileStagingBuffer, texture.image, VkExtent2D{.width = params.width, .height = params.height});
+
+        Util::VK::addPipelineBarrier(m_commandBuffer,
+                                     Util::VK::makeImageMemoryBarrier(
+                                         texture.image,
+                                         VK_PIPELINE_STAGE_2_COPY_BIT,
+                                         VK_ACCESS_2_TRANSFER_WRITE_BIT,
+                                         VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
+                                         VK_ACCESS_2_SHADER_READ_BIT,
+                                         VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                                         VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                                         VK_IMAGE_ASPECT_COLOR_BIT));
+
+        {
+            auto qLock = std::lock_guard<std::mutex>(m_queueMutex);
+            Util::VK::submitCommandBuffer(m_commandBuffer, m_vkQueue, m_renderFence);
+        }
+        VK_TRY(vkWaitForFences(m_device.device, 1, &m_renderFence, VK_TRUE, UINT64_MAX));
+        m_textureCache[cacheKey] = texture;
     }
-    m_textures[index].destroy();
-
-    const auto image       = createTextureImage(m_device, vkFormat, params.width, params.height, swizzle);
-    const auto samplerInfo = Util::VK::Defaults::SamplerCreateInfo;
-    m_textures[index].init(samplerInfo, image);
-
-    auto stagingBuffer = Util::VK::AllocatedBuffer(m_device);
-    stagingBuffer.init(VK_BUFFER_USAGE_TRANSFER_SRC_BIT, m_textureMemory.size());
-    std::memcpy(stagingBuffer.ptr, m_textureMemory.data(), m_textureMemory.size());
-
-    Util::VK::resetCommandBuffer(m_commandBuffer);
-
-    Util::VK::addPipelineBarrier(m_commandBuffer,
-                                 Util::VK::makeImageMemoryBarrier(
-                                     m_textures[index].image,
-                                     VK_PIPELINE_STAGE_2_NONE,
-                                     VK_ACCESS_2_NONE,
-                                     VK_PIPELINE_STAGE_2_COPY_BIT,
-                                     VK_ACCESS_2_TRANSFER_WRITE_BIT,
-                                     VK_IMAGE_LAYOUT_UNDEFINED,
-                                     VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                                     VK_IMAGE_ASPECT_COLOR_BIT));
-    Util::VK::cmdCopyBufferToImage(m_commandBuffer, stagingBuffer, m_textures[index].image, VkExtent2D{.width = params.width, .height = params.height});
-
-    Util::VK::addPipelineBarrier(m_commandBuffer,
-                                 Util::VK::makeImageMemoryBarrier(
-                                     m_textures[index].image,
-                                     VK_PIPELINE_STAGE_2_COPY_BIT,
-                                     VK_ACCESS_2_TRANSFER_WRITE_BIT,
-                                     VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
-                                     VK_ACCESS_2_SHADER_READ_BIT,
-                                     VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                                     VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                                     VK_IMAGE_ASPECT_COLOR_BIT));
-
-    {
-        auto qLock = std::lock_guard<std::mutex>(m_queueMutex);
-        Util::VK::submitCommandBuffer(m_commandBuffer, m_vkQueue, m_renderFence);
-    }
-    VK_TRY(vkWaitForFences(m_device.device, 1, &m_renderFence, VK_TRUE, UINT64_MAX));
-    stagingBuffer.destroy();
 
     const auto imageInfo = VkDescriptorImageInfo{
-        .sampler     = m_textures[index].sampler,
-        .imageView   = m_textures[index].image.view,
+        .sampler     = m_textureCache[cacheKey].sampler,
+        .imageView   = m_textureCache[cacheKey].image.view,
         .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
     };
-    const auto write = Util::VK::makeTextureWriteDescriptorSet(m_textureDescriptorSet, static_cast<uint32_t>(index), imageInfo);
-    vkUpdateDescriptorSets(m_device.device, 1, &write, 0, nullptr);
+    m_textureDescriptors.set(static_cast<uint32_t>(index), imageInfo);
 }
 
 auto VulkanBackend::addTriangle(uint32_t         tile,
@@ -283,7 +300,7 @@ auto VulkanBackend::startRenderPass(RenderOptions options) -> void {
     VK_TRY(vkResetFences(m_device.device, 1, &m_renderFence));
 
     std::memcpy(m_tileParamsBuffer.ptr, m_currentRenderPass.tileParams.data(), sizeof(m_currentRenderPass.tileParams));
-    reallocVertexBuffer(m_currentRenderPass.vertexData.size() * sizeof(int32_t));
+    m_vertexBuffer.realloc(m_currentRenderPass.vertexData.size() * sizeof(int32_t), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
     std::memcpy(m_vertexBuffer.ptr, m_currentRenderPass.vertexData.data(), m_currentRenderPass.vertexData.size() * sizeof(int32_t));
 
     Util::VK::resetCommandBuffer(m_commandBuffer);
@@ -339,11 +356,10 @@ auto VulkanBackend::startRenderPass(RenderOptions options) -> void {
 
     vkCmdBeginRendering(m_commandBuffer, &vkRenderingInfo);
     vkCmdBindPipeline(m_commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pipeline);
-    if (m_textureDescriptorSet != VK_NULL_HANDLE) {
-        vkCmdBindDescriptorSets(m_commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pipelineLayout, 0, 1, &m_textureDescriptorSet, 0, nullptr);
-    }
     auto offset = VkDeviceSize{0};
     vkCmdBindVertexBuffers(m_commandBuffer, 0, 1, &m_vertexBuffer.buffer, &offset);
+    vkCmdPushDescriptorSet(m_commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pipelineLayout, 0, m_textureDescriptors.writeDescriptorSets.size(), m_textureDescriptors.writeDescriptorSets.data());
+    vkCmdPushDescriptorSet(m_commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pipelineLayout, 0, m_tileParamsDescriptors.writeDescriptorSets.size(), m_tileParamsDescriptors.writeDescriptorSets.data());
     vkCmdPushConstants(m_commandBuffer, m_pipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(RdpRenderPassConstants), &m_currentRenderPass.pushConstants);
     vkCmdSetDepthTestEnable(m_commandBuffer, options.depthTestEnable ? VK_TRUE : VK_FALSE);
     vkCmdSetDepthWriteEnable(m_commandBuffer, options.depthWriteEnable ? VK_TRUE : VK_FALSE);
@@ -368,6 +384,10 @@ auto VulkanBackend::startRenderPass(RenderOptions options) -> void {
 }
 
 auto VulkanBackend::completeRenderFrame() -> void {
+    if (m_textureCache.size() > 1024) {
+        m_textureCache.clear();
+        // std::println("Texture cache cleared due to exceeding 1024 entries");
+    }
     {
         auto lock = std::lock_guard<std::mutex>(m_resourceMutex);
         if (!m_initialized || !m_currentRenderPass.active) {
@@ -408,13 +428,13 @@ auto VulkanBackend::init(
 
     m_vkInstance = vkInstance;
     m_device     = {
-            .device         = vkDevice,
-            .physicalDevice = vkPhysicalDevice};
+        .device         = vkDevice,
+        .physicalDevice = vkPhysicalDevice};
     m_vkQueueFamilyIndex = vkQueueFamilyIndex;
     m_currentRenderPass  = {};
     vkGetDeviceQueue(m_device.device, m_vkQueueFamilyIndex, 0, &m_vkQueue);
-    m_vertexBuffer.device = m_device;
-
+    m_vertexBuffer.device      = m_device;
+    m_tileStagingBuffer.device = m_device;
     createRenderTargets();
     createDescriptorInfo();
     createPipeline();
@@ -453,29 +473,15 @@ auto VulkanBackend::createDescriptorInfo() -> void {
         .stageFlags         = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
         .pImmutableSamplers = nullptr,
     };
+
     const auto layoutInfo = VkDescriptorSetLayoutCreateInfo{
         .sType        = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
         .pNext        = nullptr,
-        .flags        = 0,
+        .flags        = VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT,
         .bindingCount = static_cast<uint32_t>(bindings.size()),
         .pBindings    = bindings.data(),
     };
     VK_TRY(vkCreateDescriptorSetLayout(m_device.device, &layoutInfo, nullptr, &m_textureDescriptorSetLayout));
-
-    // descriptor pool
-    const auto poolSizes = std::array{
-        VkDescriptorPoolSize{.type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .descriptorCount = NUM_TILES},
-        VkDescriptorPoolSize{.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, .descriptorCount = 1},
-    };
-    const auto poolInfo = VkDescriptorPoolCreateInfo{
-        .sType         = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
-        .pNext         = nullptr,
-        .flags         = 0,
-        .maxSets       = 1,
-        .poolSizeCount = static_cast<uint32_t>(poolSizes.size()),
-        .pPoolSizes    = poolSizes.data(),
-    };
-    VK_TRY(vkCreateDescriptorPool(m_device.device, &poolInfo, nullptr, &m_textureDescriptorPool));
 }
 
 auto VulkanBackend::createPipeline() -> void {
@@ -588,7 +594,7 @@ auto VulkanBackend::createPipeline() -> void {
     const auto pushRange = VkPushConstantRange{
         .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
         .offset     = 0,
-        .size       = sizeof(RDP::VulkanBackend::RdpRenderPassConstants),
+        .size       = sizeof(RDP::RdpRenderPassConstants),
     };
 
     const auto layoutInfo = VkPipelineLayoutCreateInfo{
@@ -684,11 +690,8 @@ auto VulkanBackend::createCommandBuffer() -> void {
 
 auto VulkanBackend::createTextures() -> void {
     createDefaultTexture();
-    for (const auto i : std::views::iota(0uz, NUM_TILES)) {
-        m_textures[i] = Util::VK::AllocatedTexture(m_device);
-    }
     m_tileParamsBuffer = Util::VK::AllocatedBuffer(m_device);
-    m_tileParamsBuffer.init(VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, sizeof(m_currentRenderPass.tileParams));
+    m_tileParamsBuffer.init(sizeof(m_currentRenderPass.tileParams), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
 }
 
 auto VulkanBackend::destroy() -> void {
@@ -702,6 +705,7 @@ auto VulkanBackend::destroy() -> void {
     VK_TRY(vkDeviceWaitIdle(m_device.device));
 
     m_vertexBuffer.destroy();
+    m_tileStagingBuffer.destroy();
     m_tileParamsBuffer.destroy();
     vkDestroyFence(m_device.device, m_renderFence, nullptr);
     m_renderFence = VK_NULL_HANDLE;
@@ -714,20 +718,17 @@ auto VulkanBackend::destroy() -> void {
     m_pipelineLayout = VK_NULL_HANDLE;
     vkDestroyRenderPass(m_device.device, m_renderPass, nullptr);
     m_renderPass = VK_NULL_HANDLE;
-    for (const auto i : std::views::iota(0uz, NUM_TILES)) {
-        m_textures[i].destroy();
+    for (const auto& [_, texture] : m_textureCache) {
+        texture.destroy();
     }
+    m_textureCache.clear();
     m_fallbackTexture.destroy();
-    vkDestroyDescriptorPool(m_device.device, m_textureDescriptorPool, nullptr);
-    m_textureDescriptorPool = VK_NULL_HANDLE;
-    m_textureDescriptorSet  = VK_NULL_HANDLE;
     vkDestroyDescriptorSetLayout(m_device.device, m_textureDescriptorSetLayout, nullptr);
     m_textureDescriptorSetLayout = VK_NULL_HANDLE;
     for (const auto i : std::views::iota(0uz, MAX_BUFFERS)) {
         m_renderTargets[i].colour.destroy();
         m_renderTargets[i].depth.destroy();
     }
-    m_vertexBufferSize = 0;
     m_currentRenderPass.reset();
     m_renderedAtLeastOnce      = false;
     m_currentRenderPass.active = false;
@@ -741,33 +742,11 @@ auto VulkanBackend::destroy() -> void {
 }
 
 auto VulkanBackend::createDescriptorSets() -> void {
-    const auto allocation = VkDescriptorSetAllocateInfo{
-        .sType              = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
-        .pNext              = nullptr,
-        .descriptorPool     = m_textureDescriptorPool,
-        .descriptorSetCount = 1,
-        .pSetLayouts        = &m_textureDescriptorSetLayout,
-    };
-    VK_TRY(vkAllocateDescriptorSets(m_device.device, &allocation, &m_textureDescriptorSet));
-
-    const auto imageInfo = VkDescriptorImageInfo{
-        .sampler     = m_fallbackTexture.sampler,
-        .imageView   = m_fallbackTexture.image.view,
-        .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-    };
-    auto imageInfos = std::array<VkDescriptorImageInfo, NUM_TILES>{};
-    imageInfos.fill(imageInfo);
-    auto writes = std::array<VkWriteDescriptorSet, NUM_TILES + 1>{};
-    for (uint32_t i = 0; i < NUM_TILES; ++i) {
-        writes[i] = Util::VK::makeTextureWriteDescriptorSet(m_textureDescriptorSet, i, imageInfos[i]);
-    }
-    const auto tileParamsInfo = VkDescriptorBufferInfo{
-        .buffer = m_tileParamsBuffer.buffer,
-        .offset = 0,
-        .range  = sizeof(m_currentRenderPass.tileParams),
-    };
-    writes[NUM_TILES] = Util::VK::makeBufferWriteDescriptorSet(m_textureDescriptorSet, static_cast<uint32_t>(NUM_TILES), tileParamsInfo);
-    vkUpdateDescriptorSets(m_device.device, static_cast<uint32_t>(writes.size()), writes.data(), 0, nullptr);
+    m_tileParamsDescriptors.set(0, VkDescriptorBufferInfo{
+                                       .buffer = m_tileParamsBuffer.buffer,
+                                       .offset = 0,
+                                       .range  = sizeof(m_currentRenderPass.tileParams),
+                                   });
 }
 
 auto VulkanBackend::getRenderOutput() -> RenderOutput {
@@ -786,7 +765,7 @@ auto VulkanBackend::createDefaultTexture() -> void {
     const auto fallbackPixel = std::array<std::byte, 4>{std::byte{0}, std::byte{0}, std::byte{0}, std::byte{0}};
 
     auto stagingBuffer = Util::VK::AllocatedBuffer(m_device);
-    stagingBuffer.init(VK_BUFFER_USAGE_TRANSFER_SRC_BIT, fallbackPixel.size());
+    stagingBuffer.init(fallbackPixel.size(), VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
     std::memcpy(stagingBuffer.ptr, fallbackPixel.data(), fallbackPixel.size());
 
     const auto image       = createColourImage(m_device, VkExtent2D{1, 1}, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
@@ -808,15 +787,15 @@ auto VulkanBackend::createDefaultTexture() -> void {
         VK_TRY(vkWaitForFences(m_device.device, 1, &m_renderFence, VK_TRUE, UINT64_MAX));
     }
     stagingBuffer.destroy();
-}
 
-auto VulkanBackend::reallocVertexBuffer(std::size_t newSize) -> void {
-    if (m_vertexBuffer.buffer != VK_NULL_HANDLE && m_vertexBufferSize >= newSize) {
-        return;
+    const auto imageInfo = VkDescriptorImageInfo{
+        .sampler     = m_fallbackTexture.sampler,
+        .imageView   = m_fallbackTexture.image.view,
+        .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+    };
+    for (const auto i : std::views::iota(0u, NUM_TILES)) {
+        m_textureDescriptors.set(static_cast<uint32_t>(i), imageInfo);
     }
-    m_vertexBuffer.destroy();
-    m_vertexBufferSize = newSize * 2;
-    m_vertexBuffer.init(VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, m_vertexBufferSize);
 }
 
 } // namespace RDP

@@ -104,19 +104,26 @@ Window::Window(QVulkanInstance* vkInst, RDP::GfxBackend* rdpGfxBackend)
                                   Qt::WindowMinimizeButtonHint | Qt::WindowMaximizeButtonHint | Qt::WindowCloseButtonHint);
     m_vkWindow->setTitle("spark");
     m_vkWindow->setMinimumSize({320, 240});
-    m_vkWindow->setDeviceExtensions(QByteArrayList() << VK_EXT_CONSERVATIVE_RASTERIZATION_EXTENSION_NAME);
+    m_vkWindow->setDeviceExtensions(QByteArrayList()
+                                    << VK_EXT_CONSERVATIVE_RASTERIZATION_EXTENSION_NAME);
+
+    constinit static auto features14 = VkPhysicalDeviceVulkan14Features{};
+    features14.sType                 = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_4_FEATURES;
+    features14.pushDescriptor        = VK_TRUE;
 
     constinit static auto features13 = VkPhysicalDeviceVulkan13Features{};
     features13.sType                 = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
     features13.dynamicRendering      = VK_TRUE;
     features13.synchronization2      = VK_TRUE;
 
-    constinit static auto features12             = VkPhysicalDeviceVulkan12Features{};
-    features12.sType                             = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
-    features12.shaderInt8                        = VK_TRUE;
-    features12.uniformAndStorageBuffer8BitAccess = VK_TRUE;
-    features12.storagePushConstant8              = VK_TRUE;
-    features12.scalarBlockLayout                 = VK_TRUE;
+    constinit static auto features12                         = VkPhysicalDeviceVulkan12Features{};
+    features12.sType                                         = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
+    features12.shaderInt8                                    = VK_TRUE;
+    features12.uniformAndStorageBuffer8BitAccess             = VK_TRUE;
+    features12.storagePushConstant8                          = VK_TRUE;
+    features12.scalarBlockLayout                             = VK_TRUE;
+    features12.descriptorBindingSampledImageUpdateAfterBind  = VK_TRUE;
+    features12.descriptorBindingUniformBufferUpdateAfterBind = VK_TRUE;
 
     constinit static auto extendedDynamicState2Features = VkPhysicalDeviceExtendedDynamicState2FeaturesEXT{};
     extendedDynamicState2Features.sType                 = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_2_FEATURES_EXT;
@@ -125,7 +132,8 @@ Window::Window(QVulkanInstance* vkInst, RDP::GfxBackend* rdpGfxBackend)
     m_vkWindow->setEnabledFeaturesModifier([this](VkPhysicalDeviceFeatures2& features2) {
         features2.pNext  = &features12;
         features12.pNext = &features13;
-        features13.pNext = &extendedDynamicState2Features;
+        features13.pNext = &features14;
+        features14.pNext = &extendedDynamicState2Features;
     });
     m_vkWindow->m_rdpGfxBackend = m_rdpGfxBackend;
     static_cast<RDP::VulkanBackend*>(m_rdpGfxBackend)->setFrameCompleteCallback(requestWindowUpdate, m_frameCallbackWindow);

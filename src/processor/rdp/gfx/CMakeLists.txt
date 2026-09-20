@@ -1,3 +1,12 @@
+include(FetchContent)
+
+FetchContent_Declare(
+  xxHash
+  GIT_REPOSITORY https://github.com/Cyan4973/xxHash.git
+  GIT_TAG v0.8.4
+)
+FetchContent_MakeAvailable(xxHash)
+find_package(xxHash REQUIRED)
 
 add_library(rdp_gfx_backend)
 set_target_properties(rdp_gfx_backend PROPERTIES CXX_MODULE_STD ON)
@@ -14,7 +23,7 @@ target_sources(rdp_gfx_backend PUBLIC
 target_compile_options(rdp_gfx_backend PUBLIC ${CXX_COMPILE_OPTIONS})
 target_link_options(rdp_gfx_backend PUBLIC ${CXX_LINK_OPTIONS})
 target_include_directories(rdp_gfx_backend PUBLIC ${CMAKE_SOURCE_DIR}/src)
-target_link_libraries(rdp_gfx_backend PUBLIC util Vulkan::Vulkan Qt6::Core Qt6::Gui)
+target_link_libraries(rdp_gfx_backend PUBLIC util Vulkan::Vulkan Qt6::Core Qt6::Gui xxHash::xxhash)
 
 set(SHADER_SOURCES "rdp.vert" "rdp.frag")
 set(SHADER_OUTPUTS)

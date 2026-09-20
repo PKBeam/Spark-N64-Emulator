@@ -20,7 +20,7 @@ Some or all of these features are not yet available in Clang/MSVC.
 
 Vulkan 1.4 is required.
 
-## Ubuntu
+### Ubuntu
 Install from apt:
 - gcc-16
 - cmake=4.2.3
@@ -32,7 +32,7 @@ Install from apt:
 - qt6-base-dev
 - qt6-wayland
 
-## Windows
+### Windows
 Install MSYS2 with these packages:
 - gcc (`mingw-w64-ucrt-x86_64-gcc`)
 - CMake (`mingw-w64-ucrt-x86_64-cmake`)

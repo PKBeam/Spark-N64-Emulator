@@ -207,44 +207,62 @@ inline auto hostBufferAllocationInfo(Device device, VkBuffer buffer) -> VkMemory
     return allocInfo;
 }
 
-inline auto makeTextureWriteDescriptorSet(VkDescriptorSet dstSet, uint32_t index, const VkDescriptorImageInfo& imageInfo) -> VkWriteDescriptorSet {
-    return VkWriteDescriptorSet{
-        .sType            = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-        .pNext            = nullptr,
-        .dstSet           = dstSet,
-        .dstBinding       = index,
-        .dstArrayElement  = 0,
-        .descriptorCount  = 1,
-        .descriptorType   = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-        .pImageInfo       = &imageInfo,
-        .pBufferInfo      = nullptr,
-        .pTexelBufferView = nullptr,
-    };
-}
+template <std::size_t N>
+struct TextureDescriptors {
+    std::array<VkDescriptorImageInfo, N> imageInfos{};
+    std::array<VkWriteDescriptorSet, N>  writeDescriptorSets{};
+    std::size_t                          bindingOffset = 0;
+    TextureDescriptors(std::size_t bindingOffset) : bindingOffset(bindingOffset) {}
 
-inline auto makeBufferWriteDescriptorSet(VkDescriptorSet dstSet, uint32_t index, const VkDescriptorBufferInfo& bufferInfo) -> VkWriteDescriptorSet {
-    return VkWriteDescriptorSet{
-        .sType            = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-        .pNext            = nullptr,
-        .dstSet           = dstSet,
-        .dstBinding       = index,
-        .dstArrayElement  = 0,
-        .descriptorCount  = 1,
-        .descriptorType   = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-        .pImageInfo       = nullptr,
-        .pBufferInfo      = &bufferInfo,
-        .pTexelBufferView = nullptr,
-    };
-}
+    auto set(uint32_t index, VkDescriptorImageInfo imageInfo) {
+        imageInfos[index]          = imageInfo;
+        writeDescriptorSets[index] = VkWriteDescriptorSet{
+            .sType            = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+            .pNext            = nullptr,
+            .dstSet           = VK_NULL_HANDLE,
+            .dstBinding       = index + static_cast<uint32_t>(bindingOffset),
+            .dstArrayElement  = 0,
+            .descriptorCount  = 1,
+            .descriptorType   = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+            .pImageInfo       = &(imageInfos[index]),
+            .pBufferInfo      = nullptr,
+            .pTexelBufferView = nullptr,
+        };
+    }
+};
+
+template <std::size_t N>
+struct BufferDescriptors {
+    std::array<VkDescriptorBufferInfo, N> bufferInfos{};
+    std::array<VkWriteDescriptorSet, N>   writeDescriptorSets{};
+    std::size_t                           bindingOffset = 0;
+    BufferDescriptors(std::size_t bindingOffset) : bindingOffset(bindingOffset) {}
+    auto set(uint32_t index, VkDescriptorBufferInfo bufferInfo) {
+        bufferInfos[index]         = bufferInfo;
+        writeDescriptorSets[index] = VkWriteDescriptorSet{
+            .sType            = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+            .pNext            = nullptr,
+            .dstSet           = VK_NULL_HANDLE,
+            .dstBinding       = index + static_cast<uint32_t>(bindingOffset),
+            .dstArrayElement  = 0,
+            .descriptorCount  = 1,
+            .descriptorType   = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+            .pImageInfo       = nullptr,
+            .pBufferInfo      = &(bufferInfos[index]),
+            .pTexelBufferView = nullptr,
+        };
+    }
+};
 struct AllocatedBuffer {
     Device         device{};
     VkBuffer       buffer = VK_NULL_HANDLE;
     VkDeviceMemory memory = VK_NULL_HANDLE;
     void*          ptr    = nullptr;
+    std::size_t    size   = 0;
     AllocatedBuffer()     = default;
     AllocatedBuffer(Device device) : device(device) {
     }
-    void init(VkBufferUsageFlags usage, std::size_t size) {
+    void init(std::size_t size, VkBufferUsageFlags usage) {
         const auto info = VkBufferCreateInfo{
             .sType                 = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
             .pNext                 = nullptr,
@@ -261,6 +279,15 @@ struct AllocatedBuffer {
         VK_TRY(vkAllocateMemory(device.device, &allocInfo, nullptr, &(this->memory)));
         VK_TRY(vkBindBufferMemory(device.device, buffer, this->memory, 0));
         VK_TRY(vkMapMemory(device.device, this->memory, 0, size, 0, &(this->ptr)));
+        this->size = size;
+    }
+
+    void realloc(std::size_t requestedSize, VkBufferUsageFlags usage) {
+        if (this->buffer != VK_NULL_HANDLE && this->size >= requestedSize) {
+            return;
+        }
+        this->destroy();
+        this->init(requestedSize * 2, usage);
     }
 
     void destroy() {
@@ -310,6 +337,7 @@ struct AllocatedImage {
     VkImage        image  = VK_NULL_HANDLE;
     VkImageView    view   = VK_NULL_HANDLE;
     VkDeviceMemory memory = VK_NULL_HANDLE;
+    std::size_t    size   = 0;
 
     AllocatedImage() = default;
 
@@ -324,6 +352,7 @@ struct AllocatedImage {
         this->image  = image;
         this->view   = createImageView(device.device, image, format, aspectMask, swizzle);
         this->memory = mem;
+        this->size   = allocInfo.allocationSize;
     }
 
     void destroy() {

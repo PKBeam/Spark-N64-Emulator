@@ -125,7 +125,7 @@ auto RDP::flushBackend() -> void {
             tile.params(),
             m_textureMemory + tile.tmemAddress,
             m_mode.tlutType ? TextureFormat::IA16 : TextureFormat::RGBA16,
-            m_textureMemory + 0x800);
+            tile.isPaletted() ? m_textureMemory + 0x800 : nullptr);
         IF_LOG_ENABLED(m_logger) {
             m_logger->log<Level::MED, Sys::RDP>(
                 std::tuple{"op", "flushTile"},

@@ -5,7 +5,8 @@ target_sources(rdp PUBLIC
     FILES
         module.cppm
         fragments/rdp.cppm
-        fragments/rdpCommands.cppm
+        fragments/commands.cppm
+        fragments/types.cppm
 )
 target_compile_options(rdp PUBLIC ${CXX_COMPILE_OPTIONS})
 target_link_options(rdp PUBLIC ${CXX_LINK_OPTIONS})

@@ -2,6 +2,7 @@
 #include <array>
 #include <atomic>
 #include <cstddef>
+#include <flat_map>
 #include <mutex>
 #include <vector>
 #include <vulkan/vulkan.h>
@@ -14,45 +15,62 @@ struct VulkanTextureFormat {
     VkComponentMapping swizzle;
     std::size_t        bytesPerTexel;
 };
+struct RenderTarget {
+    Util::VK::AllocatedImage colour;
+    Util::VK::AllocatedImage depth;
+};
+
+struct RenderOutput {
+    VkImage     m_image     = VK_NULL_HANDLE;
+    VkImageView m_imageView = VK_NULL_HANDLE;
+    VkExtent2D  m_extent    = VkExtent2D{.width = 0, .height = 0};
+};
+
+// Vulkan push constants
+struct RdpRenderPassConstants {
+    RDP::CombineInputs combineInputs;
+};
+
+struct ShaderTileInfo {
+    std::array<uint32_t, 4> extent;
+    RDP::SamplerParams      s;
+    RDP::SamplerParams      t;
+};
+static_assert(sizeof(ShaderTileInfo) == 40);
+
+struct CurrentRenderPass {
+    bool                          active        = false;
+    std::vector<int32_t>          vertexData    = {};
+    uint32_t                      primColour    = 0;
+    RdpRenderPassConstants        pushConstants = {};
+    std::array<ShaderTileInfo, 8> tileParams    = {};
+
+    auto reset() -> void {
+        active = false;
+        vertexData.clear();
+        pushConstants = {};
+    }
+};
+
+struct TextureCacheKey {
+    struct Info {
+        uint8_t width;
+        uint8_t height;
+    };
+    struct Data {
+        uint64_t       textureHash                          = 0;
+        uint64_t       paletteHash                          = 0;
+        constexpr auto operator<=>(const Data& other) const = default;
+    };
+    Info           info = {};
+    Data           data = {};
+    constexpr auto operator<=>(const TextureCacheKey& other) const {
+        return data <=> other.data;
+    };
+};
+
 class VulkanBackend : public GfxBackend {
   public:
-    struct RenderTarget {
-        Util::VK::AllocatedImage colour;
-        Util::VK::AllocatedImage depth;
-    };
-
-    struct RenderOutput {
-        VkImage     m_image     = VK_NULL_HANDLE;
-        VkImageView m_imageView = VK_NULL_HANDLE;
-        VkExtent2D  m_extent    = VkExtent2D{.width = 0, .height = 0};
-    };
-
-    // Vulkan push constants
-    struct RdpRenderPassConstants {
-        RDP::CombineInputs combineInputs;
-    };
-
-    struct ShaderTileInfo {
-        std::array<uint32_t, 4> extent;
-        RDP::SamplerParams      s;
-        RDP::SamplerParams      t;
-    };
-    static_assert(sizeof(ShaderTileInfo) == 40);
-
-    struct CurrentRenderPass {
-        bool                          active        = false;
-        std::vector<int32_t>          vertexData    = {};
-        uint32_t                      primColour    = 0;
-        RdpRenderPassConstants        pushConstants = {};
-        std::array<ShaderTileInfo, 8> tileParams    = {};
-
-        auto reset() -> void {
-            active = false;
-            vertexData.clear();
-            pushConstants = {};
-        }
-    };
-
     VulkanBackend()  = default;
     ~VulkanBackend() = default;
 
@@ -121,7 +139,7 @@ class VulkanBackend : public GfxBackend {
     void*                 m_frameCompleteUserData = nullptr;
 
     Util::VK::AllocatedBuffer m_vertexBuffer{};
-    std::size_t               m_vertexBufferSize = 0;
+    Util::VK::AllocatedBuffer m_tileStagingBuffer{};
 
     Util::VK::AllocatedBuffer m_tileParamsBuffer{};
 
@@ -132,13 +150,13 @@ class VulkanBackend : public GfxBackend {
 
     // the currently bound tile's texture, resolved to a native VkFormat (CPU-decoded to
     // RGBA8 first for palette/sub-byte-packed formats so it can still be hardware-sampled)
-    std::array<Util::VK::AllocatedTexture, NUM_TILES> m_textures;
-    Util::VK::AllocatedTexture                        m_fallbackTexture;
-    std::vector<std::byte>                            m_textureMemory;
+    std::flat_map<TextureCacheKey, Util::VK::AllocatedTexture> m_textureCache;
+    Util::VK::AllocatedTexture                                 m_fallbackTexture;
+    std::vector<std::byte>                                     m_textureMemory;
+    Util::VK::TextureDescriptors<NUM_TILES>                    m_textureDescriptors{0};
+    Util::VK::BufferDescriptors<1>                             m_tileParamsDescriptors{NUM_TILES};
 
     VkDescriptorSetLayout m_textureDescriptorSetLayout = VK_NULL_HANDLE;
-    VkDescriptorPool      m_textureDescriptorPool      = VK_NULL_HANDLE;
-    VkDescriptorSet       m_textureDescriptorSet       = VK_NULL_HANDLE;
 
     VkExtent2D m_extent = {320, 240};
 
