@@ -41,8 +41,6 @@ set(CXX_COMPILE_OPTIONS
     -fcontracts
     -fmodules
     -fconcepts-diagnostics-depth=3
-    -g3
-    -ggdb3
     -fvar-tracking-assignments
 )
 
@@ -57,12 +55,15 @@ set(CXX_MODULE_STD ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 set(CMAKE_CONFIGURATION_TYPES "Debug;Release;RelWithDebInfo;Profiling" CACHE STRING "Supported build types" FORCE)
-set(CMAKE_CXX_FLAGS_PROFILING "${CMAKE_CXX_FLAGS_RELWITHDEBINFO} -pg -fno-omit-frame-pointer")
+set(CMAKE_CXX_FLAGS_PROFILING "${CMAKE_CXX_FLAGS_RELWITHDEBINFO} -fno-omit-frame-pointer")
 
 # workaround to allow std::meta in the std module 
 set(CMAKE_CXX_FLAGS "-freflection ${CMAKE_CXX_FLAGS}")
 
-# Add sanitisers to Debug builds
+add_compile_options(
+    "$<$<CONFIG:Debug>:-ggdb3;-g3>"
+    "$<$<CONFIG:RelWithDebInfo>:-ggdb3;-g3>"
+)
 if(UNIX)
 add_compile_options(
     "$<$<CONFIG:Debug>:-fsanitize=address;-fsanitize=undefined;-fno-omit-frame-pointer>"

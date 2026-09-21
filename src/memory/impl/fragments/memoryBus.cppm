@@ -13,9 +13,6 @@ export class MemoryBus {
   public:
     MemoryBus(std::shared_ptr<Util::Logger> logger, ::Memory::Memory* memory) : m_logger(logger), m_memory(memory) {}
 
-    template <std::integral T = std::byte>
-    auto translate(VirtualAddr vaddr) const -> PhysicalAddr;
-
     template <std::integral T>
     auto readPhysical(PhysicalAddr addr) const -> T;
 
@@ -50,6 +47,9 @@ export class MemoryBus {
         pre(interface != nullptr);
 
   private:
+    template <std::integral T>
+    auto translate(VirtualAddr vaddr) const -> PhysicalAddr;
+
     std::shared_ptr<Util::Logger> m_logger;
     ::Memory::Memory*             m_memory{};
 
@@ -73,19 +73,22 @@ auto getPhysicalSegment(PhysicalAddr paddr) -> PhysSeg {
     }
     throw Util::Error("Translation failed on N64 physical address " HEXFMT32, paddr);
 }
+} // namespace Impl
 
 template <std::integral T>
-auto translate(VirtualAddr vaddr) -> PhysicalAddr {
-    // Hot path optimisation- almost every vaddr is in KSEG0-1
-    constexpr auto kseg0Lo = Util::rangeOf(VirtSeg::KSEG0).lower;
-    constexpr auto kseg1Hi = Util::rangeOf(VirtSeg::KSEG1).upper;
-    if (kseg0Lo <= vaddr && vaddr <= kseg1Hi) [[likely]] {
-        return vaddr & 0x1FFFFFFF;
+auto MemoryBus::translate(VirtualAddr vaddr) const -> PhysicalAddr {
+    IF_LOG_ENABLED(m_logger) {
+        constexpr auto kseg0Lo = Util::rangeOf(VirtSeg::KSEG0).lower;
+        constexpr auto kseg1Hi = Util::rangeOf(VirtSeg::KSEG1).upper;
+        // does any N64 game use the other segments?
+        if (vaddr < kseg0Lo || kseg1Hi <= vaddr) {
+            m_logger->log<Level::MAX, Sev::ERROR, Sys::RDRAM>("Out of range virtual address " HEXFMT32, vaddr);
+            throw Util::Error("Translation failed on N64 virtual address " HEXFMT32, vaddr);
+        }
     }
-    // does any N64 game use the other segments?
-    throw Util::Error("Translation failed on N64 virtual address " HEXFMT32, vaddr);
+    // Hot path optimisation- almost every vaddr is in KSEG0-1
+    return vaddr & 0x1FFFFFFF;
 }
-} // namespace Impl
 
 template <std::integral T>
 auto MemoryBus::read(VirtualAddr addr) const -> T {
@@ -94,7 +97,7 @@ auto MemoryBus::read(VirtualAddr addr) const -> T {
             m_logger->log<Level::HIGH, Sev::WARNING, Sys::RDRAM>("Unaligned virtual address access " HEXFMT32 ", size {}", addr, sizeof(T));
         }
     }
-    return readPhysical<T>(Impl::translate<T>(addr));
+    return readPhysical<T>(translate<T>(addr));
 }
 
 template <std::integral T>
@@ -104,11 +107,15 @@ auto MemoryBus::write(VirtualAddr addr, T data) const -> void {
             m_logger->log<Level::HIGH, Sev::WARNING, Sys::RDRAM>("Unaligned virtual address access " HEXFMT32 ", size {}", addr, sizeof(T));
         }
     }
-    writePhysical<T>(Impl::translate<T>(addr), data);
+    writePhysical<T>(translate<T>(addr), data);
 }
 
 template <std::integral T>
 auto MemoryBus::readPhysical(PhysicalAddr paddr) const -> T {
+    if (paddr <= Util::rangeOf(PhysSeg::RDRAM).upper) { // hot path for RDRAM
+        return m_memory->read<T>(paddr);
+    }
+
     auto data = T{};
     switch (Impl::getPhysicalSegment(paddr)) {
         // these are all typical "memory" spaces
@@ -162,6 +169,11 @@ auto MemoryBus::readPhysical(PhysicalAddr paddr) const -> T {
 
 template <std::integral T>
 auto MemoryBus::writePhysical(PhysicalAddr paddr, T data) const -> void {
+    if (paddr <= Util::rangeOf(PhysSeg::RDRAM).upper) { // hot path for RDRAM
+        m_memory->write<T>(paddr, data);
+        return;
+    }
+
     switch (Impl::getPhysicalSegment(paddr)) {
         case PhysSeg::RDRAM: [[fallthrough]];
         case PhysSeg::RSP_DMEM: [[fallthrough]];
