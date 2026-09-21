@@ -292,6 +292,13 @@ struct FixedPoint {
         return fromBits(static_cast<Type>(value) - static_cast<Type>(other.value));
     }
 
+    constexpr auto operator<=>(const FixedPoint& other) const {
+        return value <=> other.value;
+    }
+    constexpr auto operator==(const FixedPoint& other) const {
+        return value == other.value;
+    }
+
     template <bool OtherSigned, std::size_t OtherIntBits, std::size_t OtherFracBits>
         requires(std::max(IntBits, OtherIntBits) + std::max(FracBits, OtherFracBits) <= 32 &&
                  (Signed != OtherSigned || IntBits != OtherIntBits || FracBits != OtherFracBits))

@@ -93,25 +93,58 @@ struct FillTriangle {
     uint64_t xmI    : 12;
     uint64_t        : 4;
 
-    constexpr auto getTriangle() const -> Util::RenderTriangle {
+    constexpr auto getTriangle() const -> std::pair<Util::RenderTriangle, Util::RenderTriangle> {
         const auto y0 = static_cast<Util::SFixedPoint<16, 16>>(Util::SFixedPoint<12, 2>::fromBits(yh));
         const auto y1 = static_cast<Util::SFixedPoint<16, 16>>(Util::SFixedPoint<12, 2>::fromBits(ym));
         const auto y2 = static_cast<Util::SFixedPoint<16, 16>>(Util::SFixedPoint<12, 2>::fromBits(yl));
-        const auto x  = [this, y0](Util::SFixedPoint<12, 2> y) {
-            const auto xh   = Util::SFixedPoint<12, 16>(xhI, xhF);
+
+        const auto xh = static_cast<Util::SFixedPoint<16, 16>>(Util::SFixedPoint<12, 16>(xhI, xhF));
+        const auto xl = static_cast<Util::SFixedPoint<16, 16>>(Util::SFixedPoint<12, 16>(xlI, xlF));
+        const auto xm = static_cast<Util::SFixedPoint<16, 16>>(Util::SFixedPoint<12, 16>(xmI, xmF));
+
+        const auto x_dh = [&, this](Util::SFixedPoint<12, 2> y) {
             const auto dxdy = Util::SFixedPoint<14, 16>(dxHdyI, dxHdyF);
             const auto dy   = y - y0.floor();
             const auto dx   = dxdy * dy;
             return static_cast<Util::SFixedPoint<16, 16>>(xh + dx);
         };
-        const auto x0 = x(y0);
-        const auto x1 = static_cast<Util::SFixedPoint<16, 16>>(Util::SFixedPoint<12, 16>(xlI, xlF));
-        const auto x2 = x(y2);
+        const auto x_dm = [&, this](Util::SFixedPoint<12, 2> y) {
+            const auto dxdy = Util::SFixedPoint<14, 16>(dxMdyI, dxMdyF);
+            const auto dy   = y - y0.floor();
+            const auto dx   = dxdy * dy;
+            return static_cast<Util::SFixedPoint<16, 16>>(xm + dx);
+        };
+        const auto x_dl = [&, this](Util::SFixedPoint<12, 2> y) {
+            const auto dxdy = Util::SFixedPoint<14, 16>(dxLdyI, dxLdyF);
+            const auto dy   = y - y1;
+            const auto dx   = dxdy * dy;
+            return static_cast<Util::SFixedPoint<16, 16>>(xl + dx);
+        };
 
-        const auto v0 = Util::Point(x0, y0);
-        const auto v1 = Util::Point(x1, y1);
-        const auto v2 = Util::Point(x2, y2);
-        return Util::RenderTriangle(v0, v1, v2);
+        const auto x0_h = static_cast<Util::SFixedPoint<16, 16>>(xh);
+        const auto x0_m = static_cast<Util::SFixedPoint<16, 16>>(xm);
+        const auto x1   = static_cast<Util::SFixedPoint<16, 16>>(Util::SFixedPoint<12, 16>(xlI, xlF));
+        const auto x2_h = x_dh(y2);
+        const auto x2_l = x_dl(y2);
+
+        const auto v0h = Util::Point(x_dh(y0), y0);
+        const auto v0m = Util::Point(x_dm(y0), y0);
+        const auto v1  = Util::Point(x1, y1);
+        const auto v2h = Util::Point(x2_h, y2);
+        const auto v2l = Util::Point(x2_l, y2);
+
+        if (yh == ym) {
+            return {
+                Util::RenderTriangle(v0h, v1, v2h),
+                Util::RenderTriangle(v1, v2l, v2h)};
+        } else if (yl == ym) {
+            const auto zero = Util::Point(Util::Fxp_0, Util::Fxp_0);
+            return {Util::RenderTriangle(v0h, v1, v2h), Util::RenderTriangle(zero, zero, zero)};
+        } else {
+            return {
+                Util::RenderTriangle(v0h, v1, v2h),
+                Util::RenderTriangle(v1, v2l, v2h)};
+        }
     }
 
     struct Cmd {

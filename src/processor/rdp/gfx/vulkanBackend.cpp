@@ -385,6 +385,9 @@ auto VulkanBackend::startRenderPass(RenderOptions options) -> void {
 
 auto VulkanBackend::completeRenderFrame() -> void {
     if (m_textureCache.size() > 1024) {
+        for (const auto& [_, value] : m_textureCache) {
+            value.destroy();
+        }
         m_textureCache.clear();
         // std::println("Texture cache cleared due to exceeding 1024 entries");
     }
