@@ -384,7 +384,7 @@ auto VulkanBackend::startRenderPass(RenderOptions options) -> void {
 }
 
 auto VulkanBackend::completeRenderFrame() -> void {
-    if (m_textureCache.size() > 1024) {
+    if (m_textureCache.size() > 1024) { // TODO this stutters and should acquire the mutex. find better way
         for (const auto& [_, value] : m_textureCache) {
             value.destroy();
         }

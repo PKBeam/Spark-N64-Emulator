@@ -91,17 +91,35 @@ void main() {
     float texelCorrection = 1024.0;
 
     // apply perspective correction and turn back to fixed-point
-    ivec3 fxpPerspTexCoords = ivec3((in_texCoords / in_texCoords.z) * texelCorrection * fixedPointScale);
-    // then do shift and mask
-    ivec2 shifts = ivec2(int(tileInfo.sShift), int(tileInfo.tShift));
-    ivec2 shiftedTexCoords = ivec2(
-        shifts.x >= 0 ? fxpPerspTexCoords.x << uint(shifts.x) : fxpPerspTexCoords.x >> uint(-shifts.x),
-        shifts.y >= 0 ? fxpPerspTexCoords.y << uint(shifts.y) : fxpPerspTexCoords.y >> uint(-shifts.y));
+    ivec2 texCoords = ivec2((in_texCoords / in_texCoords.z).xy * texelCorrection * fixedPointScale);
 
-    ivec2 tileOffsetTexCoords = shiftedTexCoords - ivec2(tileInfo.sOffset, tileInfo.tOffset);
-    ivec2 maskedTexCoords = tileOffsetTexCoords & ivec2(tileInfo.sMask, tileInfo.tMask);
+    // apply shift
+    const ivec2 shifts = ivec2(int(tileInfo.sShift), int(tileInfo.tShift));
+    texCoords = ivec2(
+        shifts.x >= 0 ? texCoords.x << uint(shifts.x) : texCoords.x >> uint(-shifts.x),
+        shifts.y >= 0 ? texCoords.y << uint(shifts.y) : texCoords.y >> uint(-shifts.y));
+
+    // apply offset
+    texCoords -= ivec2(tileInfo.sOffset, tileInfo.tOffset);
+
+    // apply mirror
+    uvec2 mirror = (texCoords / ivec2(tileInfo.sMask + 1, tileInfo.tMask + 1)) % 2;
+    
+    bvec2 doClamp = bvec2(
+        tileInfo.sClamp != 0 && (texCoords.x & ~tileInfo.sMask) != 0,
+        tileInfo.tClamp != 0 && (texCoords.y & ~tileInfo.tMask) != 0
+    );
+    texCoords = ivec2(
+        doClamp.x ? clamp(texCoords.x, 0, tileInfo.sMask) : texCoords.x,
+        doClamp.y ? clamp(texCoords.y, 0, tileInfo.tMask) : texCoords.y
+    );
+
+    // apply mask
+    texCoords &= ivec2(tileInfo.sMask, tileInfo.tMask);
     // convert back to float
-    vec2 scaledTexCoords = vec2(maskedTexCoords.xy) / fixedPointScale;
+    vec2 scaledTexCoords = vec2(
+        bool(tileInfo.sMirror) && bool(mirror.x) ? (tileInfo.sMask - texCoords.x) : texCoords.x,
+        bool(tileInfo.tMirror) && bool(mirror.y) ? (tileInfo.tMask - texCoords.y) : texCoords.y) / fixedPointScale;
 
     vec4 textureColor0 = sampleTile(in_tile, scaledTexCoords);
     vec4 textureColor1 = sampleTile((in_tile + 1) % 8, scaledTexCoords);
@@ -109,7 +127,7 @@ void main() {
     vec4 combineInputs[21];
     combineInputs[0] = vec4(0);
     combineInputs[1] = vec4(1.0);
-    combineInputs[2] = vec4(float((maskedTexCoords.x ^ maskedTexCoords.y) % 8) * 32.0); // bad noise function
+    combineInputs[2] = vec4(float((texCoords.x ^ texCoords.y) % 8) * 32.0); // bad noise function
 
     combineInputs[3] = vec4(0); 
     combineInputs[4] = vec4(combineInputs[3].w);
