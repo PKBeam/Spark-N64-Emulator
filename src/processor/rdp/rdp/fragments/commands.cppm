@@ -93,7 +93,13 @@ struct FillTriangle {
     uint64_t xmI    : 12;
     uint64_t        : 4;
 
-    constexpr auto getTriangle() const -> std::pair<Util::RenderTriangle, Util::RenderTriangle> {
+    using TriangleProcessResult = std::tuple<
+        Util::RenderTriangle,                  // primary triangle
+        std::optional<Util::RenderTriangle>,   // additional triangle to adjust for scanline raster accuracy
+        Util::Point<Util::SFixedPoint<16, 16>> // reference point for shade/texture
+        >;
+
+    constexpr auto getTriangle() const -> TriangleProcessResult {
         const auto y0 = static_cast<Util::SFixedPoint<16, 16>>(Util::SFixedPoint<12, 2>::fromBits(yh));
         const auto y1 = static_cast<Util::SFixedPoint<16, 16>>(Util::SFixedPoint<12, 2>::fromBits(ym));
         const auto y2 = static_cast<Util::SFixedPoint<16, 16>>(Util::SFixedPoint<12, 2>::fromBits(yl));
@@ -133,17 +139,24 @@ struct FillTriangle {
         const auto v2h = Util::Point(x2_h, y2);
         const auto v2l = Util::Point(x2_l, y2);
 
+        const auto referencePoint = Util::Point(xh, y0.floor());
+
         if (yh == ym) {
             return {
                 Util::RenderTriangle(v0h, v1, v2h),
-                Util::RenderTriangle(v1, v2l, v2h)};
+                Util::RenderTriangle(v1, v2l, v2h),
+                referencePoint};
         } else if (yl == ym) {
             const auto zero = Util::Point(Util::Fxp_0, Util::Fxp_0);
-            return {Util::RenderTriangle(v0h, v1, v2h), Util::RenderTriangle(zero, zero, zero)};
+            return {
+                Util::RenderTriangle(v0h, v1, v2h),
+                std::nullopt,
+                referencePoint};
         } else {
             return {
                 Util::RenderTriangle(v0h, v1, v2h),
-                Util::RenderTriangle(v1, v2l, v2h)};
+                Util::RenderTriangle(v1, v2l, v2h),
+                referencePoint};
         }
     }
 
@@ -199,7 +212,7 @@ struct FillTriangle {
         uint64_t dgDyF : 16;
         uint64_t drDyF : 16;
 
-        constexpr auto getShade(const Util::RenderTriangle& tri) const -> Util::Point<std::array<Util::SFixedPoint<16, 16>, 4>> {
+        constexpr auto getShade(const Util::Point<Util::SFixedPoint<16, 16>>& referencePoint, const Util::RenderTriangle& tri) const -> Util::Point<std::array<Util::SFixedPoint<16, 16>, 4>> {
             const auto r = Util::SFixedPoint<9, 16>(rI, rF);
             const auto g = Util::SFixedPoint<9, 16>(gI, gF);
             const auto b = Util::SFixedPoint<9, 16>(bI, bF);
@@ -219,8 +232,8 @@ struct FillTriangle {
                 const auto x0 = tri.v0().x();
                 const auto y0 = tri.v0().y();
 
-                const auto dx = x - x0;
-                const auto dy = y - y0.floor();
+                const auto dx = x - referencePoint.x();
+                const auto dy = y - referencePoint.y();
 
                 const auto dr = drdx * dx + drdy * dy;
                 const auto dg = dgdx * dx + dgdy * dy;
@@ -284,7 +297,7 @@ struct FillTriangle {
         uint64_t dtDyF : 16;
         uint64_t dsDyF : 16;
 
-        constexpr auto getTexCoords(const Util::RenderTriangle& tri) const -> Util::RenderTriangle {
+        constexpr auto getTexCoords(const Util::Point<Util::SFixedPoint<16, 16>>& referencePoint, const Util::RenderTriangle& tri) const -> Util::RenderTriangle {
             const auto s = Util::SFixedPoint<16, 16>(sI, sF);
             const auto t = Util::SFixedPoint<16, 16>(tI, tF);
             const auto w = Util::SFixedPoint<16, 16>(wI, wF);
@@ -300,8 +313,8 @@ struct FillTriangle {
                 const auto x0 = tri.v0().x();
                 const auto y0 = tri.v0().y();
 
-                const auto dx = x - x0;
-                const auto dy = y - y0.floor();
+                const auto dx = x - referencePoint.x();
+                const auto dy = y - referencePoint.y();
 
                 const auto dsX = dsdx * dx;
                 const auto dsY = dsdy * dy;

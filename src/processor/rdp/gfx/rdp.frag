@@ -109,7 +109,7 @@ void main() {
     vec4 combineInputs[21];
     combineInputs[0] = vec4(0);
     combineInputs[1] = vec4(1.0);
-    combineInputs[2] = vec4(0.5);
+    combineInputs[2] = vec4(float((maskedTexCoords.x ^ maskedTexCoords.y) % 8) * 32.0); // bad noise function
 
     combineInputs[3] = vec4(0); 
     combineInputs[4] = vec4(combineInputs[3].w);

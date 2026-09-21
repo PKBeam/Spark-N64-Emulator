@@ -192,28 +192,28 @@ auto RDP::runRdpCommand() -> void {
             case Command::FILL_TRIANGLE_STZ: {
                 const auto cmdHeader = std::bit_cast<Commands::FillTriangle::Cmd>(static_cast<uint8_t>(cmdType));
 
-                const auto cmd     = makeCommand<Commands::FillTriangle, 4>(cmds);
-                auto [tri, triAdj] = cmd.getTriangle();
-                auto shade         = Util::Point<std::array<Util::SFixedPoint<16, 16>, 4>>{};
+                const auto cmd            = makeCommand<Commands::FillTriangle, 4>(cmds);
+                auto [tri, triAdj, refPt] = cmd.getTriangle();
+                auto shade                = Util::Point<std::array<Util::SFixedPoint<16, 16>, 4>>{};
                 if (cmdHeader.shade) {
                     const auto shadeCmd = makeCommand<Commands::FillTriangle::Shade, 8>(cmds);
-                    shade               = shadeCmd.getShade(tri);
+                    shade               = shadeCmd.getShade(refPt, tri);
                 }
 
-                auto texCoords    = Util::RenderTriangle{};
-                auto texCoordsAdj = Util::RenderTriangle{};
+                auto texCoords = Util::RenderTriangle{};
                 if (cmdHeader.texture) {
                     const auto textureCmd = makeCommand<Commands::FillTriangle::Texture, 8>(cmds);
-                    texCoords             = textureCmd.getTexCoords(tri);
+                    texCoords             = textureCmd.getTexCoords(refPt, tri);
                     if (!m_mode.perspTexEn) {
                         texCoords.setZValues(TexelW_NoPerspectiveDivide);
                     }
-                    texCoordsAdj = Util::RenderTriangle{texCoords.v1(), texCoords.v2(), texCoords.v2()};
                 }
                 if (cmdHeader.zbuffer) {
                     const auto depthCmd = makeCommand<Commands::FillTriangle::Depth, 2>(cmds);
                     depthCmd.setDepth(tri);
-                    depthCmd.setDepth(triAdj);
+                    if (triAdj.has_value()) {
+                        depthCmd.setDepth(*triAdj);
+                    }
                 }
 
                 IF_LOG_ENABLED(m_logger) {
@@ -230,7 +230,10 @@ auto RDP::runRdpCommand() -> void {
                 m_tileUsedThisDraw.set(cmd.tile);
                 m_tileUsedThisDraw.set((cmd.tile + 1) % 8);
                 m_gfxBackend->addTriangle(cmd.tile, tri.bytes(), shade.bytes(), texCoords.bytes());
-                m_gfxBackend->addTriangle(cmd.tile, triAdj.bytes(), shade.bytes(), texCoordsAdj.bytes());
+                if (triAdj.has_value()) {
+                    const auto texCoordsAdj = Util::RenderTriangle{texCoords.v1(), texCoords.v2(), texCoords.v2()};
+                    m_gfxBackend->addTriangle(cmd.tile, triAdj->bytes(), shade.bytes(), texCoordsAdj.bytes());
+                }
                 flushBackend();
                 break;
             }
