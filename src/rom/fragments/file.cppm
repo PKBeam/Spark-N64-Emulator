@@ -13,7 +13,7 @@ export class RomFile {
   public:
     constexpr RomFile(std::filesystem::path path) : m_romFilePath(path),
                                                     m_size(std::filesystem::file_size(m_romFilePath)),
-                                                    m_mappedFile(Util::memMapFile(path)) {}
+                                                    m_mappedFile(Util::memMapFile(path.c_str())) {}
     constexpr ~RomFile();
 
     constexpr auto readHeader() const -> N64RomHeader;
@@ -34,7 +34,7 @@ export class RomFile {
 };
 
 constexpr RomFile::~RomFile() {
-    Util::memUnmapFile(m_romFilePath, const_cast<std::byte*>(m_mappedFile));
+    Util::memUnmapFile(m_romFilePath.c_str(), const_cast<std::byte*>(m_mappedFile));
 }
 
 constexpr auto RomFile::readHeader() const -> N64RomHeader {

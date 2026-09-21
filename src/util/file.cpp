@@ -13,10 +13,10 @@
 namespace Util {
 
 #if defined(__linux__)
-auto memMapFile(std::filesystem::path path) -> std::byte* {
+auto memMapFile(const char* path) -> std::byte* {
     auto filePath = std::filesystem::path{path};
     auto fileSize = std::filesystem::file_size(filePath);
-    auto fd       = open(path.c_str(), O_RDONLY);
+    auto fd       = open(path, O_RDONLY);
     auto ptr      = mmap(nullptr, fileSize, PROT_READ, MAP_PRIVATE, fd, 0);
     close(fd);
 
@@ -26,15 +26,16 @@ auto memMapFile(std::filesystem::path path) -> std::byte* {
     return static_cast<std::byte*>(ptr);
 }
 
-auto memUnmapFile(std::filesystem::path path, std::byte* ptr) -> void {
-    auto fileSize = std::filesystem::file_size(path);
+auto memUnmapFile(const char* path, std::byte* ptr) -> void {
+    auto filePath = std::filesystem::path{path};
+    auto fileSize = std::filesystem::file_size(filePath);
     if (munmap(ptr, fileSize) != 0) {
         throw std::runtime_error("Failed to unmap file from memory");
     }
 }
 #elif defined(_WIN32)
-auto memMapFile(std::filesystem::path path) -> std::byte* {
-    auto hFile = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+auto memMapFile(const char* path) -> std::byte* {
+    auto hFile = CreateFileW(path, GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
     if (hFile == INVALID_HANDLE_VALUE) {
         throw std::runtime_error("Failed to open file for memory mapping");
     }
@@ -54,7 +55,7 @@ auto memMapFile(std::filesystem::path path) -> std::byte* {
     return static_cast<std::byte*>(ptr);
 }
 
-auto memUnmapFile(std::filesystem::path path, std::byte* ptr) -> void {
+auto memUnmapFile(const char* path, std::byte* ptr) -> void {
     if (UnmapViewOfFile(ptr) == 0) {
         throw std::runtime_error("Failed to unmap view of file for memory mapping");
     }
