@@ -34,7 +34,7 @@ auto memUnmapFile(const char* path, std::byte* ptr) -> void {
     }
 }
 #elif defined(_WIN32)
-auto memMapFile(const char* path) -> std::byte* {
+auto memMapFile(const wchar_t* path) -> std::byte* {
     auto hFile = CreateFileW(path, GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
     if (hFile == INVALID_HANDLE_VALUE) {
         throw std::runtime_error("Failed to open file for memory mapping");
@@ -55,7 +55,7 @@ auto memMapFile(const char* path) -> std::byte* {
     return static_cast<std::byte*>(ptr);
 }
 
-auto memUnmapFile(const char* path, std::byte* ptr) -> void {
+auto memUnmapFile(const wchar_t* path, std::byte* ptr) -> void {
     if (UnmapViewOfFile(ptr) == 0) {
         throw std::runtime_error("Failed to unmap view of file for memory mapping");
     }
