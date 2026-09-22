@@ -203,7 +203,7 @@ constexpr auto Emulator::loadRom(std::filesystem::path path) -> void {
             m_logger->log<Level::HIGH, Sev::INFO>("Game booted");
         }
     });
-    if (m_logger) {
+    if (m_logger && m_config.logAfterRdpSync) {
         m_rdp->registerSyncCallback(*m_config.logAfterRdpSync, [this]() {
             m_logger->enable();
         });

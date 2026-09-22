@@ -78,7 +78,7 @@ namespace Parsers {
     if (PC.empty()) {
         throw Util::Error("Program counter not specified", PC);
     }
-    const auto value = std::stol(std::string(PC), nullptr, 16);
+    const auto value = std::stoll(std::string(PC), nullptr, 16);
     if (value % 4 != 0) {
         throw Util::Error("Program counter must be aligned to 4 bytes", PC);
     }

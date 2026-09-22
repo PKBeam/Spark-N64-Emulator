@@ -48,6 +48,9 @@ constexpr auto RomFile::readHeader() const -> N64RomHeader {
 
 template <std::integral T>
 constexpr auto RomFile::read(uint64_t addr) const -> T {
+    if (addr > m_size - sizeof(T)) {
+        throw Util::Error("Attempt to read beyond ROM size");
+    }
     T data;
     std::memcpy(&data, m_mappedFile + addr, sizeof(T));
     if constexpr (Util::isLittleEndian()) {
