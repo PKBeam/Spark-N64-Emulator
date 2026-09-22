@@ -13,7 +13,16 @@ namespace Interfaces {
 
 export class VideoInterface : public Interface {
   public:
-    VideoInterface(std::shared_ptr<Util::Logger> logger, MipsInterface* mipsInterface) : m_logger(logger), m_mipsInterface(mipsInterface) {}
+    // clang-format off
+    VideoInterface(std::shared_ptr<Util::Logger> logger, MipsInterface* mipsInterface) : m_logger(logger), m_mipsInterface(mipsInterface)
+#if !defined(DETERMINISTIC_VI_INTERRUPTS)                                                                    
+        , m_timer([&]() {
+            if (m_ctrl.type != 0) {
+                m_tick = true;
+            }
+        })
+#endif
+{} // clang-format on
 
     auto read(uint32_t addr) -> uint32_t override;
     auto write(uint32_t addr, uint32_t data) -> void override;
@@ -31,11 +40,6 @@ export class VideoInterface : public Interface {
         }
     }
 #else
-    auto processNextFrame() -> void {
-        if (m_ctrl.type != 0) {
-            m_tick = true;
-        }
-    }
     auto getInterrupt() -> bool {
         const auto old = std::atomic_exchange(&m_tick, false);
         return old;
@@ -50,7 +54,8 @@ export class VideoInterface : public Interface {
 #if defined(DETERMINISTIC_VI_INTERRUPTS)
     std::size_t m_cycles{};
 #else
-    std::atomic<bool> m_tick{};
+    Util::Timer<60 /*fps*/> m_timer;
+    std::atomic<bool>       m_tick{};
 #endif
 };
 

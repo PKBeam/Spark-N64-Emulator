@@ -211,11 +211,7 @@ int main(int argc, char* argv[]) {
         // now signal the application to stop
         g_shouldTerminate = true;
     });
-#if !defined(DETERMINISTIC_VI_INTERRUPTS)
-    auto timer = Util::Timer<60 /*fps*/>([&]() { // TODO maybe move this inside VI
-        emulator.processNextFrame();
-    });
-#endif
+
     std::signal(Util::SigInt, signalHandler);
     std::signal(Util::SigTerm, signalHandler);
 #if defined(__linux__)

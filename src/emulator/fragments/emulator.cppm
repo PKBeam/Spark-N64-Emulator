@@ -48,7 +48,6 @@ export class Emulator {
 
     constexpr auto loadRom(std::filesystem::path romFilePath) -> void;
 
-    constexpr auto processNextFrame() -> void;
     constexpr auto runCycle() -> void;
 
     constexpr auto getRdpGfxBackend() -> RDP::GfxBackend* {
@@ -162,12 +161,6 @@ Emulator::~Emulator() {
     delete m_serialInterface;
     delete m_videoInterface;
     delete m_rdpGfxBackend;
-}
-
-constexpr auto Emulator::processNextFrame() -> void {
-#if !defined(DETERMINISTIC_VI_INTERRUPTS)
-    m_videoInterface->processNextFrame();
-#endif
 }
 
 constexpr auto Emulator::processViInterrupt() -> void {
