@@ -30,7 +30,7 @@ class RSP {
           m_control(control),
           m_mipsInterface(mipsInterface),
           m_memoryBus(memoryBus),
-          m_gprs(logger),
+          m_gprs(logger, 0),
           m_vprs(logger),
           m_exec(m_logger, &m_gprs, &m_vprs, m_memoryBus) {};
 
@@ -41,7 +41,7 @@ class RSP {
     auto runRspInstruction() -> void;
 
     auto getPc() const -> uint32_t {
-        return m_gprs.readPc();
+        return m_currentInstructionPc;
     }
 
   private:
@@ -53,6 +53,7 @@ class RSP {
     ::RSP::Registers              m_vprs;
     ::RSP::InstructionExecutor    m_exec;
     std::optional<VirtualAddr>    m_delaySlotPc;
+    uint32_t                      m_currentInstructionPc{};
 };
 
 auto RSP::halt() -> void {
@@ -77,13 +78,15 @@ auto RSP::runRspInstruction() -> void {
     }
 
     if (auto pc = m_control->readPc()) { // starting from halt
-        m_gprs.writePc(*pc);
+        m_gprs.setPc(*pc);
         m_control->clearPc();
 
         // static int imems = 0;
         // dumpIMem(std::format("rsp_imem_{}.txt", imems++));
         // std::println("RSP IMEM dumped to rsp_imem_{}.txt", imems - 1);
     }
+
+    m_currentInstructionPc = m_gprs.readPc();
 
     const auto instBits = WITH_LOG_DISABLED(m_logger, m_memoryBus->readPhysical<uint32_t>(m_gprs.readPc() + RSP_IMEM_BASE));
     const auto inst     = ISA::Instruction(instBits);
@@ -101,6 +104,8 @@ auto RSP::runRspInstruction() -> void {
     namespace Func = Util::Function;
     using TypeI    = ISA::CPU::TypeI;
     using TypeR    = ISA::CPU::TypeR;
+
+    m_gprs.advancePc();
 
     switch (op) {
         // unsupported opcodes
@@ -354,7 +359,6 @@ auto RSP::runRspInstruction() -> void {
                 default: throw Util::Error("Unsupported CP2 control register {}", ops.vs);
             }
             break;
-            break;
         }
 
         // Misc. instructions
@@ -375,10 +379,8 @@ auto RSP::runRspInstruction() -> void {
             halt();
             break;
         default:
-            throw Util::Error("RSP unimplemented instruction @ PC " HEXFMT12 ": {} (" HEXFMT32 ")", m_gprs.readPc(), inst, data);
+            throw Util::Error("RSP unimplemented instruction: {} (" HEXFMT32 ")", inst, data);
     }
-
-    m_gprs.advancePc();
 
     if (m_control->getSingleStep()) {
         halt();

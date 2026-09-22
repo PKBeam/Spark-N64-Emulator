@@ -15,15 +15,18 @@ export namespace CPU {
 template <Sys System>
 struct Registers {
 
-    Registers(std::shared_ptr<Util::Logger> logger) : m_logger(logger) {}
+    Registers(std::shared_ptr<Util::Logger> logger, uint32_t initialPc) : m_logger(logger) {
+        setPc(initialPc);
+    }
+
+    // Immediately sets the PC
+    auto setPc(uint64_t value) -> void;
 
     auto readPc() const -> uint64_t;
-    auto writePc(uint64_t value) -> void;
-    auto writePcDelayed(uint64_t newPc) -> void;
-    auto pcIsDelaySlot() const -> bool;
-    auto clearDelaySlot() -> void;
+    auto pcHasPendingJump() const -> bool;
+    auto writePcPendingJump(uint64_t newPc) -> void;
+    auto clearPcPendingJump() -> void;
     auto advancePc() -> void;
-    auto getNextPc() const -> uint64_t;
 
     template <std::integral T = int32_t>
     auto readGpr(std::size_t index) const -> T;
@@ -62,9 +65,15 @@ struct Registers {
 
     // program counter state management
     uint64_t m_pc{};
-    uint64_t m_delaySlotPc   = PC_NO_JUMP;
-    uint64_t m_pendingJumpPc = PC_NO_JUMP;
+    uint64_t m_nextPc{};
+    uint64_t m_delaySlotPc = PC_NO_JUMP;
 };
+
+template <Sys System>
+auto Registers<System>::setPc(uint64_t value) -> void {
+    m_pc     = value;
+    m_nextPc = value + 4;
+}
 
 template <Sys System>
 auto Registers<System>::readPc() const -> uint64_t {
@@ -72,48 +81,32 @@ auto Registers<System>::readPc() const -> uint64_t {
 }
 
 template <Sys System>
-auto Registers<System>::writePc(uint64_t value) -> void {
-    m_pc = value;
+auto Registers<System>::writePcPendingJump(uint64_t newPc) -> void {
+    m_delaySlotPc = newPc;
 }
 
 template <Sys System>
-auto Registers<System>::writePcDelayed(uint64_t newPc) -> void {
-    m_pendingJumpPc = newPc;
-}
-
-template <Sys System>
-auto Registers<System>::pcIsDelaySlot() const -> bool {
+auto Registers<System>::pcHasPendingJump() const -> bool {
     return m_delaySlotPc != PC_NO_JUMP;
 }
 
 template <Sys System>
-auto Registers<System>::clearDelaySlot() -> void {
+auto Registers<System>::clearPcPendingJump() -> void {
     m_delaySlotPc = PC_NO_JUMP;
 }
 
 template <Sys System>
 auto Registers<System>::advancePc() -> void {
     if (m_delaySlotPc == PC_NO_JUMP) {
-        m_pc += 4;
+        setPc(m_nextPc);
     } else {
-        m_pc          = m_delaySlotPc;
+        setPc(m_delaySlotPc);
         m_delaySlotPc = PC_NO_JUMP;
     }
     if constexpr (System == Sys::RSP) {
+        m_nextPc &= 0xFFF;
         m_pc &= 0xFFF;
     }
-    if (m_pendingJumpPc != PC_NO_JUMP) {
-        m_delaySlotPc   = m_pendingJumpPc;
-        m_pendingJumpPc = PC_NO_JUMP;
-    }
-}
-
-template <Sys System>
-auto Registers<System>::getNextPc() const -> uint64_t {
-    if (m_delaySlotPc != PC_NO_JUMP) {
-        return m_delaySlotPc;
-    }
-    return m_pc + 4;
 }
 
 template <Sys System>

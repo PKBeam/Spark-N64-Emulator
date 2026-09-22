@@ -22,13 +22,12 @@ class CPU {
         Memory::MemoryBus*            memoryBus,
         CP0::CP0*                     cp0,
         CP1::CP1*                     cp1)
-        : m_regs(logger),
+        : m_regs(logger, INITIAL_PC),
           m_logger(logger),
           m_memoryBus(memoryBus),
           m_cp0(cp0),
           m_cp1(cp1),
           m_exec(logger, &m_regs, m_memoryBus) {
-        m_regs.writePc(INITIAL_PC);
     }
 
     auto dumpIMem(std::filesystem::path file) const -> void;
@@ -40,7 +39,7 @@ class CPU {
     auto runCpuInstruction() -> void;
 
     auto getPc() const -> uint32_t {
-        return m_regs.readPc();
+        return m_currentInstructionPc;
     }
 
   private:
@@ -56,6 +55,7 @@ class CPU {
     bool                  m_hasBooted{};
     std::function<void()> m_bootCallback;
     uint32_t              m_bootAddress{};
+    uint32_t              m_currentInstructionPc{};
 };
 
 auto CPU::dumpIMem(std::filesystem::path file) const -> void {
@@ -80,7 +80,7 @@ auto CPU::emulateInitialBoot() -> void {
         const auto word = m_memoryBus->read<uint32_t>(0xB0000000 + i);
         m_memoryBus->write<uint32_t>(0xA4000000 + i, word);
     }
-    m_regs.writePc(static_cast<uint32_t>(0xA4000040));
+    m_regs.setPc(static_cast<uint32_t>(0xA4000040));
 
     m_regs.writeGpr<ISA::CPU_REG::t3>(static_cast<uint32_t>(0xA4000040));
     m_regs.writeGpr<ISA::CPU_REG::s4>(static_cast<uint32_t>(0x00000001));
@@ -103,15 +103,15 @@ auto CPU::handleInterrupt() -> void {
     status.exl  = 1;
     m_cp0->writeReg(status);
     auto nextPc = m_regs.readPc();
-    if (m_regs.pcIsDelaySlot()) {
+    if (m_regs.pcHasPendingJump()) {
         nextPc -= 4;
         auto cause = m_cp0->readReg<ISA::CP0_REG::CAUSE>();
         cause.bd   = 1;
         m_cp0->writeReg(cause);
     }
     m_cp0->writeReg<ISA::CP0_REG::EPC>(nextPc);
-    m_regs.writePc(status.bev ? 0xBFC00000 : 0x80000000);
-    m_regs.clearDelaySlot();
+    m_regs.setPc(status.bev ? 0xBFC00000 : 0x80000000);
+    m_regs.clearPcPendingJump();
     IF_LOG_ENABLED(m_logger) {
         m_logger->log<Level::HIGH, Sys::CPU>(
             std::tuple{"op", "interrupt"},
@@ -134,6 +134,8 @@ auto CPU::runCpuInstruction() -> void {
         m_hasBooted = true;
         m_bootCallback();
     }
+
+    m_currentInstructionPc = m_regs.readPc();
 
     const auto instBits = WITH_LOG_DISABLED(m_logger, m_memoryBus->read<uint32_t>(m_regs.readPc()));
     const auto inst     = ISA::Instruction(instBits);
@@ -166,6 +168,7 @@ auto CPU::runCpuInstruction() -> void {
             return;
         }
     }
+    m_regs.advancePc();
 
     // execute the opcode
     switch (op) {
@@ -426,21 +429,17 @@ auto CPU::runCpuInstruction() -> void {
         case UnifiedOpcode::OP_ERET: {
             auto status = m_cp0->readReg<ISA::CP0_REG::STATUS>();
             if (status.erl) {
-                m_regs.writePc(m_cp0->readReg<ISA::CP0_REG::ERROREPC>());
+                m_regs.setPc(m_cp0->readReg<ISA::CP0_REG::ERROREPC>());
                 status.erl = 0;
             } else {
-                m_regs.writePc(m_cp0->readReg<ISA::CP0_REG::EPC>());
+                m_regs.setPc(m_cp0->readReg<ISA::CP0_REG::EPC>());
                 status.exl = 0;
             }
             m_cp0->writeReg(status);
             break;
         }
         default:
-            throw Util::Error("CPU unimplemented instruction @ PC " HEXFMT32 ": {} (" HEXFMT32 ")", m_regs.readPc(), inst, data);
-    }
-
-    if (op != UnifiedOpcode::OP_ERET) {
-        m_regs.advancePc();
+            throw Util::Error("CPU unimplemented instruction: {} (" HEXFMT32 ")", inst, data);
     }
 }
 

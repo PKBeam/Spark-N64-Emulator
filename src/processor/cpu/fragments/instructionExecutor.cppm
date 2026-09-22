@@ -91,18 +91,20 @@ class InstructionExecutor {
 template <Sys System>
 template <Param::BranchLink Link, Param::BranchSource Source>
 auto InstructionExecutor<System>::executeJump(uint32_t inst) -> void {
+    // NOTE: at this point during execution, the PC has already been advanced.
+    // readPc returns the address of the next instruction after the current one.
     if constexpr (Source == Param::BranchSource::IMM) {
         const auto ops = std::bit_cast<ISA::CPU::TypeJ>(inst);
         if constexpr (Link == Param::BranchLink::LINK) {
-            m_regs->template writeGpr<ISA::CPU_REG::ra>(m_regs->readPc() + 8);
+            m_regs->template writeGpr<ISA::CPU_REG::ra>(m_regs->readPc() + 4);
         }
-        m_regs->writePcDelayed((m_regs->readPc() & 0xF0000000) | (ops.tgt << 2));
+        m_regs->writePcPendingJump((m_regs->readPc() & 0xF0000000) | (ops.tgt << 2));
     } else {
         const auto ops = std::bit_cast<ISA::CPU::TypeR>(inst);
         if constexpr (Link == Param::BranchLink::LINK) {
-            m_regs->template writeGpr(ops.rd, m_regs->readPc() + 8);
+            m_regs->template writeGpr(ops.rd, m_regs->readPc() + 4);
         }
-        m_regs->writePcDelayed(m_regs->readGpr(ops.rs));
+        m_regs->writePcPendingJump(m_regs->readGpr(ops.rs));
     }
 }
 
@@ -112,11 +114,10 @@ auto InstructionExecutor<System>::executeBranch(uint32_t inst, bool cond) -> voi
     auto ops = std::bit_cast<ISA::CPU::TypeI>(inst);
     if (cond) {
         const auto instOffset = Util::signExt32<int16_t>(ops.imm);
-        m_regs->writePcDelayed((m_regs->readPc() + 4) + (instOffset << 2));
+        m_regs->writePcPendingJump((m_regs->readPc()) + (instOffset << 2));
     } else {
         if constexpr (Likely == Param::BranchLikelihood::LIKELY) {
-            const auto nextPc = m_regs->readPc() + 4;
-            m_regs->writePc(nextPc);
+            m_regs->advancePc();
         }
     }
 }
@@ -126,7 +127,7 @@ template <Param::BranchLikelihood Likely, Param::BranchLink Link, typename Funct
     requires std::same_as<bool, std::invoke_result_t<Function, int32_t, int32_t>>
 auto InstructionExecutor<System>::executeBranch(uint32_t inst, Function&& func) -> void {
     if constexpr (Link == Param::BranchLink::LINK) {
-        m_regs->template writeGpr<ISA::CPU_REG::ra>(m_regs->readPc() + 8);
+        m_regs->template writeGpr<ISA::CPU_REG::ra>(m_regs->readPc() + 4);
     }
     const auto ops       = std::bit_cast<ISA::CPU::TypeI>(inst);
     const bool condition = func(m_regs->readGpr(ops.rs), m_regs->readGpr(ops.rt));
@@ -219,16 +220,11 @@ auto InstructionExecutor<System>::executeDivide(uint32_t inst) -> void {
     const auto rs  = m_regs->template readGpr<T>(ops.rs);
     const auto rt  = m_regs->template readGpr<T>(ops.rt);
     if (rt == 0) {
-        IF_LOG_ENABLED(m_logger) {
-            m_logger->log<Level::HIGH, Sev::WARNING, Sys::CPU>("division by zero @ PC " HEXFMT32, m_regs->readPc());
-        }
-        return;
+        throw Util::Error("Division by zero");
     }
     if constexpr (std::is_signed_v<T>) {
         if (rs == std::numeric_limits<T>::min() && rt == -1) {
-            IF_LOG_ENABLED(m_logger) {
-                m_logger->log<Level::HIGH, Sev::WARNING, Sys::CPU>("division overflow @ PC " HEXFMT32, m_regs->readPc());
-            }
+            throw Util::Error("Division overflow");
         }
     }
     m_regs->writeHi(static_cast<T>(rs % rt));
