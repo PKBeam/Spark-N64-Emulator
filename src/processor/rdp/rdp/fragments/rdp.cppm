@@ -115,6 +115,7 @@ auto RDP::flushBackend() -> void {
     inputs.uniform = m_combineInputs;
     m_gfxBackend->setCombineInputs(inputs);
     m_gfxBackend->setBlendColour(m_blend);
+    m_gfxBackend->setZModeDecal(m_mode.zMode == Commands::SetOtherModes::ZMode::DECAL);
     for (auto tileIndex = 0uz; tileIndex < m_tileUsedThisDraw.size(); ++tileIndex) {
         if (!m_tileUsedThisDraw[tileIndex]) {
             continue;
@@ -275,6 +276,7 @@ auto RDP::runRdpCommand() -> void {
             }
             case Command::SET_OTHER_MODES: {
                 m_mode = makeCommand<Commands::SetOtherModes, 1>(cmds);
+                m_gfxBackend->setZModeDecal(m_mode.zMode == Commands::SetOtherModes::ZMode::DECAL);
                 IF_LOG_ENABLED(m_logger) {
                     m_logger->log<Level::MED, Sys::RDP>(
                         std::tuple{"op", "setOtherModes"},

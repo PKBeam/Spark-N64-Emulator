@@ -546,6 +546,13 @@ struct SetOtherModes {
         CYCLE_COPY = 2,
         CYCLE_FILL = 3
     };
+
+    enum ZMode {
+        OPAQUE,
+        INTERPENETRATING,
+        TRANSPARENT,
+        DECAL
+    };
 };
 
 struct LoadTLUT {

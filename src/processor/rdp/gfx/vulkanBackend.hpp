@@ -89,6 +89,7 @@ class VulkanBackend : public GfxBackend {
                      const std::byte* uvBytes    = nullptr) -> void override;
     auto setCombineInputs(const CombineInputs& inputs) -> void override;
     auto setBlendColour(uint32_t blendColour) -> void override;
+    auto setZModeDecal(bool enable) -> void override;
     auto startRenderPass(RenderOptions options) -> void override;
     auto completeRenderFrame() -> void override;
     auto getRenderOutput() -> RenderOutput;
@@ -161,6 +162,7 @@ class VulkanBackend : public GfxBackend {
 
     VkExtent2D m_extent = {320, 240};
 
+    bool                     m_zModeDecal             = false;
     bool                     m_renderedAtLeastOnce    = false;
     bool                     m_initialized            = false;
     bool                     m_renderTargetHasContent = false;

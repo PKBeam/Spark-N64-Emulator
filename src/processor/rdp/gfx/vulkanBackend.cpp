@@ -308,6 +308,14 @@ auto VulkanBackend::setBlendColour(uint32_t blendColour) -> void {
     m_currentRenderPass.pushConstants.blendColour = blendColour;
 }
 
+auto VulkanBackend::setZModeDecal(bool enable) -> void {
+    auto lock = std::lock_guard<std::mutex>(m_resourceMutex);
+    if (!m_initialized) {
+        return;
+    }
+    m_zModeDecal = enable;
+}
+
 auto VulkanBackend::startRenderPass(RenderOptions options) -> void {
     auto lock = std::lock_guard<std::mutex>(m_resourceMutex);
     if (!m_initialized || m_currentRenderPass.vertexData.empty()) {
@@ -374,6 +382,11 @@ auto VulkanBackend::startRenderPass(RenderOptions options) -> void {
 
     vkCmdBeginRendering(m_commandBuffer, &vkRenderingInfo);
     vkCmdBindPipeline(m_commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pipeline);
+    if (m_zModeDecal) {
+        vkCmdSetDepthBias(m_commandBuffer, -1.0f, 0.0f, -1.0f);
+    } else {
+        vkCmdSetDepthBias(m_commandBuffer, 0.0f, 0.0f, 0.0f);
+    }
     auto offset = VkDeviceSize{0};
     vkCmdBindVertexBuffers(m_commandBuffer, 0, 1, &m_vertexBuffer.buffer, &offset);
     vkCmdPushDescriptorSet(m_commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pipelineLayout, 0, m_textureDescriptors.writeDescriptorSets.size(), m_textureDescriptors.writeDescriptorSets.data());
@@ -590,7 +603,7 @@ auto VulkanBackend::createPipeline() -> void {
         .polygonMode             = VK_POLYGON_MODE_FILL,
         .cullMode                = VK_CULL_MODE_NONE,
         .frontFace               = VK_FRONT_FACE_CLOCKWISE,
-        .depthBiasEnable         = VK_FALSE,
+        .depthBiasEnable         = VK_TRUE,
         .depthBiasConstantFactor = 0.0f,
         .depthBiasClamp          = 0.0f,
         .depthBiasSlopeFactor    = 0.0f,
@@ -640,9 +653,10 @@ auto VulkanBackend::createPipeline() -> void {
         .stencilAttachmentFormat = VK_FORMAT_UNDEFINED,
     };
 
-    const auto dynamicStates = std::array<VkDynamicState, 2>{
+    const auto dynamicStates = std::array<VkDynamicState, 3>{
         VK_DYNAMIC_STATE_DEPTH_WRITE_ENABLE_EXT,
-        VK_DYNAMIC_STATE_DEPTH_TEST_ENABLE_EXT};
+        VK_DYNAMIC_STATE_DEPTH_TEST_ENABLE_EXT,
+        VK_DYNAMIC_STATE_DEPTH_BIAS};
     const auto dynamicStateInfo = VkPipelineDynamicStateCreateInfo{
         .sType             = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
         .pNext             = nullptr,
