@@ -404,13 +404,13 @@ inline auto readSpirvShader(std::filesystem::path path) -> std::vector<uint32_t>
     return buffer;
 }
 
-inline auto shaderModuleCreateInfo(const std::vector<uint32_t>& shaderCode) -> VkShaderModuleCreateInfo {
+inline auto shaderModuleCreateInfo(const std::vector<uint8_t>& shaderCode) -> VkShaderModuleCreateInfo {
     return VkShaderModuleCreateInfo{
         .sType    = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
         .pNext    = nullptr,
         .flags    = 0,
-        .codeSize = shaderCode.size() * sizeof(uint32_t),
-        .pCode    = shaderCode.data(),
+        .codeSize = shaderCode.size(),
+        .pCode    = reinterpret_cast<const uint32_t*>(shaderCode.data()),
     };
 }
 

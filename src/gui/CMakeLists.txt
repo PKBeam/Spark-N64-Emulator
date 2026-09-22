@@ -12,6 +12,7 @@ target_sources(gui PUBLIC
 target_compile_options(gui PUBLIC ${CXX_COMPILE_OPTIONS})
 target_link_options(gui PUBLIC ${CXX_LINK_OPTIONS})
 target_include_directories(gui PUBLIC ${CMAKE_SOURCE_DIR}/src)
+target_compile_options(gui PUBLIC "--embed-dir=${CMAKE_CURRENT_BINARY_DIR}")
 target_link_libraries(gui PUBLIC rdp_gfx_backend util Vulkan::Vulkan Qt6::Gui)
 
 set(SHADER_SOURCES "window.vert" "window.frag")

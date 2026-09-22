@@ -2,6 +2,16 @@
 #include <util/vkUtil.hpp>
 #include "vkRenderWindow.hpp"
 
+// clang-format off
+static const auto WindowVertexShaderSpv = std::vector<uint8_t> {
+#embed <window.vert.spv>
+};
+
+static const auto WindowFragmentShaderSpv = std::vector<uint8_t> {
+#embed <window.frag.spv>
+};
+// clang-format on
+
 namespace GUI {
 
 auto VulkanRenderer::initResources() -> void {
@@ -50,14 +60,11 @@ auto VulkanRenderer::initResources() -> void {
     vkCreateDescriptorSetLayout(m_window->device(), &descriptorSetLayoutInfo, nullptr, &m_descriptorSetLayout);
 
     // present pipelines
-
-    const auto     vertShader = Util::VK::readSpirvShader(std::filesystem::path("window.vert.spv"));
-    const auto     vertInfo   = Util::VK::shaderModuleCreateInfo(vertShader);
+    const auto     vertInfo = Util::VK::shaderModuleCreateInfo(WindowVertexShaderSpv);
     VkShaderModule vertShaderModule;
     vkCreateShaderModule(m_window->device(), &vertInfo, nullptr, &vertShaderModule);
 
-    const auto     fragShader = Util::VK::readSpirvShader(std::filesystem::path("window.frag.spv"));
-    const auto     fragInfo   = Util::VK::shaderModuleCreateInfo(fragShader);
+    const auto     fragInfo = Util::VK::shaderModuleCreateInfo(WindowFragmentShaderSpv);
     VkShaderModule fragShaderModule;
     vkCreateShaderModule(m_window->device(), &fragInfo, nullptr, &fragShaderModule);
 
@@ -102,11 +109,11 @@ auto VulkanRenderer::initResources() -> void {
 
     const auto dynamicStates = std::array<VkDynamicState, 2>{VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};
     const auto dynamicState  = VkPipelineDynamicStateCreateInfo{
-         .sType             = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
-         .pNext             = nullptr,
-         .flags             = 0,
-         .dynamicStateCount = static_cast<uint32_t>(dynamicStates.size()),
-         .pDynamicStates    = dynamicStates.data(),
+        .sType             = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
+        .pNext             = nullptr,
+        .flags             = 0,
+        .dynamicStateCount = static_cast<uint32_t>(dynamicStates.size()),
+        .pDynamicStates    = dynamicStates.data(),
     };
 
     const auto viewportState = VkPipelineViewportStateCreateInfo{
@@ -309,9 +316,9 @@ auto VulkanRenderer::startNextFrame() -> void {
 
     const auto descriptorSet = m_descriptorSets[m_window->currentSwapChainImageIndex()];
     const auto imageInfo     = VkDescriptorImageInfo{
-            .sampler     = m_sampler,
-            .imageView   = frame.m_imageView,
-            .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+        .sampler     = m_sampler,
+        .imageView   = frame.m_imageView,
+        .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
     };
     const auto writeDescSet = VkWriteDescriptorSet{
         .sType            = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
@@ -340,11 +347,11 @@ auto VulkanRenderer::startNextFrame() -> void {
         .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
         .image               = swapImage,
         .subresourceRange    = VkImageSubresourceRange{
-               .aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT,
-               .baseMipLevel   = 0,
-               .levelCount     = 1,
-               .baseArrayLayer = 0,
-               .layerCount     = 1,
+            .aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT,
+            .baseMipLevel   = 0,
+            .levelCount     = 1,
+            .baseArrayLayer = 0,
+            .layerCount     = 1,
         },
     };
     const auto preDepInfo = VkDependencyInfo{
@@ -429,11 +436,11 @@ auto VulkanRenderer::startNextFrame() -> void {
         .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
         .image               = swapImage,
         .subresourceRange    = VkImageSubresourceRange{
-               .aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT,
-               .baseMipLevel   = 0,
-               .levelCount     = 1,
-               .baseArrayLayer = 0,
-               .layerCount     = 1,
+            .aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT,
+            .baseMipLevel   = 0,
+            .levelCount     = 1,
+            .baseArrayLayer = 0,
+            .layerCount     = 1,
         },
     };
     const auto postDep = VkDependencyInfo{
@@ -469,11 +476,11 @@ auto VulkanRenderer::renderNothing(VkImage swapImage, VkImageView swapView) -> v
         .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
         .image               = swapImage,
         .subresourceRange    = VkImageSubresourceRange{
-               .aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT,
-               .baseMipLevel   = 0,
-               .levelCount     = 1,
-               .baseArrayLayer = 0,
-               .layerCount     = 1,
+            .aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT,
+            .baseMipLevel   = 0,
+            .levelCount     = 1,
+            .baseArrayLayer = 0,
+            .layerCount     = 1,
         },
     };
     const auto clearDep = VkDependencyInfo{
@@ -540,11 +547,11 @@ auto VulkanRenderer::renderNothing(VkImage swapImage, VkImageView swapView) -> v
         .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
         .image               = swapImage,
         .subresourceRange    = VkImageSubresourceRange{
-               .aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT,
-               .baseMipLevel   = 0,
-               .levelCount     = 1,
-               .baseArrayLayer = 0,
-               .layerCount     = 1,
+            .aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT,
+            .baseMipLevel   = 0,
+            .levelCount     = 1,
+            .baseArrayLayer = 0,
+            .layerCount     = 1,
         },
     };
     const auto postClearDep = VkDependencyInfo{

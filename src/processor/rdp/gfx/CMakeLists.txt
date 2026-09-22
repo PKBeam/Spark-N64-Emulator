@@ -8,6 +8,7 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(xxHash)
 find_package(xxHash REQUIRED)
 
+
 add_library(rdp_gfx_backend)
 set_target_properties(rdp_gfx_backend PROPERTIES CXX_MODULE_STD ON)
 target_sources(rdp_gfx_backend PUBLIC 
@@ -23,6 +24,7 @@ target_sources(rdp_gfx_backend PUBLIC
 target_compile_options(rdp_gfx_backend PUBLIC ${CXX_COMPILE_OPTIONS})
 target_link_options(rdp_gfx_backend PUBLIC ${CXX_LINK_OPTIONS})
 target_include_directories(rdp_gfx_backend PUBLIC ${CMAKE_SOURCE_DIR}/src)
+target_compile_options(rdp_gfx_backend PUBLIC "--embed-dir=${CMAKE_CURRENT_BINARY_DIR}")
 target_link_libraries(rdp_gfx_backend PUBLIC util Vulkan::Vulkan Qt6::Core Qt6::Gui xxHash::xxhash)
 
 set(SHADER_SOURCES "rdp.vert" "rdp.frag")

@@ -9,6 +9,16 @@
 #include <util/vkUtil.hpp>
 #include "vulkanBackend.hpp"
 
+// clang-format off
+static const auto RdpVertexShaderSpv = std::vector<uint8_t> {
+#embed <rdp.vert.spv>
+};
+
+static const auto RdpFragmentShaderSpv = std::vector<uint8_t> {
+#embed <rdp.frag.spv>
+};
+// clang-format on
+
 namespace RDP {
 
 static auto nativeFormatFor(TextureFormat format) -> std::optional<VulkanTextureFormat> {
@@ -497,12 +507,12 @@ auto VulkanBackend::createDescriptorInfo() -> void {
 
 auto VulkanBackend::createPipeline() -> void {
     const auto     vertShader     = Util::VK::readSpirvShader("rdp.vert.spv");
-    const auto     vertCreateInfo = Util::VK::shaderModuleCreateInfo(vertShader);
+    const auto     vertCreateInfo = Util::VK::shaderModuleCreateInfo(RdpVertexShaderSpv);
     VkShaderModule vertShaderModule;
     VK_TRY(vkCreateShaderModule(m_device.device, &vertCreateInfo, nullptr, &vertShaderModule));
 
     const auto     fragShader     = Util::VK::readSpirvShader("rdp.frag.spv");
-    const auto     fragCreateInfo = Util::VK::shaderModuleCreateInfo(fragShader);
+    const auto     fragCreateInfo = Util::VK::shaderModuleCreateInfo(RdpFragmentShaderSpv);
     VkShaderModule fragShaderModule;
     VK_TRY(vkCreateShaderModule(m_device.device, &fragCreateInfo, nullptr, &fragShaderModule));
 

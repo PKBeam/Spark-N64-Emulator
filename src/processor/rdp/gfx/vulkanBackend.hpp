@@ -29,6 +29,7 @@ struct RenderOutput {
 // Vulkan push constants
 struct RdpRenderPassConstants {
     RDP::CombineInputs combineInputs;
+    uint32_t           blendColour;
 };
 
 struct ShaderTileInfo {
@@ -41,7 +42,6 @@ static_assert(sizeof(ShaderTileInfo) == 40);
 struct CurrentRenderPass {
     bool                          active        = false;
     std::vector<int32_t>          vertexData    = {};
-    uint32_t                      primColour    = 0;
     RdpRenderPassConstants        pushConstants = {};
     std::array<ShaderTileInfo, 8> tileParams    = {};
 
@@ -88,6 +88,7 @@ class VulkanBackend : public GfxBackend {
                      const std::byte* shadeBytes = nullptr,
                      const std::byte* uvBytes    = nullptr) -> void override;
     auto setCombineInputs(const CombineInputs& inputs) -> void override;
+    auto setBlendColour(uint32_t blendColour) -> void override;
     auto startRenderPass(RenderOptions options) -> void override;
     auto completeRenderFrame() -> void override;
     auto getRenderOutput() -> RenderOutput;
