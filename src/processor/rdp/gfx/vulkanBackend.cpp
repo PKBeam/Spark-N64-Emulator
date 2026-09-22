@@ -290,6 +290,14 @@ auto VulkanBackend::setCombineInputs(const CombineInputs& inputs) -> void {
     m_currentRenderPass.pushConstants.combineInputs = inputs;
 }
 
+auto VulkanBackend::setBlendColour(uint32_t blendColour) -> void {
+    auto lock = std::lock_guard<std::mutex>(m_resourceMutex);
+    if (!m_initialized) {
+        return;
+    }
+    m_currentRenderPass.pushConstants.blendColour = blendColour;
+}
+
 auto VulkanBackend::startRenderPass(RenderOptions options) -> void {
     auto lock = std::lock_guard<std::mutex>(m_resourceMutex);
     if (!m_initialized || m_currentRenderPass.vertexData.empty()) {

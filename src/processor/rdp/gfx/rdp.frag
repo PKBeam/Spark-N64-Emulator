@@ -28,6 +28,7 @@ layout(push_constant) uniform RdpRenderPassConstants {
     uint8_t  in_alpha_1_b; 
     uint8_t  in_alpha_1_c; 
     uint8_t  in_alpha_1_d;
+    uint     in_blend;
 };
 
 layout(location = 0) in flat int in_tile; 
@@ -103,7 +104,7 @@ void main() {
     texCoords -= ivec2(tileInfo.sOffset, tileInfo.tOffset);
 
     // apply mirror
-    uvec2 mirror = (texCoords / ivec2(tileInfo.sMask + 1, tileInfo.tMask + 1)) % 2;
+    uvec2 mirror = (uvec2(texCoords) / ivec2(tileInfo.sMask + 1, tileInfo.tMask + 1)) % 2;
     
     bvec2 doClamp = bvec2(
         tileInfo.sClamp != 0 && (texCoords.x & ~tileInfo.sMask) != 0,
@@ -161,6 +162,10 @@ void main() {
     vec3 rgb1 = (combineInputs[in_rgb_1_a].xyz - combineInputs[in_rgb_1_b].xyz) * combineInputs[in_rgb_1_c].xyz + combineInputs[in_rgb_1_d].xyz;
     float alpha1 = (combineInputs[in_alpha_1_a].w - combineInputs[in_alpha_1_b].w) * combineInputs[in_alpha_1_c].w + combineInputs[in_alpha_1_d].w;
 
+    vec4 blend = unpackUnorm4x8(in_blend);
+    if (alpha1 <= blend.w) {
+        discard;
+    }
     out_colour = vec4(rgb1, alpha1);
-   // out_colour = vec4(textureColor0);
+    // out_colour = vec4(textureColor0);
 }

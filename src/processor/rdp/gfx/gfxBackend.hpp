@@ -115,6 +115,7 @@ class GfxBackend {
                              const std::byte* shadeBytes,
                              const std::byte* uvBytes) -> void         = 0;
     virtual auto setCombineInputs(const CombineInputs& inputs) -> void = 0;
+    virtual auto setBlendColour(uint32_t blendColour) -> void          = 0;
     virtual auto startRenderPass(RenderOptions options) -> void        = 0;
 
     virtual ~GfxBackend() = default;

@@ -114,6 +114,7 @@ auto RDP::flushBackend() -> void {
     }
     inputs.uniform = m_combineInputs;
     m_gfxBackend->setCombineInputs(inputs);
+    m_gfxBackend->setBlendColour(m_blend);
     for (auto tileIndex = 0uz; tileIndex < m_tileUsedThisDraw.size(); ++tileIndex) {
         if (!m_tileUsedThisDraw[tileIndex]) {
             continue;
