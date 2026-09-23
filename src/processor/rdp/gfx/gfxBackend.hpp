@@ -28,6 +28,8 @@ struct SamplerParams {
 };
 static_assert(sizeof(SamplerParams) == 12);
 
+constexpr auto NO_TILE = static_cast<uint32_t>(-1);
+
 struct TileParams {
     uint32_t      width;
     uint32_t      height;
@@ -116,6 +118,7 @@ class GfxBackend {
                              const std::byte* uvBytes) -> void         = 0;
     virtual auto setCombineInputs(const CombineInputs& inputs) -> void = 0;
     virtual auto setBlendColour(uint32_t blendColour) -> void          = 0;
+    virtual auto setFillColour(uint32_t fillColour) -> void            = 0;
     virtual auto setZModeDecal(bool enable) -> void                    = 0;
     virtual auto startRenderPass(RenderOptions options) -> void        = 0;
 

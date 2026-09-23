@@ -30,6 +30,7 @@ struct RenderOutput {
 struct RdpRenderPassConstants {
     RDP::CombineInputs combineInputs;
     uint32_t           blendColour;
+    uint32_t           fillColour;
 };
 
 struct ShaderTileInfo {
@@ -89,6 +90,7 @@ class VulkanBackend : public GfxBackend {
                      const std::byte* uvBytes    = nullptr) -> void override;
     auto setCombineInputs(const CombineInputs& inputs) -> void override;
     auto setBlendColour(uint32_t blendColour) -> void override;
+    auto setFillColour(uint32_t fillColour) -> void override;
     auto setZModeDecal(bool enable) -> void override;
     auto startRenderPass(RenderOptions options) -> void override;
     auto completeRenderFrame() -> void override;

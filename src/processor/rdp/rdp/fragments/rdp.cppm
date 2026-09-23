@@ -28,6 +28,25 @@ struct Colours {
     uint32_t environ;
 };
 
+constexpr auto convertRGBA16_RGBA32(uint16_t value) -> uint32_t {
+    const auto r = static_cast<uint8_t>((value >> 11) & 0x1F);
+    const auto g = static_cast<uint8_t>((value >> 6) & 0x1F);
+    const auto b = static_cast<uint8_t>((value >> 1) & 0x1F);
+    const auto a = static_cast<uint8_t>(value & 0x1);
+
+    const auto out =
+        (static_cast<uint8_t>(r << 3 | r >> 2) << 24) |
+        (static_cast<uint8_t>(g << 3 | g >> 2) << 16) |
+        (static_cast<uint8_t>(b << 3 | b >> 2) << 8) |
+        static_cast<uint8_t>(a * 255);
+    return out;
+}
+
+constexpr auto convertI8_RGBA32(uint8_t value) -> uint32_t {
+    const auto byte = static_cast<uint32_t>(value & 0xFF);
+    return (byte << 24) | (byte << 16) | (byte << 8) | 0xFF;
+}
+
 template <typename CommandT, std::size_t NumWords>
     requires(sizeof(CommandT) == NumWords * sizeof(uint64_t))
 auto makeCommand(std::deque<uint64_t>& cmds) -> CommandT {
@@ -95,6 +114,7 @@ class RDP {
 
     std::bitset<8> m_tileUsedThisDraw{};
 
+    TileFormat               m_colourImage{};
     Commands::SetCombineMode m_combineMode{};
     CombineInputs::Uniform   m_combineInputs{};
     Commands::SetOtherModes  m_mode{};
@@ -115,6 +135,7 @@ auto RDP::flushBackend() -> void {
     inputs.uniform = m_combineInputs;
     m_gfxBackend->setCombineInputs(inputs);
     m_gfxBackend->setBlendColour(m_blend);
+    m_gfxBackend->setFillColour(m_fill);
     m_gfxBackend->setZModeDecal(m_mode.zMode == Commands::SetOtherModes::ZMode::DECAL);
     for (auto tileIndex = 0uz; tileIndex < m_tileUsedThisDraw.size(); ++tileIndex) {
         if (!m_tileUsedThisDraw[tileIndex]) {
@@ -240,15 +261,16 @@ auto RDP::runRdpCommand() -> void {
                 break;
             }
             case Command::FILL_RECTANGLE: {
-                const auto cmd  = makeCommand<Commands::FillRectangle, 1>(cmds);
-                const auto tris = cmd.getTriangles(); // todo fill optimisation in vk
-                // m_gfxBackend->addTriangle(tris[0].bytes(), nullptr, nullptr, 0);
-                // m_gfxBackend->addTriangle(tris[1].bytes(), nullptr, nullptr, 0);
-                // flushBackend();
+                const auto cmd         = makeCommand<Commands::FillRectangle, 1>(cmds);
+                const auto isInclusive = m_mode.cycleType == Commands::SetOtherModes::CycleType::CYCLE_FILL || m_mode.cycleType == Commands::SetOtherModes::CycleType::CYCLE_COPY; // todo figure this out?
+                const auto tris        = cmd.getTriangles();                                                                                                                       // todo clear optimisation in vk for full screen rects?
+                m_gfxBackend->addTriangle(NO_TILE, tris[0].bytes(), nullptr, nullptr);
+                m_gfxBackend->addTriangle(NO_TILE, tris[1].bytes(), nullptr, nullptr);
+                flushBackend();
                 IF_LOG_ENABLED(m_logger) {
                     m_logger->log<Level::MED, Sys::RDP>(
                         std::tuple{"op", "drawRectangle"},
-                        std::tuple{"coords", "{}", cmd.getRectangle()});
+                        std::tuple{"coords", "{}", cmd.getRectangle(isInclusive)});
                 }
                 break;
             }
@@ -276,7 +298,6 @@ auto RDP::runRdpCommand() -> void {
             }
             case Command::SET_OTHER_MODES: {
                 m_mode = makeCommand<Commands::SetOtherModes, 1>(cmds);
-                m_gfxBackend->setZModeDecal(m_mode.zMode == Commands::SetOtherModes::ZMode::DECAL);
                 IF_LOG_ENABLED(m_logger) {
                     m_logger->log<Level::MED, Sys::RDP>(
                         std::tuple{"op", "setOtherModes"},
@@ -551,7 +572,14 @@ auto RDP::runRdpCommand() -> void {
                 }
                 break;
             }
-            case Command::SET_COLOR_IMAGE: [[fallthrough]];
+            case Command::SET_COLOR_IMAGE: {
+                // const auto cmd = makeCommand<Commands::SetColorImage, 1>(cmds);
+                // m_colourImage  = {
+                //     .format = cmd.format,
+                //     .size   = cmd.size,
+                // };
+                [[fallthrough]];
+            }
             case Command::SET_DEPTH_IMAGE:
                 cmds.pop_front();
                 IF_LOG_ENABLED(m_logger) {

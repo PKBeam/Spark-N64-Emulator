@@ -629,21 +629,23 @@ struct FillRectangle {
     uint64_t command     : 6;
     uint64_t             : 2;
 
-    constexpr auto getRectangle() const {
+    constexpr auto getRectangle(bool isInclusive) const {
         const auto v0x = static_cast<float>(Util::UFixedPoint<10, 2>::fromBits(upperLeftX));
         const auto v1x = static_cast<float>(Util::UFixedPoint<10, 2>::fromBits(upperLeftY));
-        const auto v0y = static_cast<float>(Util::UFixedPoint<10, 2>::fromBits(lowerRightX));
-        const auto v1y = static_cast<float>(Util::UFixedPoint<10, 2>::fromBits(lowerRightY));
+        const auto v0y = static_cast<float>(Util::UFixedPoint<10, 2>::fromBits(lowerRightX)) + 1.f;
+        const auto v1y = static_cast<float>(Util::UFixedPoint<10, 2>::fromBits(lowerRightY)) + 1.f;
         const auto v0  = Util::Point(v0x, v0y);
         const auto v1  = Util::Point(v1x, v1y);
         return Util::Rectangle(v0, v1);
     }
 
     constexpr auto getTriangles() const -> std::array<Util::RenderTriangle, 2> {
+        const auto adj = Util::SFixedPoint<16, 16>(Util::Fxp_1);
+
         const auto v0x = static_cast<Util::SFixedPoint<16, 16>>(Util::UFixedPoint<10, 2>::fromBits(upperLeftX));
-        const auto v1x = static_cast<Util::SFixedPoint<16, 16>>(Util::UFixedPoint<10, 2>::fromBits(upperLeftY));
-        const auto v0y = static_cast<Util::SFixedPoint<16, 16>>(Util::UFixedPoint<10, 2>::fromBits(lowerRightX));
-        const auto v1y = static_cast<Util::SFixedPoint<16, 16>>(Util::UFixedPoint<10, 2>::fromBits(lowerRightY));
+        const auto v1x = static_cast<Util::SFixedPoint<16, 16>>(Util::UFixedPoint<10, 2>::fromBits(lowerRightX)) + adj;
+        const auto v0y = static_cast<Util::SFixedPoint<16, 16>>(Util::UFixedPoint<10, 2>::fromBits(upperLeftY));
+        const auto v1y = static_cast<Util::SFixedPoint<16, 16>>(Util::UFixedPoint<10, 2>::fromBits(lowerRightY)) + adj;
 
         const auto v0 = Util::Point(v0x, v0y);
         const auto v1 = Util::Point(v1x, v0y);

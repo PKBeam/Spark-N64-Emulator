@@ -262,7 +262,7 @@ auto VulkanBackend::addTriangle(uint32_t         tile,
     if (!m_initialized) {
         return;
     }
-    if (tile >= NUM_TILES) {
+    if (tile >= NUM_TILES && tile != NO_TILE) {
         return;
     }
     const auto vtxs   = reinterpret_cast<const int32_t*>(vtxBytes);
@@ -306,6 +306,14 @@ auto VulkanBackend::setBlendColour(uint32_t blendColour) -> void {
         return;
     }
     m_currentRenderPass.pushConstants.blendColour = blendColour;
+}
+
+auto VulkanBackend::setFillColour(uint32_t fillColour) -> void {
+    auto lock = std::lock_guard<std::mutex>(m_resourceMutex);
+    if (!m_initialized) {
+        return;
+    }
+    m_currentRenderPass.pushConstants.fillColour = fillColour;
 }
 
 auto VulkanBackend::setZModeDecal(bool enable) -> void {
@@ -383,7 +391,7 @@ auto VulkanBackend::startRenderPass(RenderOptions options) -> void {
     vkCmdBeginRendering(m_commandBuffer, &vkRenderingInfo);
     vkCmdBindPipeline(m_commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pipeline);
     if (m_zModeDecal) {
-        vkCmdSetDepthBias(m_commandBuffer, -1.0f, 0.0f, -1.0f);
+        vkCmdSetDepthBias(m_commandBuffer, -1.0f, 0.0f, -2.0f);
     } else {
         vkCmdSetDepthBias(m_commandBuffer, 0.0f, 0.0f, 0.0f);
     }
@@ -415,15 +423,17 @@ auto VulkanBackend::startRenderPass(RenderOptions options) -> void {
 }
 
 auto VulkanBackend::completeRenderFrame() -> void {
-    if (m_textureCache.size() > 1024) { // TODO this stutters and should acquire the mutex. find better way
-        for (const auto& [_, value] : m_textureCache) {
-            value.destroy();
-        }
-        m_textureCache.clear();
-        // std::println("Texture cache cleared due to exceeding 1024 entries");
-    }
     {
         auto lock = std::lock_guard<std::mutex>(m_resourceMutex);
+
+        vkDeviceWaitIdle(m_device.device);
+        if (m_textureCache.size() > 4096) { // TODO this stutters, find better way
+            for (const auto& [_, value] : m_textureCache) {
+                value.destroy();
+            }
+            m_textureCache.clear();
+        }
+
         if (!m_initialized || !m_currentRenderPass.active) {
             return;
         }

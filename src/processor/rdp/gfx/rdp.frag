@@ -29,6 +29,7 @@ layout(push_constant) uniform RdpRenderPassConstants {
     uint8_t  in_alpha_1_c; 
     uint8_t  in_alpha_1_d;
     uint     in_blend;
+    uint     in_fill; // TODO properly decode this based on RDP setcolorimage
 };
 
 layout(location = 0) in flat int in_tile; 
