@@ -472,8 +472,8 @@ auto VulkanBackend::init(
 
     m_vkInstance = vkInstance;
     m_device     = {
-        .device         = vkDevice,
-        .physicalDevice = vkPhysicalDevice};
+            .device         = vkDevice,
+            .physicalDevice = vkPhysicalDevice};
     m_vkQueueFamilyIndex = vkQueueFamilyIndex;
     m_currentRenderPass  = {};
     vkGetDeviceQueue(m_device.device, m_vkQueueFamilyIndex, 0, &m_vkQueue);

@@ -9,6 +9,14 @@
     },
     "clangd.arguments": [
         "-header-insertion=never",
-        "--compile-commands-dir=${workspaceFolder}/build/reldeb"
+        "--compile-commands-dir=${workspaceFolder}/build"
     ],
+    "cmake.debugConfig": {
+        "environment": [
+            {
+                "name": "QT_QPA_PLATFORM",
+                "value": "xcb"
+            }
+        ]
+    }
 }
