@@ -66,10 +66,10 @@ add_compile_options(
 )
 if(UNIX)
 add_compile_options(
-    "$<$<CONFIG:Debug>:-fsanitize=address;-fsanitize=undefined;-fno-omit-frame-pointer>"
+    "$<$<CONFIG:Debug>:-fsanitize=address;-fsanitize=undefined;-fsanitize=thread;-fno-omit-frame-pointer>"
 )
 add_link_options(
-    "$<$<CONFIG:Debug>:-fsanitize=address;-fsanitize=undefined>"
+    "$<$<CONFIG:Debug>:-fsanitize=address;-fsanitize=undefined;-fsanitize=thread>"
 )
 endif()
 add_compile_definitions(

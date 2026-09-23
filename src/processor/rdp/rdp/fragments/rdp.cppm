@@ -81,6 +81,10 @@ class RDP {
 
     auto runRdpCommand() -> void;
 
+    constexpr auto getCycles() const -> std::size_t {
+        return m_cycles;
+    }
+
     constexpr auto setTerminateAfterSyncs(int terminateAfterSyncs) -> void {
         m_terminateAfterSyncs = terminateAfterSyncs;
     }
@@ -107,6 +111,7 @@ class RDP {
     TextureImage        m_textureImage{};
     std::array<Tile, 8> m_tiles{};
 
+    std::size_t           m_cycles{};
     std::size_t           m_syncs{};
     int                   m_terminateAfterSyncs{-1};
     std::function<void()> m_syncCallback{};
@@ -167,6 +172,7 @@ auto RDP::flushBackend() -> void {
 }
 
 auto RDP::runRdpCommand() -> void {
+    m_cycles++;
     auto& cmds = m_rdpControl->getCommands();
     if (cmds.empty()) {
         return;

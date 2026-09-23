@@ -84,6 +84,8 @@ export class Emulator {
     Interfaces::PeripheralInterface* m_peripheralInterface{};
     Interfaces::SerialInterface*     m_serialInterface{};
     Interfaces::VideoInterface*      m_videoInterface{};
+
+    std::jthread m_rdpThread;
 };
 
 constexpr auto Emulator::emulateInitialBoot() -> void {
@@ -143,6 +145,7 @@ constexpr Emulator::Emulator(Config config) : m_config(config) {
 }
 
 Emulator::~Emulator() {
+    m_rdpThread.join();
     delete m_cp0;
     delete m_cp1;
     delete m_rdpControl;
@@ -169,7 +172,7 @@ constexpr auto Emulator::processViInterrupt() -> void {
 #else
     static auto rspCycles = 0uz;
     rspCycles += CycleRatios::RSP;
-    if (m_videoInterface->getInterrupt() && rspCycles >= MIN_RSP_CYCLES_BEFORE_VI_INTERRUPT) {
+    if (m_videoInterface->getInterrupt() && rspCycles >= MIN_RSP_CYCLES_BEFORE_VI_INTERRUPT && m_rdp->getCycles() >= MIN_RSP_CYCLES_BEFORE_VI_INTERRUPT) {
         m_mipsInterface->setInterrupt<^^Interfaces::MI_INTERRUPT::vi>(true); // must be set synchronously
         rspCycles = 0uz;
     }
@@ -204,6 +207,12 @@ constexpr auto Emulator::loadRom(std::filesystem::path path) -> void {
     if (m_config.terminateAfterRdpSyncs) {
         m_rdp->setTerminateAfterSyncs(*m_config.terminateAfterRdpSyncs);
     }
+
+    m_rdpThread = std::jthread([this]() {
+        while (true) {
+            m_rdp->runRdpCommand();
+        }
+    });
 }
 
 constexpr auto Emulator::runCycle() -> void {
@@ -222,7 +231,6 @@ constexpr auto Emulator::runCycle() -> void {
 
         for (auto _ : std::views::iota(0uz, CycleRatios::RSP)) {
             m_rsp->runRspInstruction();
-            m_rdp->runRdpCommand();
         }
     } catch (const Util::Error& e) {
         std::println("A fatal exception occurred @\n"

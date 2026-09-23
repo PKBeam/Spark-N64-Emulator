@@ -51,6 +51,9 @@ class Control {
     std::deque<uint64_t> m_cmdBufferOut; // To RDP
     std::mutex           m_mutex;
 
+    std::atomic<bool> m_startPending{};
+    std::atomic<bool> m_endPending{};
+
     DPC_STATUS m_status{};
     uint32_t   m_startAddr{};
     uint32_t   m_endAddr{};
@@ -75,10 +78,10 @@ auto Control::getCommands() -> std::deque<uint64_t>& {
     IF_LOG_ENABLED(m_logger) {
         m_logger->log<Level::LOW, Sev::INFO, Sys::RDP>("Command buffer emptied by RDP");
     }
-    m_status.startPending = 0;
-    if (m_status.endPending) { // begin the next pending transfer
+    m_startPending = false;
+    if (m_endPending) { // begin the next pending transfer
         fetchCommands();
-        m_status.endPending = 0;
+        m_endPending = false;
     }
     return m_cmdBufferOut;
 }
@@ -114,7 +117,12 @@ auto Control::readRegister(CMD_REGS index) const -> uint32_t {
             case CMD_REGS::DPC_START: return m_startAddr & 0x00FFFFFF;
             case CMD_REGS::DPC_END: return m_endAddr & 0x00FFFFFF;
             case CMD_REGS::DPC_CURRENT: return m_current & 0x00FFFFFF;
-            case CMD_REGS::DPC_STATUS: return std::bit_cast<uint32_t>(m_status);
+            case CMD_REGS::DPC_STATUS: {
+                auto status         = m_status;
+                status.startPending = m_startPending ? 1 : 0;
+                status.endPending   = m_endPending ? 1 : 0;
+                return std::bit_cast<uint32_t>(status);
+            }
             case CMD_REGS::DPC_CLOCK: return m_clock & 0x00FFFFFF;
             case CMD_REGS::DPC_CMD_BUSY: [[fallthrough]];
             case CMD_REGS::DPC_PIPE_BUSY: [[fallthrough]];
@@ -155,23 +163,23 @@ auto Control::writeRegister(CMD_REGS index, uint32_t data) -> void {
 
     switch (index) {
         case CMD_REGS::DPC_START:
-            m_startAddr           = std::bit_cast<DPC_START>(data).start;
-            m_status.startPending = 1;
+            m_startAddr    = std::bit_cast<DPC_START>(data).start;
+            m_startPending = true;
             return;
         case CMD_REGS::DPC_END: {
-            if (m_status.startPending) { // start a new transfer
+            if (m_startPending) { // start a new transfer
                 m_endAddr = std::bit_cast<DPC_END>(data).end;
                 if (hasCommands()) { // wait for transfer to finish
-                    m_status.endPending = 1;
+                    m_endPending = true;
                 } else { // start transfer
                     fetchCommands();
-                    m_status.startPending = 0;
+                    m_startPending = false;
                 }
             } else { // continue existing transfer
                 m_startAddr = m_endAddr;
                 m_endAddr   = std::bit_cast<DPC_END>(data).end;
                 fetchCommands();
-                m_status.endPending = 0;
+                m_endPending = false;
             }
             return;
         }

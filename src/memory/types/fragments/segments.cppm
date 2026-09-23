@@ -50,7 +50,7 @@ constexpr auto makePrintData(T data) {
     } else if constexpr (sizeof(T) == 4) {
         return std::tuple{"data", HEXFMT32, udata};
     } else {
-        return std::tuple{"data", HEXFMT64, udata};
+        return std::tuple{"data", HEXFMT64, (udata >> 32) | ((udata & 0xFFFFFFFF) << 32)};
     }
 }
 

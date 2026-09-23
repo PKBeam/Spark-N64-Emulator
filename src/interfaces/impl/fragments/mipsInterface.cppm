@@ -23,7 +23,7 @@ export class MipsInterface : public Interface {
     auto setInterrupt(bool enable) -> void;
 
     template <std::meta::info IntrField>
-    auto getInterrupt() -> bool;
+    auto getInterrupt() const -> bool;
 
   private:
     auto updateInterrupt() -> void;
@@ -31,9 +31,9 @@ export class MipsInterface : public Interface {
     std::shared_ptr<Util::Logger> m_logger;
     CP0::CP0*                     m_cp0{};
 
-    MI_MODE      m_mode{};
-    MI_INTERRUPT m_interrupt{};
-    MI_MASK      m_mask{};
+    std::atomic<MI_MODE>      m_mode{};
+    std::atomic<MI_INTERRUPT> m_interrupt{};
+    std::atomic<MI_MASK>      m_mask{};
 };
 
 auto MipsInterface::updateInterrupt() -> void {
@@ -58,13 +58,15 @@ auto MipsInterface::setInterrupt(bool enable) -> void {
                                                        enable ? "Set" : "Clear",
                                                        std::meta::identifier_of(IntrField));
     }
-    m_interrupt.[:IntrField:] = enable ? 1 : 0;
+    auto newInterrupt          = m_interrupt.load();
+    newInterrupt.[:IntrField:] = enable ? 1 : 0;
+    m_interrupt.store(newInterrupt);
     updateInterrupt();
 }
 
 template <std::meta::info IntrField>
-auto MipsInterface::getInterrupt() -> bool {
-    return m_interrupt.[:IntrField:] != 0;
+auto MipsInterface::getInterrupt() const -> bool {
+    return m_interrupt.load().[:IntrField:] != 0;
 }
 
 auto MipsInterface::read(uint32_t addr) -> uint32_t {
@@ -100,16 +102,18 @@ auto MipsInterface::write(uint32_t addr, uint32_t data) -> void {
 
     switch (addr) {
         case MI_REG_ADDR::MI_MODE: {
-            auto mode = std::bit_cast<MI_MODE::Write>(data);
+            auto       newMode = m_mode.load();
+            const auto mode    = std::bit_cast<MI_MODE::Write>(data);
             if (mode.setRepeat) {
-                m_mode.repeat      = 1;
-                m_mode.repeatCount = mode.repeatCount;
+                newMode.repeat      = 1;
+                newMode.repeatCount = mode.repeatCount;
             }
-            if (mode.clearRepeat) m_mode.repeat = 0;
-            if (mode.setEBus) m_mode.eBus = 1;
+            if (mode.clearRepeat) newMode.repeat = 0;
+            if (mode.setEBus) newMode.eBus = 1;
             if (mode.clearDp) setInterrupt<^^MI_INTERRUPT::dp>(false);
-            if (mode.setUpper) m_mode.upper = 1;
-            if (mode.clearUpper) m_mode.upper = 0;
+            if (mode.setUpper) newMode.upper = 1;
+            if (mode.clearUpper) newMode.upper = 0;
+            m_mode.store(newMode);
             return;
         }
         case MI_REG_ADDR::MI_VERSION: [[fallthrough]];
@@ -118,19 +122,21 @@ auto MipsInterface::write(uint32_t addr, uint32_t data) -> void {
             return;
         }
         case MI_REG_ADDR::MI_MASK: {
-            auto mask = std::bit_cast<MI_MASK::Write>(data);
-            if (mask.clearSp) m_mask.sp = 0;
-            if (mask.setSp) m_mask.sp = 1;
-            if (mask.clearSi) m_mask.si = 0;
-            if (mask.setSi) m_mask.si = 1;
-            if (mask.clearAi) m_mask.ai = 0;
-            if (mask.setAi) m_mask.ai = 1;
-            if (mask.clearVi) m_mask.vi = 0;
-            if (mask.setVi) m_mask.vi = 1;
-            if (mask.clearPi) m_mask.pi = 0;
-            if (mask.setPi) m_mask.pi = 1;
-            if (mask.clearDp) m_mask.dp = 0;
-            if (mask.setDp) m_mask.dp = 1;
+            auto       newMask = m_mask.load();
+            const auto mask    = std::bit_cast<MI_MASK::Write>(data);
+            if (mask.clearSp) newMask.sp = 0;
+            if (mask.setSp) newMask.sp = 1;
+            if (mask.clearSi) newMask.si = 0;
+            if (mask.setSi) newMask.si = 1;
+            if (mask.clearAi) newMask.ai = 0;
+            if (mask.setAi) newMask.ai = 1;
+            if (mask.clearVi) newMask.vi = 0;
+            if (mask.setVi) newMask.vi = 1;
+            if (mask.clearPi) newMask.pi = 0;
+            if (mask.setPi) newMask.pi = 1;
+            if (mask.clearDp) newMask.dp = 0;
+            if (mask.setDp) newMask.dp = 1;
+            m_mask.store(newMask);
             updateInterrupt();
             return;
         }
