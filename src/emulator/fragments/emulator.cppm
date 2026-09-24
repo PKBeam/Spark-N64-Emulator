@@ -47,6 +47,7 @@ export class Emulator {
     ~Emulator();
 
     constexpr auto loadRom(std::filesystem::path romFilePath) -> void;
+    constexpr auto stop() -> void;
 
     constexpr auto runCycle() -> void;
 
@@ -58,6 +59,7 @@ export class Emulator {
     // emulates PIF and IPL3
     constexpr auto emulateInitialBoot() -> void;
     constexpr auto processViInterrupt() -> void;
+    constexpr auto processRdpInterrupt() -> void;
 
     const Config                  m_config;
     std::shared_ptr<Util::Logger> m_logger;
@@ -122,7 +124,7 @@ constexpr Emulator::Emulator(Config config) : m_config(config) {
     m_rdpGfxBackend = RDP::createGfxBackend();
 
     m_rdpControl = new RDP::Control(m_logger, m_memory);
-    m_rdp        = new RDP::RDP(m_logger, m_rdpControl, m_mipsInterface, m_memory, m_rdpGfxBackend);
+    m_rdp        = new RDP::RDP(m_logger, m_rdpControl, m_memory, m_rdpGfxBackend);
     m_rspControl = new RSP::Control(m_logger, m_memory, m_rdpControl);
     m_rsp        = new RSP::RSP(m_logger, m_rspControl, m_mipsInterface, m_memoryBus);
 
@@ -145,7 +147,6 @@ constexpr Emulator::Emulator(Config config) : m_config(config) {
 }
 
 Emulator::~Emulator() {
-    m_rdpThread.join();
     delete m_cp0;
     delete m_cp1;
     delete m_rdpControl;
@@ -166,17 +167,29 @@ Emulator::~Emulator() {
     delete m_rdpGfxBackend;
 }
 
+constexpr auto Emulator::stop() -> void {
+    m_rdpThread.request_stop();
+}
+
 constexpr auto Emulator::processViInterrupt() -> void {
 #if defined(DETERMINISTIC_VI_INTERRUPTS)
     m_videoInterface->tick(CycleRatios::VI_DEBUG);
 #else
     static auto rspCycles = 0uz;
     rspCycles += CycleRatios::RSP;
-    if (m_videoInterface->getInterrupt() && rspCycles >= MIN_RSP_CYCLES_BEFORE_VI_INTERRUPT && m_rdp->getCycles() >= MIN_RSP_CYCLES_BEFORE_VI_INTERRUPT) {
+    if (m_videoInterface->getInterrupt() && rspCycles >= MIN_RSP_CYCLES_BEFORE_VI_INTERRUPT) {
         m_mipsInterface->setInterrupt<^^Interfaces::MI_INTERRUPT::vi>(true); // must be set synchronously
+        m_videoInterface->clearInterrupt();
         rspCycles = 0uz;
     }
 #endif
+}
+
+constexpr auto Emulator::processRdpInterrupt() -> void {
+    if (m_rdp->getSyncDone()) {
+        m_mipsInterface->setInterrupt<^^Interfaces::MI_INTERRUPT::dp>(true); // must be set synchronously
+        m_rdp->clearSyncDone();
+    }
 }
 
 constexpr auto Emulator::loadRom(std::filesystem::path path) -> void {
@@ -208,8 +221,8 @@ constexpr auto Emulator::loadRom(std::filesystem::path path) -> void {
         m_rdp->setTerminateAfterSyncs(*m_config.terminateAfterRdpSyncs);
     }
 
-    m_rdpThread = std::jthread([this]() {
-        while (true) {
+    m_rdpThread = std::jthread([this](std::stop_token stopToken) {
+        while (!stopToken.stop_requested()) {
             m_rdp->runRdpCommand();
         }
     });
@@ -218,6 +231,7 @@ constexpr auto Emulator::loadRom(std::filesystem::path path) -> void {
 constexpr auto Emulator::runCycle() -> void {
     try {
         processViInterrupt();
+        processRdpInterrupt();
 
         for (auto _ : std::views::iota(0uz, CycleRatios::CPU)) {
             m_cpu->runCpuInstruction();

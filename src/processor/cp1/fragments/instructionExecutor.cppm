@@ -157,10 +157,10 @@ auto InstructionExecutor::executeBivariate(uint32_t inst, Function&& func, Excep
         if constexpr (!std::is_same_v<ExceptionFunc, std::nullptr_t> && std::is_floating_point_v<decltype(T)>) {
             const auto exception = exceptFunc(fs, ft);
             if (exception != ISA::CP1_EXCEPTION::NONE) {
-                throw Util::Error("FPU exception {} occurred during instruction execution (fs={}, ft={})",
-                                  exception,
-                                  fs,
-                                  ft);
+                //   throw Util::Error("FPU exception {} occurred during instruction execution (fs={}, ft={})",
+                //                     exception,
+                //                     fs,
+                //                     ft);
             }
         }
         const auto result = func(fs, ft);

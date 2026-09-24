@@ -239,7 +239,7 @@ auto VulkanBackend::updateTile(std::size_t      index,
                                          VK_IMAGE_ASPECT_COLOR_BIT));
 
         {
-            auto qLock = std::lock_guard<std::mutex>(m_queueMutex);
+            auto lock = std::lock_guard<std::mutex>(m_queueMutex);
             Util::VK::submitCommandBuffer(m_commandBuffer, m_vkQueue, m_renderFence);
         }
         VK_TRY(vkWaitForFences(m_device.device, 1, &m_renderFence, VK_TRUE, UINT64_MAX));
@@ -417,7 +417,10 @@ auto VulkanBackend::startRenderPass(RenderOptions options) -> void {
                                      VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
                                      VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
                                      VK_IMAGE_ASPECT_COLOR_BIT));
-    Util::VK::submitCommandBuffer(m_commandBuffer, m_vkQueue, m_renderFence);
+    {
+        auto lock = std::lock_guard<std::mutex>(m_queueMutex);
+        Util::VK::submitCommandBuffer(m_commandBuffer, m_vkQueue, m_renderFence);
+    }
     m_currentRenderPass.active = true;
     m_currentRenderPass.vertexData.clear();
 }
@@ -426,7 +429,6 @@ auto VulkanBackend::completeRenderFrame() -> void {
     {
         auto lock = std::lock_guard<std::mutex>(m_resourceMutex);
 
-        vkDeviceWaitIdle(m_device.device);
         if (m_textureCache.size() > 4096) { // TODO this stutters, find better way
             for (const auto& [_, value] : m_textureCache) {
                 value.destroy();
@@ -472,8 +474,8 @@ auto VulkanBackend::init(
 
     m_vkInstance = vkInstance;
     m_device     = {
-            .device         = vkDevice,
-            .physicalDevice = vkPhysicalDevice};
+        .device         = vkDevice,
+        .physicalDevice = vkPhysicalDevice};
     m_vkQueueFamilyIndex = vkQueueFamilyIndex;
     m_currentRenderPass  = {};
     vkGetDeviceQueue(m_device.device, m_vkQueueFamilyIndex, 0, &m_vkQueue);
@@ -827,7 +829,7 @@ auto VulkanBackend::createDefaultTexture() -> void {
 
     Util::VK::addPipelineBarrier(m_commandBuffer, Util::VK::makeImageMemoryBarrier(m_fallbackTexture.image, VK_PIPELINE_STAGE_2_COPY_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT, VK_ACCESS_2_SHADER_READ_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_ASPECT_COLOR_BIT));
     {
-        auto queueLock = std::lock_guard<std::mutex>(m_queueMutex);
+        auto lock = std::lock_guard<std::mutex>(m_queueMutex);
         Util::VK::submitCommandBuffer(m_commandBuffer, m_vkQueue, m_renderFence);
         VK_TRY(vkWaitForFences(m_device.device, 1, &m_renderFence, VK_TRUE, UINT64_MAX));
     }

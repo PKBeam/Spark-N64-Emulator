@@ -41,8 +41,10 @@ export class VideoInterface : public Interface {
     }
 #else
     auto getInterrupt() -> bool {
-        const auto old = std::atomic_exchange(&m_tick, false);
-        return old;
+        return m_tick;
+    }
+    auto clearInterrupt() -> void {
+        m_tick = false;
     }
 #endif
 

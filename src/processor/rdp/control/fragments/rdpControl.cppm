@@ -34,7 +34,7 @@ class Control {
   public:
     Control(std::shared_ptr<Util::Logger> logger, Memory::Memory* memory) : m_logger(logger), m_memory(memory) {};
 
-    auto readRegister(CMD_REGS index) const -> uint32_t;
+    auto readRegister(CMD_REGS index) -> uint32_t;
     auto writeRegister(CMD_REGS index, uint32_t data) -> void;
 
     auto hasCommands() const -> bool;
@@ -42,7 +42,7 @@ class Control {
     auto getCommands() -> std::deque<uint64_t>&; // may be called on a different thread but only by one caller
 
   private:
-    auto fetchCommands() -> void; // fetch commands from RDRAM/DMEM
+    auto dmaCommands() -> void; // fetch commands from RDRAM/DMEM
 
     std::shared_ptr<Util::Logger> m_logger;
     Memory::Memory*               m_memory{};
@@ -54,11 +54,11 @@ class Control {
     std::atomic<bool> m_startPending{};
     std::atomic<bool> m_endPending{};
 
-    DPC_STATUS m_status{};
-    uint32_t   m_startAddr{};
-    uint32_t   m_endAddr{};
-    uint32_t   m_clock{};
-    uint32_t   m_current{};
+    DPC_STATUS            m_status{};
+    uint32_t              m_startAddr{};
+    uint32_t              m_endAddr{};
+    uint32_t              m_clock{};
+    std::atomic<uint32_t> m_current{};
 };
 
 auto Control::hasCommands() const -> bool {
@@ -71,62 +71,70 @@ auto Control::getCommands() -> std::deque<uint64_t>& {
     }
 
     { // lock commands
-        auto _ = std::scoped_lock(m_mutex);
+        auto lock = std::scoped_lock(m_mutex);
         std::swap(m_cmdBufferIn, m_cmdBufferOut);
         m_cmdBufferIn.clear();
     }
     IF_LOG_ENABLED(m_logger) {
         m_logger->log<Level::LOW, Sev::INFO, Sys::RDP>("Command buffer emptied by RDP");
     }
-    m_startPending = false;
-    if (m_endPending) { // begin the next pending transfer
-        fetchCommands();
-        m_endPending = false;
-    }
     return m_cmdBufferOut;
 }
 
-auto Control::fetchCommands() -> void {
-    const auto numCommands = (static_cast<int32_t>(m_endAddr) - static_cast<int32_t>(m_startAddr)) / 8;
-    if (numCommands < 0) {
-        throw Util::Error("RDP command endAddr (" HEXFMT32 ") was before startAddr (" HEXFMT32 ")", m_endAddr, m_startAddr);
-    } else if (numCommands == 0) {
-        return;
-    }
-    const auto baseAddr = m_startAddr + (m_status.xbus == 0 ? 0 : RSP_DMEM_BASE);
-    if (m_logger) {
-        m_logger->flush();
-    }
-    { // lock commands
-        auto _ = std::scoped_lock(m_mutex);
+auto Control::dmaCommands() -> void {
+    auto numCommands = 0;
+    auto baseAddr    = 0uz;
+    {
+        auto lock = std::scoped_lock(m_mutex);
+
+        numCommands = (static_cast<int32_t>(m_endAddr) - static_cast<int32_t>(m_startAddr)) / 8;
+        if (numCommands < 0) {
+            throw Util::Error("RDP command endAddr (" HEXFMT32 ") was before startAddr (" HEXFMT32 ")", m_endAddr, m_startAddr);
+        } else if (numCommands == 0) {
+            return;
+        }
+        baseAddr = m_startAddr + (m_status.xbus == 0 ? 0 : RSP_DMEM_BASE);
         for (auto offset : std::views::iota(0, numCommands)) {
             const auto cmd = m_memory->read<uint64_t>(baseAddr + offset * 8);
             m_cmdBufferIn.push_back(cmd);
         }
-    } // release commands
+        m_current = m_endAddr;
+    }
 
     IF_LOG_ENABLED(m_logger) {
         m_logger->log<Level::LOW, Sev::INFO, Sys::RDP>("DMA {} commands from " HEXFMT32 " into command buffer", numCommands, baseAddr);
     }
-    m_current = m_endAddr;
 }
 
-auto Control::readRegister(CMD_REGS index) const -> uint32_t {
+auto Control::readRegister(CMD_REGS index) -> uint32_t {
     auto readReg = [this](CMD_REGS index) -> uint32_t {
         switch (index) {
             case CMD_REGS::DPC_START: return m_startAddr & 0x00FFFFFF;
             case CMD_REGS::DPC_END: return m_endAddr & 0x00FFFFFF;
             case CMD_REGS::DPC_CURRENT: return m_current & 0x00FFFFFF;
             case CMD_REGS::DPC_STATUS: {
+
+                if (!hasCommands() && !m_endPending) { // check for recently finished DMAs
+                    m_startPending = false;
+                }
+                if (m_endPending) { // begin the next pending transfer
+                    dmaCommands();
+                    m_startPending = false;
+                    m_endPending   = false;
+                }
+
                 auto status         = m_status;
                 status.startPending = m_startPending ? 1 : 0;
                 status.endPending   = m_endPending ? 1 : 0;
+                status.cmdBusy      = hasCommands() ? 1 : 0;
+                status.tmemBusy     = hasCommands() ? 1 : 0;
+                status.pipeBusy     = hasCommands() ? 1 : 0;
                 return std::bit_cast<uint32_t>(status);
             }
             case CMD_REGS::DPC_CLOCK: return m_clock & 0x00FFFFFF;
             case CMD_REGS::DPC_CMD_BUSY: [[fallthrough]];
             case CMD_REGS::DPC_PIPE_BUSY: [[fallthrough]];
-            case CMD_REGS::DPC_TMEM_BUSY: return 0;
+            case CMD_REGS::DPC_TMEM_BUSY: return hasCommands();
             case CMD_REGS::DPS_TBIST: [[fallthrough]];
             case CMD_REGS::DPS_TEST_MODE: [[fallthrough]];
             case CMD_REGS::DPS_BUFTEST_ADDR: [[fallthrough]];
@@ -172,13 +180,13 @@ auto Control::writeRegister(CMD_REGS index, uint32_t data) -> void {
                 if (hasCommands()) { // wait for transfer to finish
                     m_endPending = true;
                 } else { // start transfer
-                    fetchCommands();
+                    dmaCommands();
                     m_startPending = false;
                 }
             } else { // continue existing transfer
                 m_startAddr = m_endAddr;
                 m_endAddr   = std::bit_cast<DPC_END>(data).end;
-                fetchCommands();
+                dmaCommands();
                 m_endPending = false;
             }
             return;

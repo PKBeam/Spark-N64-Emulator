@@ -65,12 +65,10 @@ class RDP {
     constexpr static auto TMEM_SIZE = 4 * 1024; // 4 KB
     RDP(std::shared_ptr<Util::Logger> logger,
         ::RDP::Control*               rdpControl,
-        Interfaces::MipsInterface*    mipsInterface,
         Memory::Memory*               memory,
         GfxBackend*                   gfxBackend)
         : m_logger(logger),
           m_rdpControl(rdpControl),
-          m_mipsInterface(mipsInterface),
           m_memory(memory),
           m_gfxBackend(gfxBackend),
           m_textureMemory(reinterpret_cast<std::byte*>(std::malloc(TMEM_SIZE))) {};
@@ -81,16 +79,20 @@ class RDP {
 
     auto runRdpCommand() -> void;
 
-    constexpr auto getCycles() const -> std::size_t {
-        return m_cycles;
-    }
-
     constexpr auto setTerminateAfterSyncs(int terminateAfterSyncs) -> void {
         m_terminateAfterSyncs = terminateAfterSyncs;
     }
 
     constexpr auto getSyncCount() const -> std::size_t {
         return m_syncs;
+    }
+
+    constexpr auto getSyncDone() const -> bool {
+        return m_syncFull;
+    }
+
+    constexpr auto clearSyncDone() -> void {
+        m_syncFull = false;
     }
 
     constexpr auto registerSyncCallback(std::size_t syncCount, std::function<void()> callback) -> void {
@@ -103,7 +105,6 @@ class RDP {
 
     std::shared_ptr<Util::Logger> m_logger;
     ::RDP::Control*               m_rdpControl{};
-    Interfaces::MipsInterface*    m_mipsInterface{};
     Memory::Memory*               m_memory{};
     GfxBackend*                   m_gfxBackend{};
     std::byte*                    m_textureMemory{};
@@ -111,7 +112,7 @@ class RDP {
     TextureImage        m_textureImage{};
     std::array<Tile, 8> m_tiles{};
 
-    std::size_t           m_cycles{};
+    std::atomic<bool>     m_syncFull{};
     std::size_t           m_syncs{};
     int                   m_terminateAfterSyncs{-1};
     std::function<void()> m_syncCallback{};
@@ -172,7 +173,6 @@ auto RDP::flushBackend() -> void {
 }
 
 auto RDP::runRdpCommand() -> void {
-    m_cycles++;
     auto& cmds = m_rdpControl->getCommands();
     if (cmds.empty()) {
         return;
@@ -197,8 +197,8 @@ auto RDP::runRdpCommand() -> void {
             }
             case Command::SYNC_FULL: {
                 m_gfxBackend->completeRenderFrame();
-                m_mipsInterface->setInterrupt<^^Interfaces::MI_INTERRUPT::dp>(true);
                 m_syncs++;
+                m_syncFull = true;
                 cmds.pop_front();
                 if (m_syncCallback && m_syncs == m_syncCallbackCount) {
                     m_syncCallback();

@@ -15,7 +15,7 @@ extern "C" const char* __lsan_default_suppressions() {
 auto handle_contract_violation(const std::contracts::contract_violation& violation) -> void {
     std::println("Contract violation: {}", violation.comment());
     std::println("{}", std::to_string(std::stacktrace::current()));
-    std::terminate();
+    throw Util::Error("Contract violation: {}", violation.comment());
 }
 
 namespace Args {
@@ -208,6 +208,7 @@ int main(int argc, char* argv[]) {
             emulator.runCycle();
         }
         // TODO clean up emulator
+        emulator.stop();
         // now signal the application to stop
         g_shouldTerminate = true;
     });
