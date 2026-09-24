@@ -63,6 +63,11 @@ set(CMAKE_CXX_FLAGS "-freflection ${CMAKE_CXX_FLAGS}")
 add_compile_options(
     "$<$<CONFIG:Debug>:-ggdb3;-g3>"
     "$<$<CONFIG:RelWithDebInfo>:-ggdb3;-g3>"
+    #"$<$<CONFIG:Release>:-fprofile-generate;-fprofile-update=atomic>"
+    #"$<$<CONFIG:Release>:-fprofile-use;-Wno-missing-profile>"
+)
+add_link_options(
+    "$<$<CONFIG:Release>:-lgcov;--coverage>"
 )
 if(UNIX)
 add_compile_options(
