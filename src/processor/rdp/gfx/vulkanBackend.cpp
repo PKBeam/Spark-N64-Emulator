@@ -4,8 +4,11 @@
 #include <print>
 #include <ranges>
 #include <vector>
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wkeyword-macro"
 #define XXH_INLINE_ALL
 #include <xxhash.h>
+#pragma GCC diagnostic pop
 #include <util/vkUtil.hpp>
 #include "vulkanBackend.hpp"
 
@@ -426,7 +429,6 @@ auto VulkanBackend::completeRenderFrame() -> void {
     {
         auto lock = std::lock_guard<std::mutex>(m_resourceMutex);
 
-        vkDeviceWaitIdle(m_device.device);
         if (m_textureCache.size() > 4096) { // TODO this stutters, find better way
             for (const auto& [_, value] : m_textureCache) {
                 value.destroy();
@@ -472,8 +474,8 @@ auto VulkanBackend::init(
 
     m_vkInstance = vkInstance;
     m_device     = {
-        .device         = vkDevice,
-        .physicalDevice = vkPhysicalDevice};
+            .device         = vkDevice,
+            .physicalDevice = vkPhysicalDevice};
     m_vkQueueFamilyIndex = vkQueueFamilyIndex;
     m_currentRenderPass  = {};
     vkGetDeviceQueue(m_device.device, m_vkQueueFamilyIndex, 0, &m_vkQueue);

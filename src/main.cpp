@@ -14,7 +14,9 @@ extern "C" const char* __lsan_default_suppressions() {
 
 auto handle_contract_violation(const std::contracts::contract_violation& violation) -> void {
     std::println("Contract violation: {}", violation.comment());
+#if !defined(__APPLE__)
     std::println("{}", std::to_string(std::stacktrace::current()));
+#endif
     std::terminate();
 }
 
@@ -31,18 +33,16 @@ namespace Parsers {
 
 [[= Info(sstr("--log"),
          sstr("Set the log level    (Default: HIGH)"))]] //
-    constexpr auto log(Emulator::Config* config, std::string_view LEVEL = "HIGH"sv) -> void {
+    constexpr auto
+    log(Emulator::Config* config, std::string_view LEVEL = "HIGH"sv) -> void {
     auto logLevel = std::optional<Level>{};
-    try {
-        logLevel = static_cast<Level>(std::stoi(std::string(LEVEL)));
-    } catch (const std::exception& _) {
-        template for (constexpr auto e : Util::staticEnumeratorsOf(^^Level)) {
-            if (std::meta::identifier_of(e) == LEVEL) {
-                logLevel = [:e:];
-                break;
-            }
+    template for (constexpr auto e : Util::staticEnumeratorsOf(^^Level)) {
+        if (std::meta::identifier_of(e) == LEVEL) {
+            logLevel = [:e:];
+            break;
         }
     }
+
     if (!logLevel.has_value()) {
         std::println("Available log levels:");
         template for (constexpr auto e : Util::staticEnumeratorsOf(^^Level)) {
@@ -56,14 +56,16 @@ namespace Parsers {
 
 [[= Info(sstr("--log-after-boot"),
          sstr("Enable logging after IPL3 boots into the game"))]] //
-    constexpr auto logAfterBoot(Emulator::Config* config, std::string_view = ""sv) -> void {
+    constexpr auto
+    logAfterBoot(Emulator::Config* config, std::string_view = ""sv) -> void {
     config->logAfterBoot = true;
     config->logger->disable();
 }
 
 [[= Info(sstr("--log-after-rdp-sync"),
          sstr("Enable logging after a certain number of RDP syncs    (Default: 1)"))]] //
-    constexpr auto logAfterRdpSync(Emulator::Config* config, std::string_view RDP_SYNC = "1"sv) -> void {
+    constexpr auto
+    logAfterRdpSync(Emulator::Config* config, std::string_view RDP_SYNC = "1"sv) -> void {
     const auto value = std::stoi(std::string(RDP_SYNC));
     if (value < 1) {
         throw Util::Error("RDP_SYNC must be at least 1", RDP_SYNC);
@@ -74,7 +76,8 @@ namespace Parsers {
 
 [[= Info(sstr("--log-after-pc"),
          sstr("Enable logging after reaching a specific program counter"))]] //
-    constexpr auto logAfterPc(Emulator::Config* config, std::string_view PC = ""sv) -> void {
+    constexpr auto
+    logAfterPc(Emulator::Config* config, std::string_view PC = ""sv) -> void {
     if (PC.empty()) {
         throw Util::Error("Program counter not specified", PC);
     }
@@ -88,7 +91,8 @@ namespace Parsers {
 
 [[= Info(sstr("--log-sys"),
          sstr("Enable per-subsystem logging"))]] //
-    constexpr auto logSys(Emulator::Config* config, std::string_view SUBSYSTEMS = ""sv) -> void {
+    constexpr auto
+    logSys(Emulator::Config* config, std::string_view SUBSYSTEMS = ""sv) -> void {
     auto logFilterSys = std::vector<Sys>{};
     for (const auto system : std::views::split(SUBSYSTEMS, ","sv)) {
         if (std::string_view(system) == "ALL_INTERFACES"sv) {
@@ -120,17 +124,20 @@ namespace Parsers {
 }
 [[= Info(sstr("--dump-rom"),
          sstr("Dump the ROM contents to a file"))]] //
-    constexpr auto dumpRom(Emulator::Config* config, std::string_view = ""sv) -> void {
+    constexpr auto
+    dumpRom(Emulator::Config* config, std::string_view = ""sv) -> void {
     config->dumpRom = true;
 }
 [[= Info(sstr("--dump-pif-rom"),
          sstr("Dump the PIF ROM contents to a file"))]] //
-    constexpr auto dumpPifRom(Emulator::Config* config, std::string_view = ""sv) -> void {
+    constexpr auto
+    dumpPifRom(Emulator::Config* config, std::string_view = ""sv) -> void {
     config->dumpPifRom = true;
 }
 [[= Info(sstr("--num-rdp-syncs"),
          sstr("Terminate after a certain number of RDP syncs    (Default: 1)"))]] //
-    constexpr auto numRdpSyncs(Emulator::Config* config, std::string_view RDP_SYNCS = "1"sv) -> void {
+    constexpr auto
+    numRdpSyncs(Emulator::Config* config, std::string_view RDP_SYNCS = "1"sv) -> void {
     const auto value = std::stoi(std::string(RDP_SYNCS));
     if (value < 1) {
         throw Util::Error("RDP_SYNC must be at least 1", RDP_SYNCS);
@@ -140,7 +147,8 @@ namespace Parsers {
 
 [[= Info(sstr("--help"),
          sstr("Print help and exit"))]] //
-    constexpr auto help(Emulator::Config* = nullptr, std::string_view = ""sv) -> void {
+    constexpr auto
+    help(Emulator::Config* = nullptr, std::string_view = ""sv) -> void {
     constexpr static auto members = Util::staticMembersOf(^^Args::Parsers);
     static_assert(members.size() > 1, "Args::Parsers::help() must be declared last");
     std::println("Options:\n");
@@ -201,6 +209,8 @@ int main(int argc, char* argv[]) {
     g_emulatorThread = std::jthread([&emulator](std::stop_token stopToken) {
 #if defined(__linux__)
         emulator.loadRom("/home/pkbeam/Legend of Zelda, The - Ocarina of Time (USA).z64");
+#elif defined(__APPLE__)
+        emulator.loadRom("/Users/pkbeam/Documents/Emulation/Legend of Zelda, The - Ocarina of Time (USA).z64");
 #elif defined(_WIN32)
         emulator.loadRom("D:\\Emulation\\Nintendo 64\\Legend of Zelda, The - Ocarina of Time (USA).z64");
 #endif

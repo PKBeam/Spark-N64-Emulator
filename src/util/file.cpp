@@ -1,6 +1,6 @@
 #include <filesystem>
 #include <stdexcept>
-#if defined(__linux__)
+#if defined(__linux__) || defined(__APPLE__)
 #include <fcntl.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
@@ -12,7 +12,7 @@
 
 namespace Util {
 
-#if defined(__linux__)
+#if defined(__linux__) || defined(__APPLE__)
 auto memMapFile(const char* path) -> std::byte* {
     auto filePath = std::filesystem::path{path};
     auto fileSize = std::filesystem::file_size(filePath);

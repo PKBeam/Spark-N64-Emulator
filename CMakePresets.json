@@ -16,6 +16,20 @@
             }
         },
         {
+            "name": "macOS",
+            "displayName": "macOS",
+            "generator": "Ninja Multi-Config",
+            "binaryDir": "${sourceDir}/build/macos",
+            "cacheVariables": {
+                "CMAKE_CXX_COMPILER": "/opt/homebrew/bin/g++-16",
+                "CMAKE_PREFIX_PATH": "/opt/homebrew;/usr/local/Qt-6.13.0"
+            },
+            "environment": {
+                "LIBRARY_PATH": "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/lib",
+                "SDKROOT": "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk"
+            }
+        },
+        {
             "name": "windows",
             "displayName": "Windows",
             "generator": "Ninja Multi-Config",
@@ -75,6 +89,30 @@
             "displayName": "Profiling",
             "configuration": "Profiling",
             "configurePreset": "linux"
+        },
+        {
+            "name": "Debug-macOS",
+            "displayName": "Debug",
+            "configuration": "Debug",
+            "configurePreset": "macOS"
+        },
+        {
+            "name": "Release-macOS",
+            "displayName": "Release",
+            "configuration": "Release",
+            "configurePreset": "macOS"
+        },
+        {
+            "name": "RelWithDebInfo-macOS",
+            "displayName": "RelWithDebInfo",
+            "configuration": "RelWithDebInfo",
+            "configurePreset": "macOS"
+        },
+        {
+            "name": "Profiling-macOS",
+            "displayName": "Profiling",
+            "configuration": "Profiling",
+            "configurePreset": "macOS"
         }
     ]
 }

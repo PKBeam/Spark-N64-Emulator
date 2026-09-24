@@ -11,4 +11,7 @@
         "-header-insertion=never",
         "--compile-commands-dir=${workspaceFolder}/build/reldeb"
     ],
+    "cmake.debugConfig": {
+        "miDebuggerPath": "/usr/bin/lldb"
+    }
 }
