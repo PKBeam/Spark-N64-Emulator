@@ -9,6 +9,8 @@ The goal is to eventually implement an emulator capable of playing retail games 
 
 Able to boot into a game and perform basic rendering with Vulkan.
 
+https://youtube.com/watch?v=l297wPUB-O4
+
 ![Ocarina of Time - Spinning N64 logo](./data/image1.jpg)
 ![Ocarina of Time - Title Screen cutscene](./data/image2.jpg)
 ![Ocarina of Time - Title Screen logo](./data/image3.jpg)
