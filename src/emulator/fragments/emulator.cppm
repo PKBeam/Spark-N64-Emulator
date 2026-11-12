@@ -37,6 +37,7 @@ export class Emulator {
         std::size_t                   memorySize             = 0;
         bool                          dumpRom                = false;
         bool                          dumpPifRom             = false;
+        std::filesystem::path         pifRomPath             = "data/PIF_NTSC_U.bin";
         bool                          logAfterBoot           = false;
         std::optional<uint32_t>       logAfterPc             = std::nullopt;
         std::optional<std::size_t>    logAfterRdpSync        = std::nullopt;
@@ -102,8 +103,8 @@ constexpr auto Emulator::emulateInitialBoot() -> void {
 }
 
 constexpr Emulator::Emulator(Config config) : m_config(config) {
-    if (std::filesystem::exists("data/PIF_NTSC_U.bin")) {
-        m_pifRom.emplace("data/PIF_NTSC_U.bin");
+    if (std::filesystem::exists(m_config.pifRomPath)) {
+        m_pifRom.emplace(m_config.pifRomPath);
         if (m_config.dumpPifRom) {
             m_pifRom->dump("./pifRom.txt");
             std::println("Dumped PIF ROM to pifRom.txt, exiting...");

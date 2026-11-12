@@ -205,6 +205,13 @@ int main(int argc, char* argv[]) {
     auto config       = Args::parse(args);
     config.memorySize = 0x1FD00000; // maximum size of usable physical memory in N64
 
+#if defined(__APPLE__)
+    const auto executablePath = std::filesystem::path(argv[0]);
+    if (!std::filesystem::exists(config.pifRomPath) && executablePath.is_absolute()) {
+        config.pifRomPath = executablePath.parent_path() / config.pifRomPath;
+    }
+#endif
+
     auto emulator    = Emulator(config);
     auto app         = GUI::Application(argc, argv, emulator.getRdpGfxBackend(), g_shouldTerminate);
     g_emulatorThread = std::jthread([&emulator](std::stop_token stopToken) {

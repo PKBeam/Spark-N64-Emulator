@@ -534,12 +534,10 @@ auto VulkanBackend::createDescriptorInfo() -> void {
 }
 
 auto VulkanBackend::createPipeline() -> void {
-    const auto     vertShader     = Util::VK::readSpirvShader("rdp.vert.spv");
     const auto     vertCreateInfo = Util::VK::shaderModuleCreateInfo(RdpVertexShaderSpv);
     VkShaderModule vertShaderModule;
     VK_TRY(vkCreateShaderModule(m_device.device, &vertCreateInfo, nullptr, &vertShaderModule));
 
-    const auto     fragShader     = Util::VK::readSpirvShader("rdp.frag.spv");
     const auto     fragCreateInfo = Util::VK::shaderModuleCreateInfo(RdpFragmentShaderSpv);
     VkShaderModule fragShaderModule;
     VK_TRY(vkCreateShaderModule(m_device.device, &fragCreateInfo, nullptr, &fragShaderModule));
