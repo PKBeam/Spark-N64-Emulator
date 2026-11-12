@@ -71,3 +71,4 @@ sudo cmake --install .
 On macOS, CMake configures the app bundle with the Homebrew Vulkan loader and validation-layer paths.
 After building, launch `n64emu.app` from Finder; no shell environment setup is needed.
 `QT_VULKAN_LIB` points to the Vulkan loader linked by the application, not directly to `libMoltenVK.dylib`.
+When launched from Finder, the app also looks for an optional PIF ROM in its bundled `Contents/MacOS/data` directory.
