@@ -420,7 +420,10 @@ auto VulkanBackend::startRenderPass(RenderOptions options) -> void {
                                      VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
                                      VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
                                      VK_IMAGE_ASPECT_COLOR_BIT));
-    Util::VK::submitCommandBuffer(m_commandBuffer, m_vkQueue, m_renderFence);
+    {
+        auto queueLock = std::lock_guard<std::mutex>(m_queueMutex);
+        Util::VK::submitCommandBuffer(m_commandBuffer, m_vkQueue, m_renderFence);
+    }
     m_currentRenderPass.active = true;
     m_currentRenderPass.vertexData.clear();
 }
@@ -598,17 +601,9 @@ auto VulkanBackend::createPipeline() -> void {
         .topology               = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
         .primitiveRestartEnable = VK_FALSE,
     };
-    const auto conservativeRasterization = VkPipelineRasterizationConservativeStateCreateInfoEXT{
-        .sType                            = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_CONSERVATIVE_STATE_CREATE_INFO_EXT,
-        .pNext                            = nullptr,
-        .flags                            = 0,
-        .conservativeRasterizationMode    = VK_CONSERVATIVE_RASTERIZATION_MODE_DISABLED_EXT,
-        .extraPrimitiveOverestimationSize = 0.0f,
-    };
-
     const auto rasterization = VkPipelineRasterizationStateCreateInfo{
         .sType                   = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
-        .pNext                   = &conservativeRasterization,
+        .pNext                   = nullptr,
         .flags                   = 0,
         .depthClampEnable        = VK_FALSE,
         .rasterizerDiscardEnable = VK_FALSE,

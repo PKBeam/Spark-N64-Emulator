@@ -54,6 +54,7 @@ Install with brew:
 - gcc@16
 - cmake
 - ninja
+- vulkan-loader
 - vulkan-tools
 - vulkan-validationlayers
 - shaderc
@@ -67,4 +68,11 @@ cmake --build . --parallel
 sudo cmake --install .
 ```
 
-You will need to run the application with `QT_VULKAN_LIB=/opt/homebrew/Cellar/molten-vk/1.4.2/lib/`.
+On macOS, run the application with Qt using the same Vulkan loader linked by the application.
+Debug builds also need the validation-layer library in the dynamic loader's search path:
+```bash
+DYLD_LIBRARY_PATH="$(brew --prefix vulkan-validationlayers)/lib" \
+QT_VULKAN_LIB="$(brew --prefix vulkan-loader)/lib/libvulkan.1.dylib" \
+<path-to-n64emu>
+```
+Do not point `QT_VULKAN_LIB` directly at `libMoltenVK.dylib`; the app links to the Vulkan loader.

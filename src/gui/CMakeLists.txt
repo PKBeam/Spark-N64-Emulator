@@ -15,24 +15,6 @@ target_include_directories(gui PUBLIC ${CMAKE_SOURCE_DIR}/src)
 target_compile_options(gui PUBLIC "--embed-dir=${CMAKE_CURRENT_BINARY_DIR}")
 target_link_libraries(gui PUBLIC rdp_gfx_backend util Vulkan::Vulkan Qt6::Gui)
 
-if (APPLE)
-set(BRIDGE_SRC "${CMAKE_CURRENT_SOURCE_DIR}/qtAppleClangBridge.cpp")
-set(BRIDGE_OBJ "${CMAKE_CURRENT_BINARY_DIR}/qtAppleClangBridge.o")
-add_custom_command(
-    OUTPUT ${BRIDGE_OBJ}
-    COMMAND /usr/bin/clang++ -c ${BRIDGE_SRC} -o ${BRIDGE_OBJ}
-    -std=c++20
-    -stdlib=libc++
-    -F/usr/local/Qt-6.13.0/lib
-    -I/opt/homebrew/include
-    -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk
-    DEPENDS ${BRIDGE_SRC}
-    COMMENT "Compiling vulkan_qt_bridge.cpp with Apple Clang..."
-)
-target_sources(gui PRIVATE ${BRIDGE_OBJ})
-target_link_libraries(gui PRIVATE c++)
-endif()
-
 set(SHADER_SOURCES "window.vert" "window.frag")
 set(SHADER_OUTPUTS)
 foreach(SHADER_SOURCE IN LISTS SHADER_SOURCES)

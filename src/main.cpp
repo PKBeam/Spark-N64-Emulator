@@ -195,6 +195,7 @@ auto signalHandler(int signal) -> void {
 }
 
 int main(int argc, char* argv[]) {
+
     // get args
     auto args = std::vector<std::string_view>{};
     for (auto i = 1; i < argc; ++i) {

@@ -66,19 +66,20 @@
             "name": "(lldb) Launch Debug",
             "type": "cppdbg",
             "request": "launch",
-            "program": "${workspaceRoot}/build/macos/src/RelWithDebInfo/n64emu",
-            "args": [
-                "--log=MED",
-                "--log-sys=CPU"
-            ],
+            "program": "${workspaceRoot}/build/macos/src/Debug/n64emu",
+            "args": [],
             "stopAtEntry": false,
-            "cwd": "${workspaceRoot}/build/macos/src/RelWithDebInfo/",
+            "cwd": "${workspaceRoot}/build/macos/src/Debug/",
             "externalConsole": false,
             "MIMode": "lldb",
             "environment": [
                 {
                     "name": "DYLD_LIBRARY_PATH",
                     "value": "/opt/homebrew/lib:$DYLD_LIBRARY_PATH"
+                },
+                {
+                    "name": "MVK_CONFIG_SYNCHRONOUS_QUEUE_SUBMITS",
+                    "value": "1"
                 }
             ],
             "setupCommands": [

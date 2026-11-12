@@ -72,7 +72,7 @@ add_compile_options(
     "$<$<CONFIG:RelWithDebInfo>:-ggdb3;-g3>"
 )
 endif()
-if(UNIX)
+if(UNIX AND NOT APPLE)
 add_compile_options(
     "$<$<CONFIG:Debug>:-fsanitize=address;-fsanitize=undefined;-fno-omit-frame-pointer>"
 )

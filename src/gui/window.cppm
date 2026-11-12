@@ -6,7 +6,6 @@ export module Gui;
 extern "C++" { // Forward declarations for Qt types
 struct QGuiApplication;
 struct QTimer;
-struct QVulkanWindow;
 struct QVulkanInstance;
 }
 
