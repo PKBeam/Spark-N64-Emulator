@@ -4,8 +4,11 @@
 #include <print>
 #include <ranges>
 #include <vector>
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wkeyword-macro"
 #define XXH_INLINE_ALL
 #include <xxhash.h>
+#pragma GCC diagnostic pop
 #include <util/vkUtil.hpp>
 #include "vulkanBackend.hpp"
 
@@ -474,8 +477,8 @@ auto VulkanBackend::init(
 
     m_vkInstance = vkInstance;
     m_device     = {
-        .device         = vkDevice,
-        .physicalDevice = vkPhysicalDevice};
+            .device         = vkDevice,
+            .physicalDevice = vkPhysicalDevice};
     m_vkQueueFamilyIndex = vkQueueFamilyIndex;
     m_currentRenderPass  = {};
     vkGetDeviceQueue(m_device.device, m_vkQueueFamilyIndex, 0, &m_vkQueue);
@@ -598,17 +601,9 @@ auto VulkanBackend::createPipeline() -> void {
         .topology               = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
         .primitiveRestartEnable = VK_FALSE,
     };
-    const auto conservativeRasterization = VkPipelineRasterizationConservativeStateCreateInfoEXT{
-        .sType                            = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_CONSERVATIVE_STATE_CREATE_INFO_EXT,
-        .pNext                            = nullptr,
-        .flags                            = 0,
-        .conservativeRasterizationMode    = VK_CONSERVATIVE_RASTERIZATION_MODE_DISABLED_EXT,
-        .extraPrimitiveOverestimationSize = 0.0f,
-    };
-
     const auto rasterization = VkPipelineRasterizationStateCreateInfo{
         .sType                   = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
-        .pNext                   = &conservativeRasterization,
+        .pNext                   = nullptr,
         .flags                   = 0,
         .depthClampEnable        = VK_FALSE,
         .rasterizerDiscardEnable = VK_FALSE,

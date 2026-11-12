@@ -6,24 +6,95 @@ module;
 #include <QLoggingCategory>
 #include <QMetaObject>
 #include <QPointer>
+#include <QEvent>
+#include <QExposeEvent>
+#include <QResizeEvent>
 #include <QTimer>
-#include <QVulkanWindow>
-#include <QVulkanDeviceFunctions>
-#include <QVulkanFunctions>
 #include <QVulkanInstance>
+#include <QWindow>
 #include <QFile>
 
 #include "vkRenderWindow.hpp"
 
+#include <cstddef>
+#include <exception>
+#include <iostream>
+
+#ifdef __APPLE__
+#include <objc/message.h>
+#include <objc/runtime.h>
+#endif
+
 module Gui;
+
+#ifdef __APPLE__
+void force_window_onto_active_screen(QWindow* qwindow) {
+    if (!qwindow) return;
+    id nsView = (id)qwindow->winId();
+    if (!nsView) return;
+
+    id nsWin = ((id (*)(id, SEL))objc_msgSend)(nsView, sel_registerName("window"));
+    if (nsWin) {
+        // 1. Allow window to join all active Spaces and Stage Manager
+        // NSWindowCollectionBehaviorCanJoinAllSpaces (1) | NSWindowCollectionBehaviorStationary (16)
+        ((void (*)(id, SEL, std::size_t))objc_msgSend)(nsWin, sel_registerName("setCollectionBehavior:"), 17);
+
+        // 2. Force Quartz to order the window front REGARDLESS of the app's internal focus state
+        ((void (*)(id, SEL))objc_msgSend)(nsWin, sel_registerName("orderFrontRegardless"));
+
+        // 3. Elevate app to a foreground GUI process (gives it a Dock icon and focus rights)
+        id nsAppClass = (id)objc_getClass("NSApplication");
+        id nsApp      = ((id (*)(id, SEL))objc_msgSend)(nsAppClass, sel_registerName("sharedApplication"));
+        if (nsApp) {
+            ((void (*)(id, SEL, long long))objc_msgSend)(nsApp, sel_registerName("setActivationPolicy:"), 0);
+            ((void (*)(id, SEL, bool))objc_msgSend)(nsApp, sel_registerName("activateIgnoringOtherApps:"), true);
+        }
+    }
+}
+#endif
 
 namespace GUI {
 
-class VkWindow : public QVulkanWindow {
+class VkWindow : public QWindow {
   public:
-    auto createRenderer() -> QVulkanWindowRenderer* override;
+    auto renderFrame() -> void {
+        if (!m_renderer || !isExposed()) {
+            return;
+        }
+        try {
+            m_renderer->render();
+        } catch (const std::exception& error) {
+            qFatal("Vulkan rendering failed: %s", error.what());
+        }
+    }
 
-    RDP::GfxBackend* m_rdpGfxBackend;
+    VulkanRenderer* m_renderer = nullptr;
+
+  protected:
+    auto event(QEvent* event) -> bool override {
+        if (event->type() == QEvent::UpdateRequest) {
+            renderFrame();
+        }
+        return QWindow::event(event);
+    }
+
+    auto exposeEvent(QExposeEvent* event) -> void override {
+        QWindow::exposeEvent(event);
+        if (isExposed()) {
+            // Let Qt finish the expose callback before MoltenVK acquires a drawable.
+            requestUpdate();
+        }
+    }
+
+    auto resizeEvent(QResizeEvent* event) -> void override {
+        QWindow::resizeEvent(event);
+        if (m_renderer) {
+            m_renderer->markSwapChainDirty();
+            if (isExposed()) {
+                requestUpdate();
+            }
+        }
+    }
 };
 
 namespace {
@@ -43,14 +114,7 @@ auto requestWindowUpdate(void* userData) -> void {
 }
 } // namespace
 
-auto VkWindow::createRenderer() -> QVulkanWindowRenderer* {
-    auto vkBackend = dynamic_cast<RDP::VulkanBackend*>(m_rdpGfxBackend);
-    if (!vkBackend) {
-        qFatal("Failed to cast GfxBackend to VulkanBackend");
-    }
-    auto renderer = new VulkanRenderer(this, vkBackend);
-    return renderer;
-}
+
 
 Application::Application(int& argc, char* argv[], RDP::GfxBackend* rdpGfxBackend, std::atomic<bool>& shouldTerminate)
     : m_app(new QGuiApplication(argc, argv)),
@@ -90,7 +154,6 @@ auto Application::run() -> int {
 auto Application::quit() -> void {
     m_timer->stop();
     m_window->destroy();
-    m_vkInst->destroy();
     m_app->quit();
 }
 
@@ -100,49 +163,23 @@ Window::Window(QVulkanInstance* vkInst, RDP::GfxBackend* rdpGfxBackend)
       m_vkWindow(new VkWindow()),
       m_frameCallbackWindow(new QPointer<VkWindow>(m_vkWindow)) {
 
+    auto vkBackend = dynamic_cast<RDP::VulkanBackend*>(m_rdpGfxBackend);
+    if (!vkBackend) {
+        qFatal("Failed to cast GfxBackend to VulkanBackend");
+    }
+    m_vkWindow->setSurfaceType(QSurface::VulkanSurface);
     m_vkWindow->QWindow::setFlags(Qt::Window | Qt::WindowTitleHint | Qt::WindowSystemMenuHint |
                                   Qt::WindowMinimizeButtonHint | Qt::WindowMaximizeButtonHint | Qt::WindowCloseButtonHint);
     m_vkWindow->setTitle("spark");
     m_vkWindow->setMinimumSize({320, 240});
-    m_vkWindow->setDeviceExtensions(QByteArrayList()
-                                    << VK_EXT_CONSERVATIVE_RASTERIZATION_EXTENSION_NAME);
-
-    constinit static auto features14 = VkPhysicalDeviceVulkan14Features{};
-    features14.sType                 = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_4_FEATURES;
-    features14.pushDescriptor        = VK_TRUE;
-
-    constinit static auto features13          = VkPhysicalDeviceVulkan13Features{};
-    features13.sType                          = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
-    features13.dynamicRendering               = VK_TRUE;
-    features13.synchronization2               = VK_TRUE;
-    features13.shaderDemoteToHelperInvocation = VK_TRUE;
-
-    constinit static auto features12                         = VkPhysicalDeviceVulkan12Features{};
-    features12.sType                                         = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
-    features12.shaderInt8                                    = VK_TRUE;
-    features12.uniformAndStorageBuffer8BitAccess             = VK_TRUE;
-    features12.storagePushConstant8                          = VK_TRUE;
-    features12.scalarBlockLayout                             = VK_TRUE;
-    features12.descriptorBindingSampledImageUpdateAfterBind  = VK_TRUE;
-    features12.descriptorBindingUniformBufferUpdateAfterBind = VK_TRUE;
-
-    constinit static auto extendedDynamicState2Features = VkPhysicalDeviceExtendedDynamicState2FeaturesEXT{};
-    extendedDynamicState2Features.sType                 = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_2_FEATURES_EXT;
-    extendedDynamicState2Features.extendedDynamicState2 = VK_TRUE;
-
-    m_vkWindow->setEnabledFeaturesModifier([this](VkPhysicalDeviceFeatures2& features2) {
-        features2.pNext  = &features12;
-        features12.pNext = &features13;
-        features13.pNext = &features14;
-        features14.pNext = &extendedDynamicState2Features;
-    });
-    m_vkWindow->m_rdpGfxBackend = m_rdpGfxBackend;
+    m_vkWindow->m_renderer = new VulkanRenderer(m_vkWindow, m_vkInst, vkBackend);
     static_cast<RDP::VulkanBackend*>(m_rdpGfxBackend)->setFrameCompleteCallback(requestWindowUpdate, m_frameCallbackWindow);
 }
 
 Window::~Window() {
     static_cast<RDP::VulkanBackend*>(m_rdpGfxBackend)->setFrameCompleteCallback(nullptr, nullptr);
     delete static_cast<QPointer<VkWindow>*>(m_frameCallbackWindow);
+    delete m_vkWindow->m_renderer;
     m_vkWindow->setVulkanInstance(nullptr);
     delete m_vkWindow;
 }
@@ -151,10 +188,27 @@ auto Window::show() -> void {
     m_vkWindow->setVulkanInstance(m_vkInst);
     m_vkWindow->resize(320 * 4, 240 * 4);
     m_vkWindow->show();
+    m_vkWindow->raise();
+    m_vkWindow->requestActivate();
+    // QTimer::singleShot(2000, m_vkWindow, dump_nsapp_windows_gcc);
 }
 
 auto Window::destroy() -> void {
+    if (m_vkWindow->m_renderer) {
+        try {
+            m_vkWindow->m_renderer->shutdown();
+        } catch (const std::exception& error) {
+            qFatal("Vulkan shutdown failed: %s", error.what());
+        }
+    }
     m_vkWindow->close();
+    m_vkWindow->destroy();
 }
 
 } // namespace GUI
+
+//"env": {
+//    "QT_LOGGING_RULES": "qt.vulkan*=true;qt.qpa.window=true",
+//    "QT_DEBUG_PLUGINS": "1",
+//    "MVK_CONFIG_LOG_LEVEL": "3"
+//}

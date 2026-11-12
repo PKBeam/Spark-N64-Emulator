@@ -21,6 +21,10 @@ if(CMAKE_VERSION VERSION_GREATER_EQUAL "3.30.0")
         set(CMAKE_EXPERIMENTAL_CXX_IMPORT_STD
             "451f2fe2-a8a2-47c3-bc32-94786d8fc91b"
         )
+    elseif(CMAKE_VERSION VERSION_EQUAL "4.4.3")
+        set(CMAKE_EXPERIMENTAL_CXX_IMPORT_STD
+            "f35a9ac6-8463-4d38-8eec-5d6008153e7d"
+        )
     endif()
 endif()
 
@@ -44,8 +48,10 @@ set(CXX_COMPILE_OPTIONS
     -fvar-tracking-assignments
 )
 
+if (NOT APPLE)
 set(CXX_LINK_OPTIONS
     "-Wl,--allow-multiple-definition") # 'import std;' causes issues with multiple definitions with GCC
+endif()
 
 set(CMAKE_CXX_STANDARD 26)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -60,6 +66,7 @@ set(CMAKE_CXX_FLAGS_PROFILING "${CMAKE_CXX_FLAGS_RELWITHDEBINFO} -fno-omit-frame
 # workaround to allow std::meta in the std module 
 set(CMAKE_CXX_FLAGS "-freflection ${CMAKE_CXX_FLAGS}")
 
+if(NOT APPLE)
 add_compile_options(
     "$<$<CONFIG:Debug>:-ggdb3;-g3>"
     "$<$<CONFIG:RelWithDebInfo>:-ggdb3;-g3>"
@@ -69,7 +76,8 @@ add_compile_options(
 add_link_options(
     "$<$<CONFIG:Release>:-lgcov;--coverage>"
 )
-if(UNIX)
+endif()
+if(UNIX AND NOT APPLE)
 add_compile_options(
     "$<$<CONFIG:Debug>:-fsanitize=address;-fsanitize=undefined;-fsanitize=thread;-fno-omit-frame-pointer>"
 )

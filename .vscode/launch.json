@@ -61,6 +61,39 @@
                     "ignoreFailures": true
                 }
             ]
+        },
+        {
+            "name": "(lldb) Launch Debug",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceRoot}/build/macos/src/Debug/n64emu",
+            "args": [],
+            "stopAtEntry": false,
+            "cwd": "${workspaceRoot}/build/macos/src/Debug/",
+            "externalConsole": false,
+            "MIMode": "lldb",
+            "environment": [
+                {
+                    "name": "DYLD_LIBRARY_PATH",
+                    "value": "/opt/homebrew/lib:$DYLD_LIBRARY_PATH"
+                },
+                {
+                    "name": "MVK_CONFIG_SYNCHRONOUS_QUEUE_SUBMITS",
+                    "value": "1"
+                }
+            ],
+            "setupCommands": [
+                {
+                    "description": "Enable pretty-printing for lldb",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                },
+                {
+                    "description": "Set Disassembly Flavor to Intel",
+                    "text": "-gdb-set disassembly-flavor intel",
+                    "ignoreFailures": true
+                }
+            ]
         }
     ]
 }

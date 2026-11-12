@@ -4,13 +4,13 @@
 namespace Util {
 
 // Linux and Windows have different character sets for filenames
-
-#if defined(__linux__)
-auto memMapFile(const char* path) -> std::byte*;
-auto memUnmapFile(const char* path, std::byte* ptr) -> void;
+#if defined(__linux__) || defined(__APPLE__)
+using OsChar_t = char;
 #elif defined(_WIN32)
-auto memMapFile(const wchar_t* path) -> std::byte*;
-auto memUnmapFile(const wchar_t* path, std::byte* ptr) -> void;
+using OsChar_t = wchar_t;
 #endif
+
+auto memMapFile(const OsChar_t* path) -> std::byte*;
+auto memUnmapFile(const OsChar_t* path, std::byte* ptr) -> void;
 
 } // namespace Util
