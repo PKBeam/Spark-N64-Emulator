@@ -7,7 +7,14 @@ The goal is to eventually implement an emulator capable of playing retail games 
 
 ## Current Status
 
-Able to boot into a game and perform basic rendering with Vulkan.
+**Supported Platforms:**
+- Windows
+- Linux (Ubuntu)
+- macOS
+
+Able to boot into Ocarina of Time and perform basic rendering with Vulkan.
+
+Performance is currently poor.
 
 https://youtube.com/watch?v=l297wPUB-O4
 
